@@ -694,6 +694,8 @@ class _PlayerPageState extends State<_PlayerView> {
         ..add(_player.streams.playbackRestart.listen((_) => unawaited(_readVideoSize())))
         ..add(_player.streams.backendSwitched.listen((_) => _handedToMpv()));
     }
+    // Media3 on a TV: a video it can't play is reported, not handed to mpv, unless Settings says so
+    unawaited(_player.setAllowMpvFallback(PlayerEngine.allowHandOver));
     // Buffer about three minutes ahead. 4K runs ~16 Mbps (~360 MB for 3 min); mpv keeps the
     // cache on disk, so the byte limits don't sit in RAM.
     {
@@ -1623,7 +1625,7 @@ class _PlayerPageState extends State<_PlayerView> {
     _wanted = null;
     // One source at a time: the first link that plays is used, and nothing else is asked
     // unless you pick another source from the menu.
-    final hit = await session.firstHit(first: host?.server, stop: () => !mounted || id != _loadId || _userPicked);
+    final hit = await session.firstHit(first: host?.server ?? saved?.server, stop: () => !mounted || id != _loadId || _userPicked);
     if (!mounted || id != _loadId) return;
     if (!_userPicked) {
       if (hit == null) {
@@ -3598,6 +3600,7 @@ class _PlayerPageState extends State<_PlayerView> {
       episodeName: ep?.name,
       subtitle: _subMemo,
       subDelay: _subMemo == null ? 0 : _subOffset,
+      server: _films ? _playingLink?.partyKey : null,
     );
     _savedAt = DateTime.now();
     // an anime episode (or film) watched to VyseTV's "finished" point: AniList

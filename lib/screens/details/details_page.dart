@@ -684,18 +684,30 @@ class _Actions extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
-        _Pill(
-          icon: Icons.play_arrow_rounded,
-          label: 'Play',
-          primary: true,
-          onTap: () {
-            // Shows start at episode 1 of the first real season (season 0 is usually specials).
-            final first = details?.seasons.where((s) => s.number > 0 && s.episodes > 0).firstOrNull;
-            openPlayer(
-              context,
-              media,
-              episode: media.isTv ? PlayerEpisode(season: first?.number ?? 1, number: 1) : null,
-              runtime: details?.runtime,
+        ValueListenableBuilder<List<WatchEntry>>(
+          valueListenable: WatchProgress.entries,
+          builder: (context, _, _) {
+            // carrying on: the episode (and time, in the player) you left, on this device or another
+            final saved = WatchProgress.find(media);
+            final resume = saved != null && !saved.finished && (!media.isTv || (saved.season != null && saved.episode != null));
+            return _Pill(
+              icon: Icons.play_arrow_rounded,
+              label: resume ? (media.isTv ? 'Resume S${saved.season}:E${saved.episode}' : 'Resume') : 'Play',
+              primary: true,
+              onTap: () {
+                // Shows start at episode 1 of the first real season (season 0 is usually specials).
+                final first = details?.seasons.where((s) => s.number > 0 && s.episodes > 0).firstOrNull;
+                openPlayer(
+                  context,
+                  media,
+                  episode: !media.isTv
+                      ? null
+                      : resume
+                          ? PlayerEpisode(season: saved.season!, number: saved.episode!, name: saved.episodeName)
+                          : PlayerEpisode(season: first?.number ?? 1, number: 1),
+                  runtime: details?.runtime,
+                );
+              },
             );
           },
         ),

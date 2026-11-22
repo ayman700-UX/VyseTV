@@ -223,6 +223,7 @@ class _EpisodeExplorerState extends State<EpisodeExplorer> with SingleTickerProv
         final i = _picked.clamp(0, eps.length - 1);
         return Focus(
           focusNode: _focus,
+          skipTraversal: true, // D-pad must land on Play E1, not on this wrapper (which only steps episodes)
           onKeyEvent: (n, e) => _onKey(n, e, eps.length),
           child: DpadRail(
            axis: Axis.vertical,

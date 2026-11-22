@@ -66,6 +66,10 @@ class PlayerAndroid extends PlayerBase {
   /// change cannot put them back on screen.
   bool _subtitlesHidden = false;
 
+  /// Last style sent to the native layer, and the mpv `sub-pos` (percent of height) the page asked for.
+  Map<String, Object?>? _subStyle;
+  int? _subPos;
+
   /// Track that un-hiding restores: whatever was selected when subtitles were
   /// hidden, then whatever was selected for the current media while hidden.
   String? _hiddenSubtitleTrackId;
@@ -164,6 +168,7 @@ class PlayerAndroid extends PlayerBase {
       if (result != true) {
         throw const PlayerInitializationException();
       }
+      await invoke('setAllowMpvFallback', {'allow': _allowMpvFallback}); // VyseTV
 
       // Register property observers before flipping `initialized` so partial
       // failures don't leave us in a half-initialized state that the memoized
@@ -388,6 +393,21 @@ class PlayerAndroid extends PlayerBase {
           }
         }
         break;
+      case 'sid':
+        // mpv's subtitle id: here a track id from state.tracks (built-in subtitle picked from the page)
+        if (value == 'no') {
+          await selectSubtitleTrack(SubtitleTrack.off);
+        } else {
+          final t = state.tracks.subtitle.firstWhereOrNull((t) => t.id == value);
+          if (t != null) await selectSubtitleTrack(t);
+        }
+        break;
+      case 'sub-pos':
+        final pos = int.tryParse(value);
+        final style = _subStyle;
+        if (pos != null && style != null) await invoke('setSubtitleStyle', {...style, 'subtitlePosition': pos});
+        if (pos != null) _subPos = pos;
+        break;
       default:
         await invoke('setMpvProperty', {'name': name, 'value': value});
     }
@@ -518,7 +538,20 @@ class PlayerAndroid extends PlayerBase {
   /// silent no-op here — including in the native MPV fallback mode.
   @override
   // ignore: no-empty-block - deliberate no-op, mpv commands target the mpv backend
-  Future<void> command(List<String> args) async {}
+  Future<void> command(List<String> args) async {
+    // 'sub-add <file> select <title> <lang>': VyseTV's subtitle files go to ExoPlayer's own track list
+    if (args.length >= 2 && args[0] == 'sub-remove' && state.track.subtitle?.id == args[1]) {
+      await selectSubtitleTrack(SubtitleTrack.off);
+    }
+    if (args.length >= 2 && args[0] == 'sub-add') {
+      await invoke('addSubtitleTrack', {
+        'uri': Uri.file(args[1]).toString(),
+        'title': args.length > 3 ? args[3] : null,
+        'language': args.length > 4 ? args[4] : null,
+        'select': args.length > 2 && args[2] == 'select',
+      });
+    }
+  }
 
   /// Apply subtitle styling to the native ExoPlayer layer.
   ///
@@ -538,6 +571,18 @@ class PlayerAndroid extends PlayerBase {
     bool anchorToScreen = false,
   }) async {
     if (disposed || !initialized) return;
+    _subStyle = {
+      'fontSize': fontSize,
+      'textColor': textColor,
+      'borderSize': borderSize,
+      'borderColor': borderColor,
+      'bgColor': bgColor,
+      'bgOpacity': bgOpacity,
+      'subtitlePosition': _subPos ?? subtitlePosition,
+      'bold': bold,
+      'italic': italic,
+      'anchorToScreen': anchorToScreen,
+    };
     await invoke('setSubtitleStyle', {
       'fontSize': fontSize,
       'textColor': textColor,
@@ -558,6 +603,17 @@ class PlayerAndroid extends PlayerBase {
   Future<void> setBoxFitMode(int mode) async {
     if (disposed || !initialized) return;
     await invoke('setBoxFitMode', {'mode': mode});
+  }
+
+  // VyseTV: may ExoPlayer give a video it can't play to mpv? Said to the native side once it is up (and again when it
+  // is told later), so a plugin kept from an earlier player never keeps an older answer.
+  bool _allowMpvFallback = true;
+
+  @override
+  Future<void> setAllowMpvFallback(bool allow) async {
+    _allowMpvFallback = allow;
+    if (disposed || !initialized) return;
+    await invoke('setAllowMpvFallback', {'allow': allow});
   }
 
   /// Apply custom zoom to the native ExoPlayer layer.

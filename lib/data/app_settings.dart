@@ -144,6 +144,9 @@ class AppSettings {
   static final matchRefreshRate = Setting<bool>('device.matchRefresh', false);
   // The video engine on an Android TV: '' (not chosen: Media3), 'media3' or 'mpv'. Read through
   // PlayerEngine (data/playback/player_engine.dart).
+  /// Media3 hands a video it can't play to mpv: '' (not chosen: on, except on an Android TV), 'on' or 'off'. Read through
+  /// PlayerEngine.allowHandOver.
+  static final mpvHandOver = Setting<String>('device.handover', '');
   static final playerEngine = Setting<String>('device.engine', '');
   // Fewer animations and less paint, for a TV's chip: '' (not chosen: on for an Android TV),
   // 'on' or 'off'. Read through Lean (core/lean.dart).
@@ -176,7 +179,7 @@ class AppSettings {
         subtitleLanguage, subtitleSize, subtitleColor,
         subtitleBackground, subtitleFont, subtitleBold, subtitleItalic, subtitleBackColor, subtitleOutline, subtitleOutlineColor,
         subtitleShadow, subtitleShadowColor, subtitleBlur, subtitleSpacing, subtitleTop, subtitleLift, subtitleOnPicture, subtitleAss,
-        audioDelayMs, audioPassthrough, audioChannels, hdrOutput, matchRefreshRate, playerEngine, leanMotion, pictureShape, volumeLevelling,
+        audioDelayMs, audioPassthrough, audioChannels, hdrOutput, matchRefreshRate, playerEngine, mpvHandOver, leanMotion, pictureShape, volumeLevelling,
         upscaler, ambientLight, partyLibrary, musicAutoplay, debridProvider, debridOn, updateAuto, updateSkipped, myListGrid, myListSort, partyMembers, partySounds, partyMuted, animeAdult, animeAudio,
       ];
 

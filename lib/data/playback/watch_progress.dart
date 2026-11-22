@@ -19,6 +19,7 @@ class WatchEntry {
     this.episodes = const {},
     this.subtitle,
     this.subDelay = 0,
+    this.server,
   });
 
   final Media media;
@@ -43,6 +44,10 @@ class WatchEntry {
   /// Its timing nudge, in seconds.
   final double subDelay;
 
+  /// The source (FilmLink.partyKey) it was last played from: tried first when you carry on, and
+  /// for the next episode.
+  final String? server;
+
   double get fraction => duration.inMilliseconds <= 0 ? 0 : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
   Duration get left => duration - position;
   bool get finished => fraction >= WatchProgress.finishedAt;
@@ -61,6 +66,7 @@ class WatchEntry {
     episodes: episodes,
     subtitle: subtitle,
     subDelay: subDelay,
+    server: server,
   );
 
   Map<String, dynamic> toJson() => {
@@ -86,6 +92,7 @@ class WatchEntry {
     if (episodes.isNotEmpty) 'x': episodes,
     'sub': ?subtitle,
     if (subDelay != 0) 'sd': subDelay,
+    if (server != null) 'srv': server,
   };
 
   static WatchEntry fromJson(Map<String, dynamic> j) {
@@ -104,6 +111,7 @@ class WatchEntry {
       episodes: {for (final e in ((j['x'] as Map?) ?? const {}).entries) '${e.key}': (e.value as num).toDouble()},
       subtitle: j['sub'] is Map ? Map<String, dynamic>.from(j['sub'] as Map) : null,
       subDelay: (j['sd'] as num?)?.toDouble() ?? 0,
+      server: j['srv'] as String?,
     );
   }
 }
@@ -161,6 +169,7 @@ class WatchProgress {
     String? episodeName,
     Map<String, dynamic>? subtitle,
     double subDelay = 0,
+    String? server,
   }) {
     if (duration < const Duration(minutes: 1) || position < const Duration(seconds: 3)) return;
     final old = find(media);
@@ -182,6 +191,7 @@ class WatchProgress {
         episodes: episodes,
         subtitle: subtitle,
         subDelay: subDelay,
+        server: server ?? old?.server,
       ),
       ...entries.value.where((e) => !_same(e.media, media)),
     ].take(_max).toList());
@@ -220,6 +230,7 @@ class WatchProgress {
         // an import knows nothing of subtitles: keep this device's for the same episode
         subtitle: w.subtitle ?? (old != null && old.season == w.season && old.episode == w.episode ? old.subtitle : null),
         subDelay: w.subtitle != null ? w.subDelay : (old != null && old.season == w.season && old.episode == w.episode ? old.subDelay : 0),
+        server: w.server ?? old?.server,
       );
     }
     final list = byKey.values.toList()..sort((a, b) => b.updated.compareTo(a.updated));

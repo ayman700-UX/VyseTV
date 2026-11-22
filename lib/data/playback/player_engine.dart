@@ -35,6 +35,17 @@ abstract final class PlayerEngine {
 
   static bool get isMedia3 => current == media3;
 
+  /// Whether Media3 may hand a video it can't play to mpv by itself (Settings → Playback). Not chosen: yes, but not
+  /// on an Android TV, where mpv is the heavier player and a hand-over mid-video is more surprise than help: there
+  /// a video Media3 can't play is reported as one that isn't playing, and you pick another source.
+  static bool get allowHandOver => switch (AppSettings.mpvHandOver.value) {
+    'on' => true,
+    'off' => false,
+    _ => !offered,
+  };
+
+  static void chooseHandOver(bool allow) => AppSettings.mpvHandOver.set(allow ? 'on' : 'off');
+
   static void choose(String engine) => AppSettings.playerEngine.set(engine == mpv ? mpv : media3);
 
   /// Tells when the choice changes.

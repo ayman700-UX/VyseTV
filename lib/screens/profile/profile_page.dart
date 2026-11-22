@@ -1382,19 +1382,37 @@ class _EngineRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: PlayerEngine.changes,
-    builder: (context, _) => _Row(
-      title: 'Player engine',
-      subtitle: PlayerEngine.isMedia3
-          ? "Media3 is Android's own player. A video it can't play switches to mpv by itself. "
-                'Upscaling, ambient lighting, the 5.1 limit and some subtitle styling need mpv. Applies from the next video'
-          : 'mpv has upscaling, ambient lighting, the 5.1 limit and every subtitle style. Applies from the next video',
-      below: _Choice<String>(
-        value: PlayerEngine.current,
-        options: const [PlayerEngine.media3, PlayerEngine.mpv],
-        label: (v) => v == PlayerEngine.media3 ? 'Media3' : 'mpv',
-        onChanged: PlayerEngine.choose,
-      ),
+    listenable: Listenable.merge([PlayerEngine.changes, AppSettings.mpvHandOver]),
+    builder: (context, _) => Column(
+      children: [
+        _Row(
+          title: 'Player engine',
+          subtitle: PlayerEngine.isMedia3
+              ? "Media3 is Android's own player. "
+                    'Upscaling, ambient lighting, the 5.1 limit and some subtitle styling need mpv. Applies from the next video'
+              : 'mpv has upscaling, ambient lighting, the 5.1 limit and every subtitle style. Applies from the next video',
+          below: _Choice<String>(
+            value: PlayerEngine.current,
+            options: const [PlayerEngine.media3, PlayerEngine.mpv],
+            label: (v) => v == PlayerEngine.media3 ? 'Media3' : 'mpv',
+            onChanged: PlayerEngine.choose,
+          ),
+        ),
+        if (PlayerEngine.isMedia3)
+          _Row(
+            title: "If Media3 can't play a video",
+            subtitle: PlayerEngine.allowHandOver
+                ? 'It switches to mpv by itself, in the middle of the video, and carries on from the same spot.'
+                : 'It stays on Media3 and tells you the video is not playing, so you can pick another source. '
+                      'A few formats (some TrueHD, DTS and rare codecs) then do not play. Applies from the next video',
+            below: _Choice<bool>(
+              value: PlayerEngine.allowHandOver,
+              options: const [false, true],
+              label: (v) => v ? 'Switch to mpv' : 'Stay on Media3',
+              onChanged: PlayerEngine.chooseHandOver,
+            ),
+          ),
+      ],
     ),
   );
 }
