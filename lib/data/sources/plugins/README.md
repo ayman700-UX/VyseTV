@@ -114,6 +114,16 @@ var hit = await searchBest(q, async function (text) {
 if (!hit) return [];
 ```
 
+## Vega providers
+
+A repository link can also be a [Vega](https://github.com/Zenda-Cross/vega-providers) `manifest.json` (a JSON list of providers
+built into `dist/<value>/{posts,meta,stream,episodes}.js` next to it). Each enabled provider is listed as a source named
+`vega-<value>`. Vega providers browse a site, so the app adapts them to `getStreams`: it searches the site with the title, opens the
+matching page, picks the film's links or the season and episode, and resolves them to video files (DRM streams are dropped).
+They run on `assets/plugins/vega_runtime.js` (the real axios and cheerio, `URL` polyfills and the adapter), in the same sandbox
+and with the same time budget as other plugins. Providers that need a browser challenge (`openWebView`) find nothing.
+Details, and how to rebuild the runtime: [tool/vega_runtime/README.md](../../../../tool/vega_runtime/README.md).
+
 ## Try a plugin without the app
 
 The helpers file is plain JavaScript, so a plugin can be run in Node with a small stand-in for `http()` (see

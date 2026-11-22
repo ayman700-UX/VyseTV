@@ -70,3 +70,6 @@ FRONTEND_PROMPT.md
 # This build's own server addresses. The copy in the repository is
 # lib/data/server_config.example.dart; the real one never leaves the build machine.
 /lib/data/server_config.dart
+
+# the Vega runtime build's packages
+/tool/vega_runtime/node_modules/

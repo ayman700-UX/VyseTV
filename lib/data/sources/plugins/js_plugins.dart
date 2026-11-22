@@ -120,9 +120,69 @@ String normalizeRepoUrl(String input) {
   return u;
 }
 
+// ── Vega providers (https://github.com/Zenda-Cross/vega-providers) ──
+// A Vega repository's manifest.json is a list of providers, each built into dist/<value>/{posts,meta,stream,episodes}.js
+// next to it. VyseTV composes those modules into one script that assets/plugins/vega_runtime.js (axios, cheerio, an
+// adapter) runs: it searches the provider's site for the title, opens the page and resolves the stream.
+
+/// Providers that are not about films and shows, or hand out torrents/live channels: not listed.
+const _vegaSkip = {'torrentio', 'youtube', 'durbinLive', 'liveTgTv'};
+
+/// The text that starts a composed Vega plugin's script.
+const vegaMarker = '// @vega-provider ';
+
+({String name, List<({String id, String name, String url, String version, String note, List<String> types, bool vega})> plugins}) _parseVegaManifest(
+  List<Object?> list,
+  String manifestUrl,
+) {
+  // the repository's folder: the manifest's link without its query and its file name
+  final clean = manifestUrl.split(RegExp(r'[?#]')).first;
+  final base = clean.substring(0, clean.lastIndexOf('/'));
+  final out = <({String id, String name, String url, String version, String note, List<String> types, bool vega})>[];
+  final seen = <String>{};
+  for (final p in list) {
+    if (p is! Map || p['value'] is! String) continue;
+    final value = (p['value'] as String).trim();
+    if (p['disabled'] == true || _vegaSkip.contains(value) || !RegExp(r'^[A-Za-z0-9_.-]{1,60}$').hasMatch(value)) continue;
+    final id = 'vega-$value';
+    if (!seen.add(id)) continue;
+    final kind = '${p['type'] ?? ''}';
+    out.add((
+      id: id,
+      name: '${p['display_name'] ?? value}',
+      url: '$base/dist/$value',
+      version: '${p['version'] ?? ''}',
+      note: 'Vega provider${kind.isEmpty ? '' : ' ($kind)'}',
+      types: const ['movie', 'tv'],
+      vega: true,
+    ));
+    if (out.length >= _maxPlugins) break;
+  }
+  return (name: 'Vega providers', plugins: out);
+}
+
+/// The script of the Vega provider whose built modules are at [distUrl] (`…/dist/<value>`): posts, meta and stream are
+/// needed, episodes is optional. [fetch] downloads one file. Throws when a needed module can't be read.
+Future<String> composeVegaPlugin(String distUrl, String version, Future<String> Function(String url) fetch) async {
+  final value = distUrl.substring(distUrl.lastIndexOf('/') + 1);
+  final base = distUrl.substring(0, distUrl.length - '/dist/$value'.length);
+  final b = StringBuffer('$vegaMarker$value\n// @vega-version $version\n__vega.source(${jsonEncode(base)}, ${jsonEncode(value)});\n');
+  for (final m in const ['posts', 'meta', 'stream', 'episodes']) {
+    final String code;
+    try {
+      code = await fetch('$distUrl/$m.js');
+    } catch (e) {
+      if (m == 'episodes' && e is HttpError && e.status == 404) continue;
+      rethrow;
+    }
+    b.write('__vega.module(${jsonEncode(m)}, function (exports, module, require, __awaiter, providerGlobal) {\n$code\n});\n');
+  }
+  return b.toString();
+}
+
 /// A repository file: `{"name": "…", "plugins": [{"id","name","url","version","note","types"}]}`.
 /// Each plugin's `url` may be relative to the repository file. Returns (name, entries).
-({String name, List<({String id, String name, String url, String version, String note, List<String> types})> plugins}) parseRepoFile(
+({String name, List<({String id, String name, String url, String version, String note, List<String> types, bool vega})> plugins}) parseRepoFile(
   String text,
   String repoUrl,
 ) {
@@ -132,9 +192,10 @@ String normalizeRepoUrl(String input) {
   } catch (_) {
     throw const FormatException('That link is not a JSON file.');
   }
+  if (j is List) return _parseVegaManifest(j, repoUrl);
   if (j is! Map || j['plugins'] is! List) throw const FormatException('Not a plugin repository: it has no "plugins" list.');
   final base = Uri.parse(repoUrl);
-  final out = <({String id, String name, String url, String version, String note, List<String> types})>[];
+  final out = <({String id, String name, String url, String version, String note, List<String> types, bool vega})>[];
   final seen = <String>{};
   for (final p in j['plugins'] as List) {
     if (p is! Map || p['url'] is! String) continue;
@@ -142,7 +203,15 @@ String normalizeRepoUrl(String input) {
     if (url.scheme != 'https' && url.scheme != 'http') continue;
     final id = '${p['id'] ?? ''}'.trim().isEmpty ? url.pathSegments.last.replaceAll(RegExp(r'\.js$'), '') : '${p['id']}'.trim();
     if (!RegExp(r'^[A-Za-z0-9_.-]{1,64}$').hasMatch(id) || !seen.add(id)) continue;
-    out.add((id: id, name: '${p['name'] ?? id}', url: '$url', version: '${p['version'] ?? ''}', note: '${p['note'] ?? ''}', types: _types(p['types'])));
+    out.add((
+      id: id,
+      name: '${p['name'] ?? id}',
+      url: '$url',
+      version: '${p['version'] ?? ''}',
+      note: '${p['note'] ?? ''}',
+      types: _types(p['types']),
+      vega: false,
+    ));
     if (out.length >= _maxPlugins) break;
   }
   return (name: '${j['name'] ?? ''}'.trim(), plugins: out);
@@ -271,7 +340,9 @@ class JsPlugins {
         continue;
       }
       try {
-        final code = await fetchText(e.url, timeout: const Duration(seconds: 20));
+        final code = e.vega
+            ? await composeVegaPlugin(e.url, e.version, (u) => fetchText(u, timeout: const Duration(seconds: 20)))
+            : await fetchText(e.url, timeout: const Duration(seconds: 20));
         if (code.length > _maxScript) continue;
         plugins.add(JsPlugin(id: e.id, name: e.name, url: e.url, code: code, version: e.version, note: e.note, types: e.types));
       } catch (_) {
@@ -454,6 +525,11 @@ void _loadQuickJsDeepBound() {
   } catch (_) {}
 }
 
+String? _vegaRuntimeJs;
+
+/// assets/plugins/vega_runtime.js: what a Vega provider runs on (see tool/vega_runtime).
+Future<String> _vegaRuntime() async => _vegaRuntimeJs ??= await rootBundle.loadString('assets/plugins/vega_runtime.js');
+
 String? _helpersJs;
 
 /// assets/plugins/helpers.js: the title-matching functions every plugin can call.
@@ -486,6 +562,7 @@ Future<List<FoundStream>> runJsPlugin(String code, FilmQuery q, {String name = '
   // the app until the engine's own 20-second limit stops it: it runs in an isolate of its own.
   _loadQuickJsDeepBound();
   final helpers = await _helpers();
+  if (code.startsWith(vegaMarker)) code = '${await _vegaRuntime()}\n$code';
   final Map<String, Object?> res;
   try {
     if (Platform.isAndroid || Platform.isLinux || Platform.isWindows) {
@@ -505,6 +582,13 @@ Future<List<FoundStream>> runJsPlugin(String code, FilmQuery q, {String name = '
   ]);
   if (error != null) throw StateError(error);
   return streams;
+}
+
+/// [_execute] for tests: runs [code] (after [helpers]) in a real engine and returns {streams, log, error?}.
+@visibleForTesting
+Future<Map<String, Object?>> executeScriptForTest(String code, Map<String, Object?> query, String helpers) {
+  _loadQuickJsDeepBound();
+  return _execute(code, query, helpers);
 }
 
 /// Runs the script in a fresh engine and returns the streams it answered with (as plain data).

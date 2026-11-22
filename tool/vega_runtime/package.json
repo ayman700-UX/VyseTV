@@ -1,0 +1,7 @@
+{
+  "name": "vega-runtime",
+  "private": true,
+  "description": "Builds assets/plugins/vega_runtime.js: polyfills + real axios + real cheerio + the Vega provider adapter",
+  "scripts": { "build": "node build.mjs" },
+  "devDependencies": { "axios": "1.12.2", "cheerio": "1.0.0", "esbuild": "0.25.0" }
+}

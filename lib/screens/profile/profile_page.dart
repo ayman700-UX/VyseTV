@@ -2823,7 +2823,7 @@ class _PluginReposState extends State<_PluginRepos> {
   @override
   Widget build(BuildContext context) => _Section(
     title: 'Plugins',
-    subtitle: 'Add a repository link (a repo.json, for example on GitHub). Its scripts run in a sandbox on this device: '
+    subtitle: 'Add a repository link (a repo.json, for example on GitHub, or a Vega manifest.json). Its scripts run in a sandbox on this device: '
         'they can fetch web pages but cannot reach your files or your home network. Only add repositories you trust.',
     children: [
       Padding(
