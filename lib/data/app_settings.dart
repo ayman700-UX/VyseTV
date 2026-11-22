@@ -181,8 +181,9 @@ class AppSettings {
         subtitleLanguage, subtitleSize, subtitleColor,
         subtitleBackground, subtitleFont, subtitleBold, subtitleItalic, subtitleBackColor, subtitleOutline, subtitleOutlineColor,
         subtitleShadow, subtitleShadowColor, subtitleBlur, subtitleSpacing, subtitleTop, subtitleLift, subtitleOnPicture, subtitleAss,
-        audioDelayMs, audioPassthrough, audioChannels, hdrOutput, matchRefreshRate, playerEngine, plugins, pluginAutoUpdate, pluginsChecked, leanMotion, pictureShape, volumeLevelling,
+        audioDelayMs, audioPassthrough, audioChannels, hdrOutput, matchRefreshRate, playerEngine, leanMotion, pictureShape, volumeLevelling,
         upscaler, ambientLight, partyLibrary, musicAutoplay, debridProvider, debridOn, updateAuto, updateSkipped, myListGrid, myListSort, partyMembers, partySounds, partyMuted, animeAdult, animeAudio,
+        plugins, pluginAutoUpdate, pluginsChecked,
       ];
 
   static Future<void> initialize() async {
