@@ -4,6 +4,7 @@ import '../../data/account/account_sync.dart';
 import '../../data/sources/addons.dart';
 import '../../data/sources/film_sources/film_sources.dart';
 import '../../data/sources/film_sources/source_settings.dart';
+import '../../data/sources/plugins/js_plugins.dart';
 import '../../data/playback/intro_db.dart' show SegmentKind;
 import '../../data/account/account.dart';
 import '../../core/platform/platform_detector.dart' show PlatformDetector;
@@ -2707,7 +2708,7 @@ class _SourcesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([AppSettings.sourceOrder, AppSettings.sourcesOff]),
+    listenable: Listenable.merge([AppSettings.sourceOrder, AppSettings.sourcesOff, AppSettings.plugins]),
     builder: (context, _) {
       final list = orderedFilmSources();
       final firstOn = list.indexWhere(filmSourceOn);
@@ -2718,7 +2719,7 @@ class _SourcesTab extends StatelessWidget {
         setFilmSourceOrder(next);
       }
 
-      return _Section(
+      return Column(children: [_Section(
         title: 'Film and TV sources',
         subtitle: 'When a film or episode starts these are asked from the top down, and the first to answer plays. '
             'Drag a row or use the arrows to change the order; switch one off to skip it. Anime has servers of its own.',
@@ -2765,8 +2766,184 @@ class _SourcesTab extends StatelessWidget {
             ),
           ),
         ],
-      );
+      ), const _PluginRepos()]);
     },
+  );
+}
+
+/// Settings → Sources → Plugins: add a repository (a `repo.json` link, e.g. on GitHub) whose
+/// scripts find streams. Each plugin it lists shows up in the list above as a source.
+class _PluginRepos extends StatefulWidget {
+  const _PluginRepos();
+
+  @override
+  State<_PluginRepos> createState() => _PluginReposState();
+}
+
+class _PluginReposState extends State<_PluginRepos> {
+  final _link = TextEditingController();
+  bool _busy = false;
+  String? _message;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    JsPlugins.load();
+  }
+
+  @override
+  void dispose() {
+    _link.dispose();
+    super.dispose();
+  }
+
+  Future<void> _add([String? url]) async {
+    final text = (url ?? _link.text).trim();
+    if (text.isEmpty || _busy) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final r = await JsPlugins.add(text);
+      if (url == null) _link.clear();
+      _failed = false;
+      _message = '${r.name}: ${r.plugins.length} plugin${r.plugins.length == 1 ? '' : 's'} ready. They are in the list above.';
+    } on FormatException catch (e) {
+      _failed = true;
+      _message = e.message;
+    } catch (e) {
+      _failed = true;
+      _message = '$e';
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) => _Section(
+    title: 'Plugins',
+    subtitle: 'Add a repository link (a repo.json, for example on GitHub). Its scripts run in a sandbox on this device: '
+        'they can fetch web pages but cannot reach your files or your home network. Only add repositories you trust.',
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _link,
+                    enabled: !_busy,
+                    onSubmitted: (_) => _add(),
+                    style: const TextStyle(fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: 'https://raw.githubusercontent.com/…/repo.json',
+                      hintStyle: const TextStyle(color: VyseColors.textFaint),
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: .05),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                      prefixIcon: const Icon(Icons.extension_rounded, size: 18, color: VyseColors.textDim),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: VyseColors.stroke)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: VyseColors.stroke)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: VyseColors.accent.withValues(alpha: .7)),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _busy
+                    ? const SizedBox(width: 92, child: Center(child: SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))))
+                    : _SmallButton(label: 'Add', icon: Icons.add_rounded, primary: true, onTap: _add),
+              ],
+            ),
+            if (_message != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(_failed ? Icons.error_outline_rounded : Icons.check_circle_rounded, size: 16, color: _failed ? _danger : const Color(0xFF3DDC97)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_message!, style: TextStyle(fontSize: 13, color: _failed ? _danger : VyseColors.textDim, height: 1.35))),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+      ValueListenableBuilder<bool>(
+        valueListenable: AppSettings.pluginAutoUpdate,
+        builder: (context, on, _) => _Row(
+          title: 'Update automatically',
+          subtitle: 'When VyseTV starts (at most once a day) it checks the repositories and downloads only the plugins whose version changed. Off: scripts change only when you press refresh.',
+          below: ValueListenableBuilder<String?>(
+            valueListenable: JsPlugins.status,
+            builder: (context, msg, _) => msg == null ? const SizedBox.shrink() : Padding(padding: const EdgeInsets.only(top: 6), child: Text(msg, style: const TextStyle(fontSize: 12.5, color: VyseColors.textDim))),
+          ),
+          trailing: _Switch(value: on, onChanged: AppSettings.pluginAutoUpdate.set),
+        ),
+      ),
+      ValueListenableBuilder<List<PluginRepo>>(
+        valueListenable: JsPlugins.repos,
+        builder: (context, repos, _) => Column(
+          children: [
+            for (final r in repos)
+              _Row(
+                title: r.name,
+                subtitle: '${r.plugins.length} plugin${r.plugins.length == 1 ? '' : 's'} · ${r.url}',
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _IconAction(icon: Icons.refresh_rounded, tooltip: 'Update from the link', onTap: _busy ? null : () => _add(r.url)),
+                    _IconAction(icon: Icons.delete_outline_rounded, tooltip: 'Remove the repository and its plugins', danger: true, onTap: () => JsPlugins.remove(r)),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+      ValueListenableBuilder<List<String>>(
+        valueListenable: PluginLog.lines,
+        builder: (context, lines, _) => Padding(
+          padding: const EdgeInsets.only(top: 18, bottom: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(child: Text('Plugin log', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
+                  _SmallButton(label: 'Clear', icon: Icons.delete_sweep_rounded, onTap: PluginLog.clear),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'What the plugins reported on their last runs. If a source finds nothing, this shows where it stopped.',
+                style: TextStyle(fontSize: 12.5, color: VyseColors.textDim, height: 1.35),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 260),
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.black.withValues(alpha: .25), borderRadius: BorderRadius.circular(8)),
+                child: SingleChildScrollView(
+                  reverse: true,
+                  child: SelectableText(
+                    lines.isEmpty ? 'Nothing yet. Play something with a plugin source first.' : lines.reversed.take(80).toList().reversed.join('\n'),
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 11.5, height: 1.4, color: VyseColors.textDim),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ],
   );
 }
 

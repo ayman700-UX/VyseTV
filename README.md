@@ -199,6 +199,11 @@ The whole app works with the arrow keys, Enter and Escape, so a keyboard, a remo
 - **In a text box** the arrows move the caret and leave the box at the ends of the text. Escape leaves the box; in a search box it clears the text first.
 - **In Party**, Enter on a message opens its menu, and holding Enter on the talk button talks for as long as you hold it. A room's video is one stop on the room's page: Enter makes it fill the window, and Escape brings it back.
 
+## Scraper plugins
+
+Extra film sources can be added as JavaScript plugins from a repository you choose (Settings → Plugins). Plugins run in a
+sandbox and find streams by title or IMDb id. How to use and write them: [lib/data/sources/plugins/README.md](lib/data/sources/plugins/README.md).
+
 ## Platforms
 
 | Platform | Minimum | What you get |

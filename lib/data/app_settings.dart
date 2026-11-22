@@ -142,6 +142,11 @@ class AppSettings {
   static final audioChannels = Setting<String>('device.channels', 'original'); // original, surround51, stereo
   static final hdrOutput = Setting<bool>('device.hdr', true);
   static final matchRefreshRate = Setting<bool>('device.matchRefresh', false);
+  /// Scraper plugin repositories and their scripts (sources/plugins/js_plugins.dart): this device only.
+  static final plugins = Setting<String>('device.plugins', '');
+  /// Plugins: check the repositories when the app starts (once a day) and download the plugins whose version changed.
+  static final pluginAutoUpdate = Setting<bool>('device.pluginsAuto', false);
+  static final pluginsChecked = Setting<int>('device.pluginsChecked', 0); // when, in ms since the epoch
   // The video engine on an Android TV: '' (not chosen: Media3), 'media3' or 'mpv'. Read through
   // PlayerEngine (data/playback/player_engine.dart).
   static final playerEngine = Setting<String>('device.engine', '');
@@ -176,7 +181,7 @@ class AppSettings {
         subtitleLanguage, subtitleSize, subtitleColor,
         subtitleBackground, subtitleFont, subtitleBold, subtitleItalic, subtitleBackColor, subtitleOutline, subtitleOutlineColor,
         subtitleShadow, subtitleShadowColor, subtitleBlur, subtitleSpacing, subtitleTop, subtitleLift, subtitleOnPicture, subtitleAss,
-        audioDelayMs, audioPassthrough, audioChannels, hdrOutput, matchRefreshRate, playerEngine, leanMotion, pictureShape, volumeLevelling,
+        audioDelayMs, audioPassthrough, audioChannels, hdrOutput, matchRefreshRate, playerEngine, plugins, pluginAutoUpdate, pluginsChecked, leanMotion, pictureShape, volumeLevelling,
         upscaler, ambientLight, partyLibrary, musicAutoplay, debridProvider, debridOn, updateAuto, updateSkipped, myListGrid, myListSort, partyMembers, partySounds, partyMuted, animeAdult, animeAudio,
       ];
 

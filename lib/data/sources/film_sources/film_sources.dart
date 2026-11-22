@@ -8,6 +8,7 @@ import '../sources.dart';
 import '../../playback/stream_proxy.dart';
 import 'common.dart';
 import 'scrapers.dart';
+import '../plugins/js_plugins.dart' show pluginSources;
 
 /// Where films and shows play from (Settings → Sources): Movy, and the sources ported from the
 /// Vyla SDK that passed VyseTV's checks (a real title found, played through the relay, and a
@@ -37,7 +38,7 @@ class FilmSource {
 const movySource = FilmSource(id: 'movy', name: 'Movy', note: '17 servers, some in other languages');
 
 /// Every source, in the default order: Movy first.
-final List<FilmSource> filmSources = [movySource, ...portedSources];
+List<FilmSource> get filmSources => [movySource, ...portedSources, ...pluginSources];
 
 enum FilmState { untried, trying, ready, dead }
 
@@ -96,7 +97,7 @@ class FilmSourceState {
 
 /// One title's lookups, source by source. Movy's details and seed are fetched once and shared.
 class FilmSession {
-  FilmSession({required int tmdbId, required bool isTv, int? season, int? episode, required List<FilmSource> order, this.onChange})
+  FilmSession({required int tmdbId, required bool isTv, int? season, int? episode, required List<FilmSource> order, this.onChange, this.dash = true})
     : movy = MovySession(tmdbId: tmdbId, isTv: isTv, season: season, episode: episode),
       _query = FilmQuery(tmdbId: tmdbId, isTv: isTv, season: isTv ? (season ?? 1) : null, episode: isTv ? (episode ?? 1) : null),
       sources = [
@@ -117,6 +118,10 @@ class FilmSession {
 
   /// Something's state changed: a lookup started or ended.
   final void Function()? onChange;
+
+  /// The player can play DASH manifests (ExoPlayer can; the libmpv in the Linux build has no DASH demuxer).
+  /// When it can't, a DASH link counts as one that doesn't work, and the next link is tried.
+  final bool dash;
 
   final _scraping = <FilmSourceState, Future<void>>{};
   final _opening = <FilmLink, Future<StreamSource?>>{};
@@ -160,7 +165,11 @@ class FilmSession {
           got = await movy.fetch(m);
         } else if (f != null) {
           final h = _withAgent(f.headers);
-          if (f.type == 'hls' ? await _hlsAnswers(f.url, h) : await _answers(f.url, h)) got = _toSource(f, l.source.name);
+          if (f.type == 'dash' && !dash) {
+            // (nothing to check: it can't be played)
+          } else if (f.type == 'hls' ? await _hlsAnswers(f.url, h) : f.type == 'dash' ? await _dashAnswers(f.url, h) : await _answers(f.url, h)) {
+            got = _toSource(f, l.source.name);
+          }
         }
       } catch (_) {}
       l.stream = got;
@@ -247,6 +256,13 @@ Future<bool> _hlsAnswers(String url, Map<String, String> h) async {
   }
   final piece = _firstUri(r.body);
   return piece != null && await _answers('${base.resolve(piece)}', h);
+}
+
+/// A DASH manifest: the answer is a real MPD, not a relay's error page (which mpv can't open: it
+/// would stop on "Loading…" with no audio list).
+Future<bool> _dashAnswers(String url, Map<String, String> h) async {
+  final r = await fetchRaw(url, headers: h, timeout: _probeTimeout);
+  return r.statusCode < 300 && r.body.contains('<MPD');
 }
 
 /// The first bytes of [url] come back (only the status is read; the rest is dropped).

@@ -5,15 +5,24 @@ import 'film_sources.dart';
 
 /// Settings → Sources: the order film and TV sources are asked in, and which are off.
 
-List<String> _ids(String raw) => [for (final s in raw.split(',')) if (s.trim().isNotEmpty) s.trim()];
+List<String> _ids(String raw) => [
+  for (final s in raw.split(','))
+    if (s.trim().isNotEmpty) s.trim(),
+];
 
 /// Every source in your order. Ones the saved order doesn't know yet (added by an update) go
 /// to the end, in their default order.
 List<FilmSource> orderedFilmSources() {
-  final byId = {for (final s in filmSources) s.id: s};
-  final out = <FilmSource>[for (final id in _ids(AppSettings.sourceOrder.value)) ?byId[id]];
-  for (final s in filmSources) {
-    if (!out.contains(s)) out.add(s);
+  final all = filmSources; // (plugin sources are built anew on each call: compare by id, never by object)
+  final byId = {for (final s in all) s.id: s};
+  final out = <FilmSource>[];
+  final seen = <String>{};
+  for (final id in _ids(AppSettings.sourceOrder.value)) {
+    final s = byId[id];
+    if (s != null && seen.add(id)) out.add(s); // an id saved twice (an older build did that) counts once
+  }
+  for (final s in all) {
+    if (seen.add(s.id)) out.add(s);
   }
   return out;
 }
@@ -33,7 +42,12 @@ void setFilmSourceOn(FilmSource s, bool on) {
 }
 
 /// The sources a play asks, in your order, without the ones you turned off.
-List<FilmSource> activeFilmSources() => debugFilmSources ?? [for (final s in orderedFilmSources()) if (filmSourceOn(s)) s];
+List<FilmSource> activeFilmSources() =>
+    debugFilmSources ??
+    [
+      for (final s in orderedFilmSources())
+        if (filmSourceOn(s)) s,
+    ];
 
 /// Tests: made-up sources in place of yours (no site is asked).
 @visibleForTesting

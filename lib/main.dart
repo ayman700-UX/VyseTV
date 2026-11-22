@@ -16,6 +16,7 @@ import 'data/party/party_music.dart' show PartyMusic;
 import 'data/party/rooms.dart' show Rooms;
 import 'data/party/voice.dart' show Voice;
 import 'data/party/watch_party.dart' show WatchParty;
+import 'data/sources/plugins/js_plugins.dart';
 import 'data/app_settings.dart';
 import 'data/catalog/tmdb.dart' show MyList;
 import 'data/downloads/downloads.dart';
@@ -77,6 +78,8 @@ Future<void> main() async {
   }
   await IptvSettings.initialize();
   await AppSettings.initialize();
+  // plugins: a daily check of the repositories, when the user switched it on (a few seconds after start-up)
+  unawaited(Future<void>.delayed(const Duration(seconds: 8), JsPlugins.autoUpdateIfDue));
   // On a TV the interface is drawn the lean way (fewer frames, less paint), unless Settings says not
   Lean.decide();
   await Torrents.initialize(); // iPhone and iPad: is the engine in this build (instant elsewhere)

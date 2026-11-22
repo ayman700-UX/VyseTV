@@ -1615,6 +1615,7 @@ class _PlayerPageState extends State<_PlayerView> {
       season: ep?.season,
       episode: ep?.number,
       order: _hostOrder ? theirs : activeFilmSources(),
+      dash: _media3 || !Platform.isLinux,
       onChange: () {
         if (mounted && id == _loadId) setState(() {});
       },
@@ -2481,7 +2482,8 @@ class _PlayerPageState extends State<_PlayerView> {
     _wanted = null;
     if (src == null) {
       final what = l.source.scraper == null ? l.name : '${l.name} on ${l.source.name}';
-      showToast(context, Text("$what isn't playing this one", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)), icon: Icons.error_outline_rounded);
+      final msg = l.format == 'DASH' && !session.dash ? "$what is DASH, which this player can't play" : "$what isn't playing this one";
+      showToast(context, Text(msg, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)), icon: Icons.error_outline_rounded);
       return;
     }
     await _playLink(l);
@@ -4253,6 +4255,7 @@ class _PlayerPageState extends State<_PlayerView> {
                   audio: l.audio,
                   state: shown(l.state),
                   current: l == _playingLink,
+                  unsupported: l.format == 'DASH' && !session.dash,
                   onTap: () => _tapLink(l),
                 ),
             ],
