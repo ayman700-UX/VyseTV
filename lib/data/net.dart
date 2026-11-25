@@ -25,9 +25,13 @@ final http.Client netClient = IOClient(
     ..connectionFactory = _connect,
 );
 
+/// `VYSE_LOG_URLS=1 vysetv.sh` prints every request the app's own HTTP clients make (not what mpv or the Android player fetch).
+final _logUrls = Platform.environment['VYSE_LOG_URLS'] == '1';
+
 /// The proxy for [uri]: the local gateway while a network mode has a route, otherwise a direct connection; this device and its local
 /// network always go direct.
 String _findProxy(Uri uri) {
+  if (_logUrls) stderr.writeln('[net] $uri');
   final port = NetState.proxyPort ?? (uri.host == NetState.serverHost ? NetState.serverPort : null);
   return port == null || isLocalHost(uri.host) ? 'DIRECT' : 'PROXY 127.0.0.1:$port';
 }
