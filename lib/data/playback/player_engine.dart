@@ -100,6 +100,8 @@ abstract final class PlayerEngine {
 
   /// The codecs the plugin named ("... (audio/true-hd, audio/ac3)"), in plain names; ones with
   /// no plain name are left out, and at most two are said.
+  static List<String> codecsIn(String reason) => _codecs(reason);
+
   static List<String> _codecs(String reason) {
     final out = <String>[];
     for (final m in RegExp(r'(?:audio|video)/[A-Za-z0-9.+\-]+(?:;profile=[a-z0-9]+)?').allMatches(reason)) {

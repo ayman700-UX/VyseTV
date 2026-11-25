@@ -80,6 +80,13 @@ class PlaybackReport {
     'subtitle': name == null && language == null ? null : {'name': ?name, 'language': ?language, 'origin': ?origin},
   });
 
+  /// How the sound settings stand: Passthrough on or off, and whether levelling or Stereo keep
+  /// it from being used. They say why a Dolby track was decoded here and not sent on.
+  PlaybackReport withSoundSettings({required bool passthrough, bool decodeForced = false}) {
+    final now = {'passthrough': passthrough, 'forced': decodeForced};
+    return mapEquals(_m('sound'), now) ? this : _with({'sound': now});
+  }
+
   /// A first frame showed, [ms] after the open (the app's clock; Media3's own is used when it
   /// has one). After a hand-over it is mpv's, and says mpv played what Media3 gave up.
   PlaybackReport withFirstFrame(int ms) {
@@ -98,6 +105,10 @@ class PlaybackReport {
 
   /// It did not play, and why (the player's error, or the app's own words for it).
   PlaybackReport withFailure(String why) => _with({'failure': scrub(why)});
+
+  /// The player gave up one half of the video and played on with the other: [part] is 'audio'
+  /// or 'video', [line] the engine's own words as it did.
+  PlaybackReport withDropped(String part, String line) => _with({'dropped': {'part': part, 'line': scrub(line)}});
 
   /// The player closed, [afterMs] after the open.
   PlaybackReport closed(int afterMs) => _with({'closedAfterMs': afterMs});
@@ -174,12 +185,14 @@ class PlaybackReport {
         ('Resolution', _resolution(exo, mpv)),
         ('Bitrate', _bitrate(exo['videoBitrate'] ?? mpv['video-bitrate'])),
         ('Frame rate', _fps(exo['videoFps'] ?? mpv['container-fps'])),
+        ('On screen', onScreen),
       ])),
       (title: 'Audio', facts: _facts([
         ('Codec', _audioCodec(exo, mpv)),
         ('Channels', _channels(exo, mpv)),
         ('Sample rate', _sampleRate(exo['audioSampleRate'] ?? mpv['current-tracks/audio/demux-samplerate'] ?? mpv['audio-params/samplerate'] ?? _m('audio')['sampleRate'])),
         ('Language', _str(_m('audio')['language']) ?? ''),
+        ('Heard as', heard),
       ])),
       (title: 'Subtitle', facts: subtitle.isEmpty
           ? const [(label: 'Showing', value: 'Off')]
@@ -224,15 +237,136 @@ class PlaybackReport {
         // (what this TV does with profile 7, whatever is playing: the rule other apps call the DV mode)
         ('Profile 7 videos', asked == null ? '' : (asked.toUpperCase() == 'AUTO' ? 'Auto: ${_dvMode(inEffect)}' : '${_dvMode(asked)}, set by hand')),
         ('Conversion bridge', bridge == null ? '' : (converting ? 'In use' : (bridge ? 'Ready, not in use' : 'Not there'))),
+        // (how long Media3 asks a link that sends nothing before it gives the video up)
+        ('A quiet link', switch ((exo['networkPatienceMs'] as num?)?.toInt()) {
+          null => '',
+          0 => "Media3's own four tries, about 40 s",
+          final ms => 'Asked again for ${(ms / 1000).round()} s, as mpv is',
+        }),
       ])),
       (title: 'Outcome', facts: _facts([
         ('HDR format', _hdr(exo, mpv)),
+        ('On screen', onScreen),
+        ('Heard as', heard),
         ('First frame', firstFrameMs == null ? '' : '$firstFrameMs ms'),
         ('Rebuffers', started ? '${(exo['rebuffers'] as num?)?.toInt() ?? (_f['rebuffers'] as num?)?.toInt() ?? 0}' : ''),
         ('Result', result),
+        ('Left out', switch (_m('dropped')) {
+          {'part': 'audio', 'line': final String line} => 'The sound · $line',
+          {'part': 'video', 'line': final String line} => 'The picture · $line',
+          _ => '',
+        }),
         ('What Media3 said', _str(_m('handOver')['detail']) ?? _str(_m('handOver')['reason']) ?? ''),
       ])),
     ];
+  }
+
+  // ── What reaches the screen and the speakers ──
+
+  /// The picture as it is shown, where that can be told (an Android device says what its
+  /// screen takes): "Dolby Vision", "HDR10, its HDR10 layer", "SDR, mapped by the TV". Empty
+  /// until the player has the video, and on devices that do not say what their screen takes.
+  String get onScreen => _picture().$1;
+
+  /// The sound as it leaves: "Passed through as Dolby Digital Plus, Atmos inside", "Decoded
+  /// here to 5.1". Empty until the player has opened its sound output.
+  String get heard => _sound().$1;
+
+  /// A short line for each way the video plays in a lesser form than the stream carries (Dolby
+  /// Vision as HDR10, HDR on a screen without it, Atmos decoded), with why: the picture's, then
+  /// the sound's. Null when it plays as it is, or when that cannot be told.
+  String? get lesser {
+    final lines = [?_picture().$2, ?_sound().$2];
+    return lines.isEmpty ? null : lines.join('\n');
+  }
+
+  (String, String?) _picture() {
+    // (after a hand-over the video is mpv's to describe, once it has it open)
+    final exo = handedOver && _mpvKnows ? const <String, Object?>{} : _m('exo'), mpv = _m('mpv'), caps = _m('caps');
+    final format = _hdr(exo, mpv);
+    if (format.isEmpty || caps.isEmpty) return ('', null);
+    final display = _list(caps['displayHdr']);
+    final dvScreen = display.contains('Dolby Vision');
+    final noHdr = display.isEmpty;
+    if (!format.startsWith('Dolby Vision')) {
+      if (format == 'SDR') return ('SDR', null);
+      return noHdr ? ('SDR, mapped by the TV', '$format shown as SDR · this screen has no HDR') : (format, null);
+    }
+    final under = noHdr ? 'SDR, mapped by the TV from its HDR10 layer' : 'HDR10, its HDR10 layer';
+    final whyNot = dvScreen ? 'no Dolby Vision decoder here plays it' : 'this screen has no Dolby Vision';
+    // mpv says which way it took the video; Media3 which path its decoder choice came to
+    if (exo.isEmpty) {
+      final gamma = _str(mpv['video-params/gamma']);
+      switch (_str(mpv['dvRoute'])) {
+        case 'dv-decoder':
+          return dvScreen ? ('Dolby Vision', null) : ("Converted by the TV's Dolby Vision decoder", null);
+        case 'dv-decoder-p81':
+          return ('Dolby Vision, profile 7 converted to 8.1', null);
+        case 'reshaped':
+          return ('Dolby Vision colours, decoded in software by mpv', 'Dolby Vision is decoded in software here · it may stutter');
+        case 'base-layer':
+          return gamma == 'pq' || gamma == 'hlg'
+              ? (under, 'Dolby Vision shown as ${noHdr ? 'SDR' : 'HDR10'} · $whyNot')
+              : ('Its base layer, without Dolby Vision', 'Dolby Vision is not shown · $whyNot');
+      }
+      return ('', null);
+    }
+    final path = _str(exo['dvPlaybackPath']);
+    if (path == null) return ('', null);
+    if (path == 'HDR fallback' || path == 'P7 -> HEVC') return (under, 'Dolby Vision shown as ${noHdr ? 'SDR' : 'HDR10'} · $whyNot');
+    if (path == 'P7 -> P8.1') return ('Dolby Vision, profile 7 converted to 8.1', null);
+    return dvScreen ? ('Dolby Vision', null) : ("Converted by the TV's Dolby Vision decoder", null);
+  }
+
+  // Android's numbers for what a sound output is given (AudioFormat.ENCODING_*).
+  static const _pcmOut = {2, 3, 4, 21, 22, 0x10000000, 0x50000000, 0x60000000};
+  static const _encodedOut = {
+    5: 'Dolby Digital',
+    6: 'Dolby Digital Plus',
+    18: 'Dolby Digital Plus with Atmos',
+    7: 'DTS',
+    8: 'DTS-HD',
+    14: 'TrueHD',
+    17: 'AC-4',
+    30: 'DTS:X',
+  };
+
+  static String _layout(int? channels) => switch (channels) {
+    null || 0 => 'PCM',
+    1 => 'mono',
+    2 => 'stereo',
+    6 => '5.1',
+    8 => '7.1',
+    final n => '$n channels',
+  };
+
+  (String, String?) _sound() {
+    final exo = handedOver && _mpvKnows ? const <String, Object?>{} : _m('exo'), mpv = _m('mpv');
+    final settings = _m('sound');
+    // (why a Dolby track is decoded here: the setting first, then the TV's own answer)
+    final whyDecoded = settings['passthrough'] == false
+        ? 'Passthrough is off'
+        : (settings['forced'] == true ? 'levelling or Stereo is on' : "the TV's sound output does not take it");
+    final atmos = exo['audioMimeType'] == 'audio/eac3-joc' || (_str(mpv['current-tracks/audio/codec-profile'])?.contains('Atmos') ?? false);
+    final out = (exo['audioOutputEncoding'] as num?)?.toInt();
+    if (out != null) {
+      if (_pcmOut.contains(out)) {
+        final to = _layout((exo['audioOutputChannels'] as num?)?.toInt());
+        return ('Decoded here to $to', atmos ? 'Atmos decoded to $to · $whyDecoded' : null);
+      }
+      // (a TrueHD or DTS-HD stream in its carrier is still that stream)
+      final name = out == 13 ? _audioCodec(exo, mpv) : (out == 6 && atmos ? 'Dolby Digital Plus, Atmos inside' : _encodedOut[out]);
+      return (name == null || name.isEmpty ? 'Passed through to the TV or receiver' : 'Passed through as $name', null);
+    }
+    final format = _str(mpv['audio-params/format']);
+    if (format == null) return ('', null);
+    if (format.startsWith('spdif-')) {
+      final codec = format.substring(6);
+      final name = {'eac3': atmos ? 'Dolby Digital Plus, Atmos inside' : 'Dolby Digital Plus', 'ac3': 'Dolby Digital', 'dts-hd': 'DTS-HD'}[codec] ?? _audioNames[codec] ?? codec.toUpperCase();
+      return ('Passed through as $name', null);
+    }
+    final to = _str(mpv['audio-out-params/hr-channels']) ?? _str(mpv['audio-params/hr-channels']) ?? 'PCM';
+    return ('Decoded here to $to', atmos ? 'Atmos decoded to $to · $whyDecoded' : null);
   }
 
   /// How it went, in a line: played and on what, handed to mpv and what for, or why not.

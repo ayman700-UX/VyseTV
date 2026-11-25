@@ -3103,6 +3103,10 @@ class MpvPlayerCore private constructor(
       "audio-params/samplerate" to readProperty("audio-params/samplerate"),
       "audio-params/hr-channels" to readProperty("audio-params/hr-channels"),
       "audio-params/format" to readProperty("audio-params/format"),
+      // VyseTV: for the report card's "Heard as": what the sound output is given once any
+      // downmix is done, and whether the track says it carries Atmos
+      "audio-out-params/hr-channels" to readProperty("audio-out-params/hr-channels"),
+      "current-tracks/audio/codec-profile" to readProperty("current-tracks/audio/codec-profile"),
       "current-tracks/audio/demux-samplerate" to readProperty("current-tracks/audio/demux-samplerate"),
       "current-tracks/audio/demux-channel-count" to readProperty("current-tracks/audio/demux-channel-count"),
       "audio-bitrate" to readProperty("audio-bitrate"),

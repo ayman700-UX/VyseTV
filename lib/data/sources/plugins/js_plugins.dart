@@ -9,7 +9,8 @@
 // only the link, so another device downloads them the first time it needs them.
 //
 // What a script can do is only what the bridge below gives it: `http()` to fetch web pages
-// (never this device's own network) and plain computation. No files, no other apps.
+// (never this device's own network), `crypto.subtle` (web_crypto.dart) and plain computation.
+// No files, no other apps.
 
 import 'dart:async';
 import 'dart:convert';
@@ -27,6 +28,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../net.dart';
 import '../film_sources/common.dart';
+import 'web_crypto.dart';
 
 const _maxPlugins = 100;
 const _maxScript = 512 * 1024;
@@ -930,6 +932,80 @@ function http(url, opts) {
   });
 }
 function __reply(id, r) { var f = __cb[id]; delete __cb[id]; if (f) f(r); }
+// WebCrypto, as a browser has it: crypto.subtle's usual parts (AES-GCM, AES-CBC, AES-CTR, SHA
+// digests, HMAC, PBKDF2), done by the app and answered like http() (web_crypto.dart); and
+// crypto.getRandomValues. Some scrapers decrypt their links with it.
+(function () {
+  var c = globalThis.crypto || (globalThis.crypto = {});
+  function bytes(d) {
+    if (d == null) return new Uint8Array(0);
+    if (d instanceof ArrayBuffer) return new Uint8Array(d);
+    if (ArrayBuffer.isView(d)) return new Uint8Array(d.buffer, d.byteOffset, d.byteLength);
+    if (Array.isArray(d)) return new Uint8Array(d);
+    throw new TypeError('crypto.subtle: expected an ArrayBuffer or a typed array');
+  }
+  function b64(d) { var u = bytes(d), s = ''; for (var i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); return btoa(s); }
+  function unb64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u.buffer; }
+  function b64url(s) { s = String(s).replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return s; }
+  function name(a) { return String(typeof a === 'string' ? a : (a && a.name) || '').toUpperCase(); }
+  function hashOf(a) { var h = a && a.hash; return h ? name(h) : 'SHA-256'; }
+  function key(raw, alg, extractable, usages) { return { type: 'secret', extractable: !!extractable, usages: usages || [], algorithm: typeof alg === 'string' ? { name: alg } : alg, __raw: raw }; }
+  function ask(m) {
+    return new Promise(function (resolve, reject) {
+      var id = ++__n;
+      __cb[id] = function (r) { if (!r || r.error) reject(new Error((r && r.error) || 'crypto.subtle failed')); else resolve(unb64(r.data)); };
+      m.id = id;
+      sendMessage('subtle', JSON.stringify(m));
+    });
+  }
+  function cipher(op, alg, k, data) {
+    var n = name(alg), m = { op: op, alg: n, key: k.__raw, data: b64(data) };
+    if (n === 'AES-GCM') { m.iv = b64(alg.iv); m.tagLength = alg.tagLength || 128; if (alg.additionalData) m.aad = b64(alg.additionalData); }
+    else if (n === 'AES-CBC') m.iv = b64(alg.iv);
+    else if (n === 'AES-CTR') m.iv = b64(alg.counter);
+    return ask(m);
+  }
+  if (typeof c.getRandomValues !== 'function') {
+    c.getRandomValues = function (a) {
+      var u = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+      for (var i = 0; i < u.length; i++) u[i] = Math.floor(Math.random() * 256);
+      return a;
+    };
+  }
+  if (c.subtle) return;
+  var s = c.subtle = {
+    importKey: function (format, data, alg, extractable, usages) {
+      try {
+        if (format === 'raw') return Promise.resolve(key(b64(data), alg, extractable, usages));
+        if (format === 'jwk' && data && data.k) return Promise.resolve(key(b64url(data.k), alg, extractable, usages));
+      } catch (e) { return Promise.reject(e); }
+      return Promise.reject(new Error('crypto.subtle: only raw and jwk keys'));
+    },
+    exportKey: function (format, k) {
+      if (format === 'raw') return Promise.resolve(unb64(k.__raw));
+      if (format === 'jwk') return Promise.resolve({ kty: 'oct', k: k.__raw.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''), ext: true });
+      return Promise.reject(new Error('crypto.subtle: only raw and jwk keys'));
+    },
+    encrypt: function (alg, k, data) { return cipher('encrypt', alg, k, data); },
+    decrypt: function (alg, k, data) { return cipher('decrypt', alg, k, data); },
+    digest: function (alg, data) { return ask({ op: 'digest', hash: name(alg), data: b64(data) }); },
+    sign: function (alg, k, data) { return ask({ op: 'sign', hash: hashOf(k.algorithm), key: k.__raw, data: b64(data) }); },
+    verify: function (alg, k, sig, data) {
+      return s.sign(alg, k, data).then(function (mac) {
+        var a = new Uint8Array(mac), b = bytes(sig), d = a.length ^ b.length;
+        for (var i = 0; i < a.length && i < b.length; i++) d |= a[i] ^ b[i];
+        return d === 0;
+      });
+    },
+    deriveBits: function (alg, k, length) {
+      if (name(alg) !== 'PBKDF2') return Promise.reject(new Error('crypto.subtle: deriveBits does PBKDF2 only'));
+      return ask({ op: 'pbkdf2', hash: hashOf(alg), salt: b64(alg.salt), iterations: alg.iterations, key: k.__raw, length: length || 256 });
+    },
+    deriveKey: function (alg, k, derived, extractable, usages) {
+      return s.deriveBits(alg, k, (derived && derived.length) || 256).then(function (bits) { return key(b64(bits), derived, extractable, usages); });
+    }
+  };
+})();
 // timers: the engine's setTimeout gives no id back and has no clearTimeout; these do, over it
 (function () {
   var later = typeof setTimeout === 'function' ? setTimeout : null, on = {}, n = 0;
@@ -1209,6 +1285,25 @@ Future<Map<String, Object?>> _execute(String code, Map<String, Object?> query, S
         rt.evaluate('__reply($id, ${jsonEncode(res)})');
         rt.executePendingJob();
       }());
+      return null;
+    });
+    // crypto.subtle (the prelude's WebCrypto): done here, answered like http
+    rt.onMessage('subtle', (a) {
+      final id = a is Map ? a['id'] : null;
+      if (id is! int) return null;
+      Map<String, Object?> res;
+      try {
+        res = {'data': base64Encode(webCrypto(Map<String, dynamic>.from(a as Map)))};
+      } catch (e) {
+        res = {'error': '$e'.split('\n').first};
+      }
+      unawaited(
+        Future(() {
+          if (closed) return;
+          rt.evaluate('__reply($id, ${jsonEncode(res)})');
+          rt.executePendingJob();
+        }),
+      );
       return null;
     });
     final pre = rt.evaluate(_prelude);

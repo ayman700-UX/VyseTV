@@ -27,6 +27,7 @@ import 'account_sheet.dart';
 import 'phone_edit_dialog.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../../core/accent.dart';
@@ -1165,8 +1166,28 @@ class _AppearanceTab extends StatelessWidget {
         ),
       ),
       if (PlatformDetector.isTV()) const _Section(title: 'Interface', children: [_LeanRow()]),
+      if (_handheld) const _Section(title: 'Player', children: [_SidewaysRow()]),
       const _Navigation(),
     ],
+  );
+}
+
+/// A phone or tablet (not a TV, not a computer): where the screen can be turned.
+bool get _handheld => (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) && !PlatformDetector.isTV();
+
+/// Settings → Appearance, on a phone or tablet: the player opens sideways, or goes the way the
+/// device is held.
+class _SidewaysRow extends StatelessWidget {
+  const _SidewaysRow();
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+    valueListenable: AppSettings.playSideways,
+    builder: (context, on, _) => _Row(
+      title: 'Play videos sideways',
+      subtitle: 'The player turns the screen sideways by itself. Off: it follows how you hold your phone',
+      trailing: _Switch(value: on, onChanged: AppSettings.playSideways.set),
+    ),
   );
 }
 

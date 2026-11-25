@@ -35,6 +35,7 @@ import '../../data/sources/film_sources/film_sources.dart';
 import '../../data/sources/film_sources/source_settings.dart';
 import '../../data/live_tv/iptv_playback.dart' show IptvPlayback;
 import '../../data/playback/outside_play.dart';
+import '../../data/playback/playback_failure.dart';
 import '../../data/playback/playback_report.dart';
 import '../../data/playback/player_engine.dart';
 import '../../data/sources/sources.dart';
@@ -765,10 +766,13 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       }))
       ..add(_player.streams.track.listen((t) { if (mounted) setState(() => _audioNow = t.audio); }))
       ..add(_player.streams.log.listen(_mpvLog))
+      ..add(_player.streams.log.listen(_watchForDroppedPart))
       // (the report card: the first frame, and why it did not play)
       ..add(_player.streams.playbackRestart.listen((_) => _reportFirstFrame()))
       ..add(_player.streams.fileLoaded.listen((_) => unawaited(_applyShape(fresh: true))))
-      ..add(_player.streams.error.listen((e) => _editReport((r) => r.withFailure(e.message))))
+      // (why it did not play: on the report card, and said on screen when it ended the video)
+      ..add(_player.streams.fileLoadFailed.listen((_) => _gaveUp = true))
+      ..add(_player.streams.error.listen(_onPlayerError))
       ..add(_player.secondaryLines.listen(_autoSyncHeard))
       ;
     if (_media3) {
@@ -781,16 +785,24 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       // Settings > Playback: a video Media3 can't play goes to mpv, or is said not to play
       unawaited(_player.setAllowMpvFallback(PlayerEngine.handOver));
     }
-    // Buffer about three minutes ahead. 4K runs ~16 Mbps (~360 MB for 3 min); mpv keeps the
-    // cache on disk, so the byte limits don't sit in RAM.
+    // Buffer about three minutes ahead. 4K runs ~16 Mbps (~360 MB for 3 min), held in memory.
+    //
+    // Not the byte limits on Android. mpv fills whatever it is allowed, and its Android core
+    // sets its own limits from the device's memory class as it starts (32 to 100 MB ahead,
+    // narrowed again when Android says memory is short). These two used to replace that with
+    // 528 MB on every phone and TV, also on the mpv a Media3 player hands a video to. A
+    // 15 Mbps film never gets there in three minutes; a 4K HDR or Dolby Vision remux at
+    // 60 to 80 Mbps fills it in under a minute, on TVs with 2 GB in all, where Android then
+    // takes the app or its decoder. Upstream never sends them.
     {
       final mpv = _player;
-      for (final (k, v) in const [
+      final ownBudget = defaultTargetPlatform == TargetPlatform.android;
+      for (final (k, v) in [
         ('cache', 'yes'),
         ('cache-secs', '180'),
         ('demuxer-readahead-secs', '180'),
-        ('demuxer-max-bytes', '400MiB'),
-        ('demuxer-max-back-bytes', '128MiB'), // ~30 s+ behind even at 4K
+        if (!ownBudget) ('demuxer-max-bytes', '400MiB'),
+        if (!ownBudget) ('demuxer-max-back-bytes', '128MiB'), // ~30 s+ behind even at 4K
         ('demuxer-seekable-cache', 'yes'),
       ]) {
         unawaited(mpv.setProperty(k, v));
@@ -824,6 +836,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     if (_touch) {
       ScreenBrightness.instance.application.then<void>((b) => _brightness = b, onError: (Object _) {});
     }
+    _openSideways();
     _loadAndPlay();
     // Opened from a plain Play button: fill in the episode's name and length.
     final ep = _ep;
@@ -846,9 +859,23 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
         if (mounted && _tile) _tileNode.requestFocus();
       });
     }
+    // a watch party's room: sideways while its player fills the window, as you hold it on its tile
+    if (widget.embedded && !widget.mini && old.expanded != widget.expanded) {
+      if (widget.expanded) {
+        _openSideways();
+      } else {
+        _letGoOfTurn();
+      }
+    }
     if (old.mini != widget.mini) {
       unawaited(_applyShape());
-      if (widget.mini) _letGoOfTurn(); // (the app around the small window goes back to how the phone is held)
+      // (the app around the small window goes back to how the phone is held, and the player is
+      // sideways again when it's back)
+      if (widget.mini) {
+        _letGoOfTurn();
+      } else {
+        _openSideways();
+      }
       // Android would shrink the whole app around a player that's already a small window
       if (_pipOk) unawaited(pz.Pip.setAutoReady(_playing && !widget.mini, width: _videoW > 0 ? _videoW : 16, height: _videoH > 0 ? _videoH : 9));
       // back from the small window: the controls show, and the keys are the player's again
@@ -1329,8 +1356,11 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     await safe(() => _player.setProperty('audio-delay', (AppSettings.audioDelayMs.value / 1000).toStringAsFixed(3)));
     await safe(() => _player.setAudioChannelLimit(_channelLimit, centerBoostDb: 0, normalize: true));
     await safe(() => _player.setAudioNormalization(AppSettings.volumeLevelling.value));
-    await safe(() => _player.setAudioPassthrough(AppSettings.audioPassthrough.value));
-    if (Platform.isWindows) await safe(() => _player.setProperty('hdr-enabled', AppSettings.hdrOutput.value ? 'yes' : 'no'));
+    // (not once this device has refused the sound untouched: see _soundDropped)
+    await safe(() => _player.setAudioPassthrough(AppSettings.audioPassthrough.value && !_passthroughGivenUp));
+    // (Linux too: its player keeps HDR off until it is asked for, and was never asked. There
+    // "yes" allows it: the picture is only sent as HDR when the desktop and the screen take it.)
+    if (Platform.isWindows || Platform.isLinux) await safe(() => _player.setProperty('hdr-enabled', AppSettings.hdrOutput.value ? 'yes' : 'no'));
   }
 
   void _nudgeDelay(int ms) => AppSettings.audioDelayMs.set((AppSettings.audioDelayMs.value + ms).clamp(-5000, 5000));
@@ -1424,6 +1454,15 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       size.width > size.height ? const [DeviceOrientation.portraitUp] : const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight],
     ));
     _poke();
+  }
+
+  /// Settings > Appearance, on a phone or tablet: the player opens sideways (and stays so until
+  /// you turn it with the button, shrink it to the small window or leave). Off: it goes the way
+  /// the device is held. Not for a player in a watch party's room until it fills the window.
+  void _openSideways() {
+    if (!_turnable || widget.mini || (widget.embedded && !widget.expanded) || !AppSettings.playSideways.value) return;
+    _turned = true;
+    unawaited(SystemChrome.setPreferredOrientations(const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]));
   }
 
   /// The phone follows its own rotation setting again.
@@ -1668,6 +1707,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       _loadingSources = true;
       _started = false;
       _error = null;
+      _failure = null;
       _loadNote = null;
       _sources = [];
       _source = 0;
@@ -3299,6 +3339,164 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     if (subby || level == 'warn' || level == 'error' || level == 'fatal') SubLog.line('mpv [${l.prefix}] $level: ${SubLog.clip(t, 200)}');
   }
 
+  // ── Half a video: a picture with no sound, or sound over a black screen ──
+
+  int _droppedAt = -1; // the open whose dropped half has been said
+  final _droppedParts = <String>{};
+  bool _passthroughGivenUp = false; // this device refused the sound untouched: decoded from here on
+
+  /// mpv gives up one half of a video and plays on with the other, saying so only in its log
+  /// (PlaybackFailure.droppedPart). That was the other way to a silent film or a black screen
+  /// with nothing said. (Media3 hands such a video to mpv itself.)
+  void _watchForDroppedPart(pz.PlayerLog l) {
+    final part = PlaybackFailure.droppedPart(
+      error: l.level == pz.PlayerLogLevel.error || l.level == pz.PlayerLogLevel.fatal,
+      prefix: l.prefix,
+      text: l.text,
+    );
+    if (part == null || !mounted) return;
+    if (_droppedAt != _openSeq) {
+      _droppedAt = _openSeq;
+      _droppedParts.clear();
+    }
+    if (!_droppedParts.add(part)) return;
+    // (the track playing now: mpv deselects it right after this line)
+    final track = _audioNow ?? _audioTracks.firstOrNull;
+    _editReport((r) => r.withDropped(part, l.text.trim()));
+    SubLog.line('mpv gave up the $part of this video: ${l.text.trim()}');
+    unawaited(part == 'audio' ? _soundDropped(track) : _pictureDropped());
+  }
+
+  /// No sound. When it was being sent on untouched (Passthrough) and this device would not open
+  /// its output for it, it is decoded here instead from now on, and the track put back on; a
+  /// track nothing here can decode says so.
+  Future<void> _soundDropped(pz.AudioTrack? track) async {
+    final seq = _openSeq;
+    void say(String line) {
+      if (!mounted || seq != _openSeq || widget.mini) return;
+      showToast(
+        context,
+        Text(line, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        icon: Icons.volume_off_rounded,
+      );
+    }
+
+    if (_player.audioPassthroughActive && !_passthroughGivenUp && !_media3) {
+      _passthroughGivenUp = true;
+      try {
+        await _player.setAudioPassthrough(false);
+        if (track != null && mounted && seq == _openSeq) await _player.selectAudioTrack(track);
+      } catch (_) {}
+      return say('This device would not take the sound untouched · decoding it here for now');
+    }
+    say("No sound: this device can't play this audio track · try another track or source");
+  }
+
+  /// No picture, the sound playing on: said in the middle of the screen once mpv has in fact
+  /// let the picture go (it tries software decoding first).
+  Future<void> _pictureDropped() async {
+    final seq = _openSeq;
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (!mounted || seq != _openSeq) return;
+    String? vid;
+    try {
+      vid = await _player.getProperty('vid');
+    } catch (_) {}
+    if (!mounted || seq != _openSeq || (vid != null && vid != 'no')) return;
+    const w = (title: 'No picture', why: "this device can't decode this video's picture", hint: 'Pick another source');
+    _editReport((r) => r.withFailure('no picture'));
+    setState(() {
+      _failure = w;
+      _error = PlaybackFailure.line(w);
+      _veil = false;
+    });
+    _poke();
+  }
+
+  bool _gaveUp = false; // the player ended the video with an error: its words come next
+  ({String title, String why, String hint})? _failure; // why it did not play, on screen
+
+  /// [_failure] while it is still the trouble on screen (anything that clears or replaces
+  /// [_error], a new open or a search for the next link, takes it down with it).
+  ({String title, String why, String hint})? get _failureNow {
+    final f = _failure;
+    return f != null && _error == PlaybackFailure.line(f) ? f : null;
+  }
+
+  /// The player's errors. Every one goes on the report card. One that ended the video (it would
+  /// not open, nothing here decodes it, the link died) is also said on screen: [_playerFailed].
+  void _onPlayerError(pz.PlayerError e) {
+    _editReport((r) => r.withFailure(e.message));
+    final ended = _gaveUp ||
+        const {pz.PlayerError.playerInitFailed, pz.PlayerError.serverHttp404, pz.PlayerError.serverHttp500, pz.PlayerError.audioOutputFailed}.contains(e.cause);
+    _gaveUp = false;
+    if (ended) unawaited(_playerFailed(e));
+  }
+
+  /// The player gave the video up. That used to end as a black, silent screen: the spinner went
+  /// and nothing took its place, whatever the cause (testers: "a black screen, no audio" on
+  /// Dolby Vision and HDR films). A link that was picked for you is moved on from, as one that
+  /// never starts is; anything else says why it did not play, in the middle of the screen, with
+  /// the controls up so another source is a key away.
+  Future<void> _playerFailed(pz.PlayerError e) async {
+    if (!mounted) return;
+    // (a segment timeline that would not open goes back to trimmed playlists by itself)
+    if (_timeline != null && _player.state.duration == Duration.zero) return;
+    final seq = _openSeq, id = _loadId;
+    final src = _sources.isEmpty || _source >= _sources.length ? null : _sources[_source];
+    SubLog.line('the player gave the video up: ${PlaybackReport.scrub(e.message)}');
+    if (!_started && src != null && await _moveOn(src, seq, id)) return;
+    if (!mounted || seq != _openSeq || id != _loadId) return;
+    final w = PlaybackFailure.words(
+      e.message,
+      cause: e.cause,
+      started: _started,
+      handOverOff: _media3 && !_player.mpvCore && !PlayerEngine.handOver,
+      otherSources: widget.server == null,
+    );
+    _startTimer?.cancel();
+    setState(() {
+      _failure = w;
+      _error = PlaybackFailure.line(w);
+      _loadingSources = false;
+      _loadNote = null;
+      _buffering = false;
+      _veil = false;
+    });
+    _poke();
+  }
+
+  /// Carries the search on past a link that was picked for you and will not play: an addon's
+  /// next best, or the next film source that answers. False when the link was your own pick or
+  /// there is nothing to move on to.
+  Future<bool> _moveOn(StreamSource src, int seq, int id) async {
+    if (!mounted || _userPicked || seq != _openSeq || id != _loadId) return false;
+    if (_pick != null) return _nextBest(id);
+    final session = _session, l = _playingLink;
+    if (session == null || l == null || l.stream != src) return false;
+    session.giveUp(l);
+    setState(() {
+      _error = null;
+      _failure = null;
+      _loadingSources = true;
+      _loadNote = "That one didn't play. Trying the next…";
+    });
+    bool stop() => !mounted || id != _loadId || seq != _openSeq || _userPicked;
+    final next = await session.firstHit(after: l, stop: stop);
+    if (!mounted || id != _loadId) return true;
+    if (next == null || stop()) {
+      // (nothing else answers: what the first one said is what is shown)
+      setState(() {
+        _loadingSources = false;
+        _loadNote = null;
+      });
+      return _userPicked || seq != _openSeq;
+    }
+    setState(() => _loadNote = null);
+    await _playLink(next);
+    return true;
+  }
+
   /// A link that was picked for you and never gets going shouldn't leave you on the spinner:
   /// after a while, carry on the search from there, one at a time, to the next that plays.
   void _watchStart(StreamSource src, int seq) {
@@ -3346,6 +3544,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       ..reset()
       ..start();
     _reportFrame = false;
+    _saidLesser = false;
     _report.value = PlaybackReport.begin(
       title: ep == null ? widget.media.title : '${widget.media.title} · ${episodeLabel(ep.season, ep.number)}',
       source: l?.source.name ?? addon ?? widget.server?.label ?? src.server,
@@ -3364,13 +3563,41 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     if (_reportFrame || _report.value == null) return; // (a seek shows a first frame too)
     _reportFrame = true;
     _editReport((r) => r.withFirstFrame(_reportClock.elapsedMilliseconds));
-    unawaited(_refreshReport());
+    unawaited(_refreshReport().then((_) => _sayLesser()));
+  }
+
+  bool _saidLesser = false; // this video's "plays as …" note has been shown
+
+  /// Once per video, when it plays in a lesser form than the link carries (Dolby Vision shown
+  /// as HDR10, HDR on a screen without it, Atmos decoded here): a line saying so and why, so a
+  /// fallback is never silent. The sound output can open a moment after the first frame, so
+  /// the player is read once more when it had nothing to say of it yet.
+  Future<void> _sayLesser({bool again = true}) async {
+    if (!mounted || _saidLesser || widget.mini) return;
+    final report = _report.value;
+    if (report == null) return;
+    final line = report.lesser;
+    if (line == null) {
+      if (!again || report.heard.isNotEmpty) return;
+      final seq = _openSeq;
+      await Future<void>.delayed(const Duration(seconds: 3));
+      if (!mounted || seq != _openSeq) return;
+      await _refreshReport();
+      return _sayLesser(again: false);
+    }
+    _saidLesser = true;
+    showToast(
+      context,
+      Text(line, maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      icon: Icons.info_outline_rounded,
+    );
   }
 
   /// mpv's own names for what the report shows, where the engine has no stats call (a desktop).
   static const _reportProperties = [
     'video-codec', 'video-params/w', 'video-params/h', 'video-params/gamma', 'video-bitrate', 'container-fps', 'hwdec-current',
-    'audio-codec-name', 'audio-params/samplerate', 'audio-params/hr-channels',
+    'audio-codec-name', 'audio-params/samplerate', 'audio-params/hr-channels', 'audio-params/format', 'audio-out-params/hr-channels',
+    'current-tracks/audio/codec-profile',
     'current-tracks/audio/demux-channel-count', 'current-tracks/audio/demux-samplerate',
   ];
 
@@ -3397,6 +3624,10 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     final t = _activeSubTrack;
     _editReport((r) {
       r = media3 ? r.withMedia3(facts) : r.withMpv(facts);
+      r = r.withSoundSettings(
+        passthrough: AppSettings.audioPassthrough.value,
+        decodeForced: AppSettings.volumeLevelling.value || AppSettings.audioChannels.value == 'stereo',
+      );
       if (audio != null) r = r.withAudio(language: _audioName(audio), codec: audio.codec, channels: audio.channels, sampleRate: audio.sampleRate);
       return t == null
           ? r.withSubtitle()
@@ -3411,7 +3642,10 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   /// Everything plays through the local relay, which sends each host the headers it expects.
   Future<void> _playSource(StreamSource src, {Duration? at}) async {
     AudioFocus.claim(this, _player.pause);
-    setState(() => _error = null);
+    setState(() {
+      _error = null;
+      _failure = null;
+    });
     _beginReport(src);
     final resume = at != null && at > const Duration(seconds: 5) ? at : null;
     if (resume != null) _holdAt(resume);
@@ -4378,7 +4612,10 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
                   Positioned.fill(child: RepaintBoundary(child: _Backdrop(media: widget.media))),
                 // on a phone the middle button turns into the spinner while the controls are up
                 if (_loadingSources || (_buffering && (!phone || !_chromeUp)))
-                  Center(child: RepaintBoundary(child: _Spinner(note: _error ?? _note ?? _loadNote ?? (_torrent != null ? _torrentNote : _searchNote)))),
+                  Center(child: RepaintBoundary(child: _Spinner(note: _error ?? _note ?? _loadNote ?? (_torrent != null ? _torrentNote : _searchNote))))
+                // the player gave the video up: why, where the spinner was
+                else if (_failureNow case final f? when !(phone && _chromeUp))
+                  Center(child: RepaintBoundary(child: PlaybackProblem(title: f.title, why: f.why, hint: f.hint))),
                 // a phone or a tablet: what taps on a side skipped, and 2x while held
                 if (_tapSkip != 0)
                   Positioned(
@@ -4968,7 +5205,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
         if (!Platform.isIOS)
           MenuToggle(
             title: 'Passthrough',
-            detail: 'Sends Dolby and DTS untouched to a receiver · not with levelling, stereo or other speeds',
+            detail: 'Sends Dolby and DTS, Atmos too, untouched to a TV or receiver that takes them · not with levelling, stereo or other speeds',
             value: AppSettings.audioPassthrough.value,
             onChanged: AppSettings.audioPassthrough.set,
           ),
@@ -5052,7 +5289,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
             ),
           ]),
         ('DISPLAY', [
-          if (Platform.isWindows)
+          if (Platform.isWindows || Platform.isLinux)
             MenuToggle(
               title: 'HDR',
               detail: 'Real HDR on an HDR screen · off maps it to SDR',
@@ -5219,6 +5456,54 @@ class _Spinner extends StatelessWidget {
   );
 }
 
+/// Why the video is not playing, where the spinner was: what happened, why, and what to do.
+class PlaybackProblem extends StatelessWidget {
+  const PlaybackProblem({super.key, required this.title, required this.why, required this.hint});
+  final String title;
+  final String why;
+  final String hint;
+
+  static String _sentence(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: LayoutBuilder(
+      builder: (context, box) {
+        // A watch party's tile is too small for the three lines: there, what happened and why.
+        if (box.maxHeight < 260 || box.maxWidth < 300) {
+          return Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              why.isEmpty ? title : '$title: $why',
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12.5, height: 1.3, fontWeight: FontWeight.w600, color: Colors.white),
+            ),
+          );
+        }
+        return ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.error_outline_rounded, size: 34, color: Colors.white),
+              const SizedBox(height: 12),
+              Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white)),
+              for (final line in [why, hint])
+                if (line.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(_sentence(line), textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, height: 1.35, color: VyseColors.textDim)),
+                  ),
+            ]),
+          ),
+        );
+      },
+    ),
+  );
+}
+
 class _PhoneTransport extends StatelessWidget {
   const _PhoneTransport({required this.paused, required this.buffering, required this.note, required this.onPause, required this.onSeek, required this.position});
   final bool paused;
@@ -5277,7 +5562,11 @@ class _PhoneTransport extends StatelessWidget {
       ]),
       if (note != null) ...[
         const SizedBox(height: 14),
-        Text(note!, style: const TextStyle(fontSize: 12.5, color: VyseColors.textDim)),
+        // (a short note sits as it did; a long one, why a link did not play, wraps in the middle)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Text(note!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12.5, color: VyseColors.textDim)),
+        ),
       ],
     ]);
   }

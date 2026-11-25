@@ -9,7 +9,8 @@ Vega providers browse a site, so the app adapts them to the plugin contract `get
 1. search the site with the title (`getSearchPosts`) and keep the listings that match (title, year; "Download …" prefixes are ignored),
 2. read the page (`getMeta`; a listing naming another IMDb id is skipped) and pick the film's links, or the season and episode
    (`getEpisodes` when a season is loaded separately),
-3. resolve each link to video files (`getStream`); DRM streams are dropped.
+3. resolve each link to video files (`getStream`); DRM streams are dropped. A stream the provider gives no headers gets
+   the page it came from as its `Referer`, as a browser sends it (some video hosts answer "not found" without one).
 
 They run in the same sandbox, with the same time budget (17 s) and one retry for reset connections, as other plugins, on
 `assets/plugins/vega_runtime.js`: the real axios (its transport replaced by the plugin `http()`), the real cheerio, polyfills for

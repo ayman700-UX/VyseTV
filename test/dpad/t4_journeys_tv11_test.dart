@@ -168,6 +168,9 @@ void main() {
   }, variant: tv);
 
   testWidgets('a live channel on a phone: Turn sideways turns the screen, whatever the rotation lock says, and it is let go on leaving', (t) async {
+    // (the button by itself: opening sideways is play_sideways_test.dart's)
+    AppSettings.playSideways.set(false);
+    addTearDown(() => AppSettings.playSideways.set(true));
     final turns = <Object?>[];
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {

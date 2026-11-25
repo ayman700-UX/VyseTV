@@ -81,13 +81,14 @@ Return `[]` when the title is not found; do not throw for that. Put the best lin
 | `parseHtml(html)`, `unescapeHtml(s)` | a small HTML tree with CSS selectors (`select`, `selectFirst`, `attr`, `text`, `data`, `html`) |
 | title helpers | `searchQueries`, `searchBest`, `searchByImdb`, `bestMatch`, `rankMatches`, `parseTitle`, `titleScore`, `imdbMatches`, `normTitle` |
 | `console.log` | goes to the plugin log |
+| `crypto.subtle`, `crypto.getRandomValues` | WebCrypto as a browser has it, for the usual parts: `importKey`/`exportKey` (raw, jwk), `encrypt`/`decrypt` (AES-GCM, AES-CBC, AES-CTR), `digest` (SHA-1/256/384/512), `sign`/`verify` (HMAC), `deriveBits`/`deriveKey` (PBKDF2). Done by the app (web_crypto.dart), so it is fast. `getRandomValues` is not cryptographically strong. |
 
-Not available: a browser DOM, `fetch`, `XMLHttpRequest`, `require`/`import`, Node APIs, `crypto`, WebAssembly, cookies
-between calls (send them in `headers`).
+Not available: a browser DOM, `fetch`, `XMLHttpRequest`, `require`/`import`, Node APIs (Node's `crypto` module
+included), WebAssembly, cookies between calls (send them in `headers`).
 
 ### Sandbox
 
-* The script has no access to the app, its files or its settings; only `http()` and the globals above.
+* The script has no access to the app, its files or its settings; only `http()`, `crypto.subtle` and the globals above.
 * `http()` refuses `localhost`, loopback, private ranges (`10.x`, `172.16–31.x`, `192.168.x`, `100.64–127.x`),
   link-local and `*.local`, also after a redirect, so a plugin can't reach the user's own network.
 * Every call starts a fresh engine: nothing is kept between calls.

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/platform/platform_detector.dart' show PlatformDetector;
@@ -140,7 +141,12 @@ class AppSettings {
   // Player (mpv). `device.` keys describe this device's screen and speakers, so they stay
   // here and never sync to the account (see [synced]).
   static final audioDelayMs = Setting<int>('device.audioDelay', 0); // lip-sync, + = audio later
-  static final audioPassthrough = Setting<bool>('device.passthrough', false); // bitstream to a receiver
+  // Dolby and DTS go to the TV or receiver as they are, not decoded here. Atmos only gets there
+  // that way, so on an Android TV it starts on (as upstream has it): both engines send only what
+  // the TV's sound output says it takes and decode the rest. Off until 2026-11-25, when testers
+  // with Atmos systems never got Atmos. A choice made by hand is kept.
+  static bool get passthroughStartsOn => defaultTargetPlatform == TargetPlatform.android && PlatformDetector.isTV();
+  static final audioPassthrough = Setting<bool>('device.passthrough', passthroughStartsOn);
   static final audioChannels = Setting<String>('device.channels', 'original'); // original, surround51, stereo
   static final hdrOutput = Setting<bool>('device.hdr', true);
   static final matchRefreshRate = Setting<bool>('device.matchRefresh', false);
@@ -155,6 +161,9 @@ class AppSettings {
   static final leanMotion = Setting<String>('device.lean', '');
   // The picture's shape on this screen: 'fit', 'fill' or 'stretch' (screens/player/picture_shape.dart).
   static final pictureShape = Setting<String>('device.shape', 'fit');
+  // A phone or tablet: the player turns the screen sideways as it opens (off: it goes the way
+  // the device is held)
+  static final playSideways = Setting<bool>('device.playSideways', true);
   static final volumeLevelling = Setting<bool>('play.levelling', false);
   static final upscaler = Setting<String>('play.upscaler', 'none');
   static final ambientLight = Setting<bool>('play.ambient', false);
@@ -194,7 +203,7 @@ class AppSettings {
         subtitleLanguage, autoSyncSubtitles, subtitleSize, subtitleColor,
         subtitleBackground, subtitleFont, subtitleBold, subtitleItalic, subtitleBackColor, subtitleOutline, subtitleOutlineColor,
         subtitleShadow, subtitleShadowColor, subtitleBlur, subtitleSpacing, subtitleTop, subtitleLift, subtitleOnPicture, subtitleAss,
-        audioDelayMs, audioPassthrough, audioChannels, hdrOutput, matchRefreshRate, playerEngine, mpvHandOver, leanMotion, pictureShape, volumeLevelling,
+        audioDelayMs, audioPassthrough, audioChannels, hdrOutput, matchRefreshRate, playerEngine, mpvHandOver, leanMotion, pictureShape, playSideways, volumeLevelling,
         upscaler, ambientLight, partyLibrary, musicAutoplay, debridProvider, debridOn, updateAuto, updateSkipped, addonsRefreshed,
         torrentMemory, torrentPreload, torrentConnections, torrentUpload, torrentTrackers, publicTrackers, myListGrid, myListSort, partyMembers, partySounds, partyMuted, animeAdult, animeAudio,
       ];

@@ -396,6 +396,14 @@ function __vegaType(t, link) {
 function __vegaErr(e) { return String((e && e.message) || e).slice(0, 160); }
 
 // Each link of the page turned into video files, in parallel: DRM ones dropped, 12 at most.
+// A stream's headers: the provider's own; when it gives none, the page the video plays in as the
+// Referer, as a browser sends it (some video hosts answer "not found" without one: Pornhub's).
+function __vegaHeaders(h, page) {
+  if (h && typeof h === 'object' && Object.keys(h).length) return h;
+  var site = /^(https?:\/\/[^\/?#]+)/i.exec(String(page || ''));
+  return site ? { Referer: site[1] + '/' } : undefined;
+}
+
 async function __vegaResolve(links, tv) {
   var V = __vega.V, ctx = __vega.ctx, streamMod = __vega.load('stream'), signal = new AbortController().signal;
   var got = await Promise.all(links.map(function (l) {
@@ -412,7 +420,7 @@ async function __vegaResolve(links, tv) {
       if (String(s.type || '').toLowerCase() === 'image' || /\.(?:jpe?g|png|webp|gif|avif)(?:[?#]|$)/i.test(s.link)) return;
       have[s.link] = true;
       var ql = s.quality ? (/^\d+$/.test(String(s.quality)) ? s.quality + 'p' : String(s.quality)) : (g.l.quality ? g.l.quality + 'p' : '');
-      out.push({ url: s.link, type: __vegaType(s.type, s.link), quality: ql, server: s.server || V.value, label: s.tag || undefined, headers: s.headers || undefined });
+      out.push({ url: s.link, type: __vegaType(s.type, s.link), quality: ql, server: s.server || V.value, label: s.tag || undefined, headers: __vegaHeaders(s.headers, g.l.link) });
     });
   });
   return out.slice(0, 12);

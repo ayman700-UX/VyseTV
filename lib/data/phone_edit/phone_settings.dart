@@ -484,10 +484,10 @@ List<PhoneSection> phoneSections({required List<SubtitleFontChoice> fonts}) {
           // (Media3 has no 5.1 limit: it plays that choice as Original)
           shown: m3 ? (v) => v == 'surround51' ? 'original' : v : null),
       _Toggle(AppSettings.volumeLevelling, 'Volume levelling', 'Evens out quiet talk and loud action'),
-      if (!Platform.isIOS) _Toggle(AppSettings.audioPassthrough, 'Passthrough', 'Sends Dolby and DTS untouched to a receiver. Not with levelling, stereo or other speeds'),
+      if (!Platform.isIOS) _Toggle(AppSettings.audioPassthrough, 'Passthrough', 'Sends Dolby and DTS, Atmos too, untouched to a TV or receiver that takes them. Not with levelling, stereo or other speeds'),
       if (!m3) _Choice<String>(AppSettings.upscaler, 'Upscaling', [for (final u in Upscaler.offered) (u.id, u.label)]),
       if (!m3) _Toggle(AppSettings.ambientLight, 'Ambient lighting', 'Fills the black bars with a soft glow of the picture'),
-      if (Platform.isWindows) _Toggle(AppSettings.hdrOutput, 'HDR', 'Real HDR on an HDR screen. Off maps it to SDR'),
+      if (Platform.isWindows || Platform.isLinux) _Toggle(AppSettings.hdrOutput, 'HDR', 'Real HDR on an HDR screen. Off maps it to SDR'),
       if (Platform.isWindows || Platform.isAndroid) _Toggle(AppSettings.matchRefreshRate, 'Match refresh rate', "Switches the screen to the video's frame rate"),
     ]),
     PhoneSection('subtitles', 'Subtitles', 'Default captions for the player.', [

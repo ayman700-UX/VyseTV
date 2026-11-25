@@ -129,6 +129,11 @@ class _LiveTvPlayerPageState extends State<LiveTvPlayerPage> with WidgetsBinding
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Settings > Appearance, on a phone or tablet: sideways from the start (off: as it's held)
+    if (_turnable && AppSettings.playSideways.value) {
+      _turned = true;
+      unawaited(SystemChrome.setPreferredOrientations(const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]));
+    }
     _subs
       ..add(_player.streams.playing.listen((v) => setState(() => _playing = v)))
       ..add(_player.streams.buffering.listen((v) => setState(() => _buffering = v)))

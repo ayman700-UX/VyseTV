@@ -335,4 +335,76 @@ exports.getSearchPosts = async function () { return []; };
     expect(asVideo['error'], isNull, reason: '${asVideo['log']}');
     expect(parseStreams(asVideo['streams']), isEmpty, reason: "a comic's pages are pictures, not a video");
   }, skip: skip);
+
+  // (2026-11-24: a scraper said "WebCrypto subtle missing — cannot decrypt" and found nothing)
+  test("WebCrypto: a script's crypto.subtle answers as a browser's does (digest, HMAC, PBKDF2, AES-GCM both ways and a bad tag refused, AES-CBC, AES-CTR); getRandomValues", () async {
+    const code = r'''
+function hexOf(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
+function bytesOf(hex) { var u = new Uint8Array(hex.length / 2); for (var i = 0; i < u.length; i++) u[i] = parseInt(hex.substr(i * 2, 2), 16); return u; }
+function ascii(s) { var u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+async function __test() {
+  var s = crypto.subtle, out = {};
+  out.sha = hexOf(await s.digest('SHA-256', ascii('abc')));
+  var hk = await s.importKey('raw', ascii('Jefe'), { name: 'HMAC', hash: { name: 'SHA-256' } }, false, ['sign', 'verify']);
+  var mac = await s.sign('HMAC', hk, ascii('what do ya want for nothing?'));
+  out.hmac = hexOf(mac);
+  out.verified = await s.verify('HMAC', hk, mac, ascii('what do ya want for nothing?'));
+  var pk = await s.importKey('raw', ascii('passwd'), 'PBKDF2', false, ['deriveBits']);
+  out.pbkdf2 = hexOf(await s.deriveBits({ name: 'PBKDF2', salt: ascii('salt'), iterations: 1, hash: 'SHA-256' }, pk, 256));
+  var gk = await s.importKey('raw', bytesOf('00000000000000000000000000000000'), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  var iv = bytesOf('000000000000000000000000');
+  var sealed = await s.encrypt({ name: 'AES-GCM', iv: iv }, gk, bytesOf('00000000000000000000000000000000'));
+  out.gcm = hexOf(sealed);
+  out.opened = hexOf(await s.decrypt({ name: 'AES-GCM', iv: iv, tagLength: 128 }, gk, sealed));
+  var bad = new Uint8Array(sealed); bad[31] ^= 1;
+  try { await s.decrypt({ name: 'AES-GCM', iv: iv }, gk, bad); out.badTag = 'opened'; } catch (e) { out.badTag = 'refused'; }
+  var k = await s.importKey('raw', bytesOf('2b7e151628aed2a6abf7158809cf4f3c'), 'AES-CBC', false, ['encrypt']);
+  out.cbc = hexOf(await s.encrypt({ name: 'AES-CBC', iv: bytesOf('000102030405060708090a0b0c0d0e0f') }, k, bytesOf('6bc1bee22e409f96e93d7e117393172a'))).slice(0, 32);
+  var ck = await s.importKey('raw', bytesOf('2b7e151628aed2a6abf7158809cf4f3c'), 'AES-CTR', false, ['encrypt']);
+  out.ctr = hexOf(await s.encrypt({ name: 'AES-CTR', counter: bytesOf('f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff'), length: 64 }, ck, bytesOf('6bc1bee22e409f96e93d7e117393172a')));
+  var r = new Uint8Array(16);
+  out.random = crypto.getRandomValues(r) === r && r.length === 16;
+  return out;
+}''';
+    final res = await executeScriptForTest(code, const {}, '', entry: '__test');
+    expect(res['error'], isNull, reason: '${res['log']}');
+    expect(res['value'], {
+      'sha': 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+      'hmac': '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843',
+      'verified': true,
+      'pbkdf2': '55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc',
+      'gcm': '0388dace60b6a392f328c2b971b2fe78ab6e47d42cec13bdf53a67b21257bddf',
+      'opened': '00000000000000000000000000000000',
+      'badTag': 'refused',
+      'cbc': '7649abac8119b246cee98e9b12e9197d',
+      'ctr': '874d6191b620e3261bef6864990db6ce',
+      'random': true,
+    }, reason: 'published test vectors: SHA-256 "abc", RFC 4231 case 2, RFC 7914, GCM case 2, SP 800-38A F.2.1 and F.5.1');
+  }, skip: skip);
+
+  // (2026-11-24: Pornhub's video answered "not found" without the page it plays in as its Referer)
+  test("a Vega provider's stream with no headers says the page it came from as its Referer; one with headers of its own keeps them", () async {
+    const meta = r'''
+exports.getMeta = async function (a) {
+  return { title: 'Heat', image: '', synopsis: '', type: 'movie', linkList: [{ title: '1080p', quality: '1080', directLinks: [{ title: 'Movie', link: 'https://site.test/watch/heat', type: 'movie' }] }] };
+};
+''';
+    const stream = r'''
+exports.getStream = async function (a) {
+  return [{ server: 'Plain', link: 'https://cdn.test/heat.mp4', type: 'mp4' },
+          { server: 'Own', link: 'https://cdn.test/heat-own.mp4', type: 'mp4', headers: { Referer: 'https://own.test/', 'X-Key': '1' } }];
+};
+''';
+    const posts = r'''
+exports.getSearchPosts = async function () { return []; };
+''';
+    final code = '${vegaMarker}plain\n__vega.source("https://repo.test", "plain");\n${_module('posts', posts)}${_module('meta', meta)}${_module('stream', stream)}';
+    final runtime = File('assets/plugins/vega_runtime.js').readAsStringSync();
+    final res = await executeScriptForTest('$runtime\n$code', {'ownId': 'https://site.test/watch/heat', 'isTv': false}, helpers);
+    expect(res['error'], isNull, reason: '${res['log']}');
+    expect({for (final s in parseStreams(res['streams'])) s.server: s.headers}, {
+      'Plain': {'Referer': 'https://site.test/'},
+      'Own': {'Referer': 'https://own.test/', 'X-Key': '1'},
+    });
+  }, skip: skip);
 }

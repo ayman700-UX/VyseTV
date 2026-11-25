@@ -133,9 +133,9 @@ class ExoPlayerCore(private val activity: Activity) :
       "videoCodec", "videoMimeType", "videoWidth", "videoHeight", "videoFps", "videoBitrate", "videoDecoderName",
       "videoRenderedFrames", "videoDroppedFrames", "colorTransfer", "hdrStaticInfo",
       "audioCodec", "audioMimeType", "audioSampleRate", "audioChannels", "audioBitrate", "audioLanguage",
-      "audioDecoderName", "audioOutputEncoding", "audioLastSinkError", "tunneledPlayback",
+      "audioDecoderName", "audioOutputEncoding", "audioOutputChannels", "audioLastSinkError", "tunneledPlayback",
       "bufferedPositionMs", "currentPositionMs", "totalBufferedDurationMs", "playbackState",
-      "firstFrameMs", "sinceOpenMs", "rebuffers", "dvAutoMode", "dvAutoReason",
+      "firstFrameMs", "sinceOpenMs", "rebuffers", "networkPatienceMs", "dvAutoMode", "dvAutoReason",
       "dvConversionActive", "dvConversionMode", "dvConversionDebugMode", "dvSourceProfile", "dvPlaybackPath", "dvPlaybackReason"
     )
 
@@ -564,7 +564,9 @@ class ExoPlayerCore(private val activity: Activity) :
       "${PlaybackException.getErrorCodeName(error.errorCode)} (${error.errorCode})",
       httpStatus?.let { "HTTP $it" },
       error.message?.takeIf { it.isNotBlank() },
-      rootText
+      rootText,
+      // (a link that went quiet: how long it was waited for, and over how many tries)
+      slowLinkPolicy.lastGivenUp?.takeIf { error.errorCode in 2000..2999 }
     ).joinToString(" · ")
   }
 
@@ -865,6 +867,8 @@ class ExoPlayerCore(private val activity: Activity) :
 
       val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory!!, wrappedExtractorsFactory)
         .setSubtitleParserFactory(subtitleParserFactory)
+        // VyseTV: a link that is only slow is waited for as long as mpv would wait
+        .setLoadErrorHandlingPolicy(slowLinkPolicy)
       playbackMediaSourceFactory = mediaSourceFactory
 
       // Wrap text renderers with subtitle delay support
@@ -1180,6 +1184,17 @@ class ExoPlayerCore(private val activity: Activity) :
     if (forceSeekable == force) return
     forceSeekable = force
     emitCurrentSeekable(force = true)
+  }
+
+  // VyseTV: how long a link that has gone quiet is asked again before the video is given up
+  // (SlowLinkPolicy). The app says it the way it tells mpv: `network-timeout`, in seconds.
+  private val slowLinkPolicy = SlowLinkLoadErrorPolicy()
+
+  fun setNetworkPatience(networkTimeout: String?) {
+    val patienceMs = SlowLinkPolicy.patienceMs(networkTimeout)
+    if (slowLinkPolicy.patienceMs == patienceMs) return
+    slowLinkPolicy.patienceMs = patienceMs
+    emitLog("info", "network", if (patienceMs > 0L) "A quiet link is asked again for ${patienceMs / 1000}s" else "A quiet link gets media3's own retries")
   }
 
   // Player.Listener
@@ -3598,6 +3613,7 @@ class ExoPlayerCore(private val activity: Activity) :
     cancelBufferingStallWatchdog()
     resumeStallRecoveryCount = 0
     loggedResumeStallCap = false
+    slowLinkPolicy.reset() // VyseTV
 
     // Reset FPS detection for new content
     detectedFrameRate = -1f
@@ -4475,6 +4491,7 @@ class ExoPlayerCore(private val activity: Activity) :
       "firstFrameMs" to firstFrameMs,
       "sinceOpenMs" to (SystemClock.elapsedRealtime() - openedAtMs),
       "rebuffers" to rebufferCount,
+      "networkPatienceMs" to slowLinkPolicy.patienceMs,
       "dvAutoMode" to dvAutoDecision?.mode?.name,
       "dvAutoReason" to dvAutoDecision?.reason,
       // DV conversion (query extractor's track output, which is set during extraction)

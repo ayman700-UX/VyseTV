@@ -373,6 +373,9 @@ class ExoPlayerPlugin :
         }
         // Seed from this device's persisted calibration, falling back to the Dart perf-tier proxy.
         core.seedAssVideoLatencyFrames(assVideoLatencyFrames)
+        // VyseTV: the app sets `network-timeout` just before it opens a video, which on a
+        // player's first video is before this core exists
+        core.setNetworkPatience(pendingMpvProperties["network-timeout"])
         core.setVisible(false)
 
         Log.d(TAG, "Initialized: true")
@@ -1254,6 +1257,9 @@ class ExoPlayerPlugin :
       "force-seekable" -> playerCore?.setForceSeekable(value == "yes")
       // VyseTV: the picture's shape the viewer forced (16:9, 4:3, 21:9), mpv's own way of saying it
       "video-aspect-override" -> playerCore?.setAspectOverride(value)
+      // VyseTV: how long the app has mpv wait for a link that sends nothing is how long ExoPlayer
+      // waits too (kept below with the rest, so a core started later is told as it starts)
+      "network-timeout" -> playerCore?.setNetworkPatience(value)
     }
 
     // Before fallback this is queue acceptance, not a completed MPV write.
