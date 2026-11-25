@@ -16,6 +16,17 @@ import 'dart:typed_data';
 
 import 'auto_sync.dart';
 
+/// Whether listening would take from the film itself: a picture [lines] tall on a TV.
+///
+/// A stream's sound comes inside the same pieces as its picture, so 45 seconds of sound from a
+/// 4K stream is 60 to 80 MB, taken as fast as the line gives it, up to four times over, while
+/// the film plays. A phone or a PC has that to spare. A TV's chip, carrying the film through the
+/// relay as it is, does not: a tester's Google TV that played a 4K server without a stop in 1.0.1
+/// stopped to load every few seconds in 1.0.2, the first version that listened. Up to 1080p it
+/// kept up. So on a TV nothing taller than 1080p is listened to: a stream with a smaller version
+/// of itself is heard through that, and one without is left alone.
+bool tooHeavyToHear({required int lines, required bool tv}) => tv && lines > 1100;
+
 /// A stretch of the film's sound, heard: where it starts (film seconds) and, 100 times a second,
 /// whether someone speaks there (1) or not.
 class Heard {

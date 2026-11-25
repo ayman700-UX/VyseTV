@@ -290,7 +290,12 @@ StreamSource _toSource(FoundStream f, String name) {
   final hls = f.type == 'hls';
   // the relay sends each host the headers its source gives (as tested); files go to mpv with
   // them, plus a browser's User-Agent when the source names none
-  if (hls) StreamProxy.instance.useHeaders(f.url, f.headers);
+  if (hls) {
+    StreamProxy.instance.useHeaders(f.url, f.headers);
+    for (final q in f.qualities) {
+      StreamProxy.instance.useHeaders(q.url, f.headers);
+    }
+  }
   return StreamSource(
     url: f.url,
     server: name,
@@ -299,5 +304,7 @@ StreamSource _toSource(FoundStream f, String name) {
     userAgent: pick('user-agent') ?? sdkUA,
     headers: headers,
     hls: hls,
+    qualities: f.qualities,
+    playsUrlFirst: f.qualities.isNotEmpty,
   );
 }

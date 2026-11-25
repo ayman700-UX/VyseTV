@@ -37,8 +37,12 @@ class FilmQuery {
 /// One stream a scraper found (the SDK's `allUrls` entries).
 class FoundStream {
   // ignore: prefer_initializing_formals
-  const FoundStream({required this.url, this.server = 'Server', this.quality = 'Auto', String? type, this.headers = const {}, this.label, this.audio}) : _type = type;
+  const FoundStream({required this.url, this.server = 'Server', this.quality = 'Auto', String? type, this.headers = const {}, this.label, this.audio, this.qualities = const []}) : _type = type;
   final String url;
+
+  /// The same stream in every size its server lists (this one among them), best first, when the
+  /// server lists more than one. [url] is the one that plays unless another is picked.
+  final List<({String label, String url})> qualities;
 
   /// The language this link's sound is in, in the source's own words ('Hindi', 'English sub'),
   /// when the source says. Null when it doesn't: usually the original, or one stream with

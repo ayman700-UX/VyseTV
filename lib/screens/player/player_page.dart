@@ -650,6 +650,8 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   double? _autoOffset; // the delay it set last (the next file may be timed too); null once you set one
   pz.Media? _lastOpened; // what the player opened last (the sound is heard from it)
   String? _earFor; // the video listened to by ear for this file
+  bool _earAtWork = false; // a stretch of the film's sound is being fetched and heard right now
+  String? _earGaveWayFor; // the video whose listening was stopped because the film had to load
   final _ear = SoundListener(); // hears stretches of its sound (sound_listener.dart)
   String _subtitle = AppSettings.autoSubtitles.value ? AppSettings.subtitleLanguage.value : 'Off';
   double _speed = 1;
@@ -705,6 +707,8 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       ..add(_player.streams.buffering.listen((v) {
         if (!mounted) return;
         setState(() => _buffering = v);
+        // the film comes first: it has stopped to load while its sound was being listened to
+        if (v && _earAtWork && _started && !_reopening && DateTime.now().difference(_seekAt) > const Duration(seconds: 3)) _earGivesWay();
         // the report card counts a stop to load again (a seek's own loading is not one)
         if (v && _reportFrame && !_reopening && DateTime.now().difference(_seekAt) > const Duration(seconds: 3)) _editReport((r) => r.withRebuffer());
         if (!widget.party) return;
@@ -3218,14 +3222,38 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     }
     if (!_started || _syncMap != null || _torrent != null) return;
     if (!_media3 && _autoSyncRef() != null) return; // its own subtitles, followed as it plays
+    if (_earGaveWayFor == media.uri) return; // (the film had to stop for it once: not again)
     final lines = spokenLines([for (final c in _cues) (c.start, c.end, c.text)]);
-    final offset = _offset; // (a stream opened part way along counts its time from there)
+    // What is listened to: the smallest version of the stream there is. The sound is the same in
+    // every size and comes inside the picture's own pieces, so the 4K one costs ten times the
+    // 480p one for nothing. With no smaller version it is the film's own stream.
+    var url = media.uri, headers = media.headers ?? const <String, String>{};
+    var offset = _offset; // (a stream opened part way along counts its time from there)
+    var tall = StreamVariant.linesOf(qualityLabel(_videoW, _videoH));
+    final src = _sources.isEmpty || _source >= _sources.length ? null : _sources[_source];
+    final light = _variants.length > 1 ? StreamVariant.lightest(_variants) : null;
+    if (src != null && light != null && light.url != _playUrl) {
+      try {
+        url = src.hls ? await StreamProxy.instance.wrap(light.url) : light.url;
+        headers = src.hls ? const {} : src.headers;
+        offset = 0;
+        tall = light.lines;
+      } catch (_) {}
+      if (run != _syncRun || !mounted) return;
+    }
+    if (tooHeavyToHear(lines: tall, tv: PlatformDetector.isTV())) {
+      SubLog.line('AUTO-SYNC by ear: not on a TV for a ${tall}p stream with no smaller version (it would take from the film)');
+      return;
+    }
     final spots = listenAt(lines, _duration.value.inMilliseconds / 1000, _position.value.inMilliseconds / 1000);
-    SubLog.line('AUTO-SYNC by ear: listening at ${spots.map((s) => '${s.round()}s').join(', ')}');
+    SubLog.line('AUTO-SYNC by ear: listening at ${spots.map((s) => '${s.round()}s').join(', ')}${light != null && offset == 0 && url != media.uri ? ' (to the ${light.label} version)' : ''}');
     final heard = <Heard>[];
     try {
       for (var k = 0; k < spots.length; k++) {
-        final h = await _ear.hear(media.uri, media.headers ?? const {}, spots[k] - offset);
+        _earAtWork = true;
+        final h = await _ear.hear(url, headers, spots[k] - offset);
+        _earAtWork = false;
+        if (_earGaveWayFor == media.uri) return;
         if (run != _syncRun || !mounted || _syncMap != null) return;
         SubLog.line('  heard ${spots[k].round()}s: ${h == null ? 'nothing' : '${(h.speech.where((x) => x == 1).length / h.speech.length * 100).round()}% speech'}');
         if (h != null) heard.add(Heard(spots[k], h.speech));
@@ -3236,8 +3264,19 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
         if (v.kind == AutoSyncKind.fits) return _follow(v.map!);
       }
     } finally {
+      _earAtWork = false;
       if (run == _syncRun && mounted) _ear.stop(); // nothing more to hear
     }
+  }
+
+  /// The film stopped to load while its sound was being listened to: the listening ends there,
+  /// for this video. Timing the subtitles is not worth a film that stutters; they keep the
+  /// timing they have.
+  void _earGivesWay() {
+    _earAtWork = false;
+    _earGaveWayFor = _lastOpened?.uri;
+    _ear.stop();
+    SubLog.line('AUTO-SYNC by ear: the film stopped to load, so the listening stops for this video');
   }
 
   /// A line of the video's own track, as it shows (hidden). Every 8 lines once there are enough
@@ -3667,9 +3706,10 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       // with their host's headers; one file per quality, 1080p first
       final files = [for (final q in src.qualities) StreamVariant(url: q.url, name: q.label)];
       final hd = files.indexWhere((v) => v.label == '1080p');
+      final own = src.playsUrlFirst ? files.indexWhere((v) => v.url == src.url) : -1;
       setState(() {
         _variants = files;
-        _variant = files.isEmpty ? null : (hd >= 0 ? hd : 0);
+        _variant = files.isEmpty ? null : (own >= 0 ? own : (hd >= 0 ? hd : 0));
       });
       _playUrl = _variant == null ? src.url : files[_variant!].url;
       await _prepOpen();
@@ -3687,7 +3727,9 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
         : await proxy.variants(src.url).catchError((Object _) => const <StreamVariant>[]);
     if (!mounted || _playUrl != src.url) return;
     final hd = variants.indexWhere((v) => v.label == '1080p');
-    final pick = hd >= 0 ? hd : (src.qualities.isNotEmpty ? 0 : null);
+    // (a film source's link starts on the size its source picked: CNO's is its 4K)
+    final own = src.playsUrlFirst ? variants.indexWhere((v) => v.url == src.url) : -1;
+    final pick = own >= 0 ? own : (hd >= 0 ? hd : (src.qualities.isNotEmpty ? 0 : null));
     setState(() {
       _variants = variants;
       _variant = pick;

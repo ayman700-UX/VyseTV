@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:pointycastle/export.dart' as pc;
 
 import '../../net.dart';
+import '../../playback/stream_proxy.dart' show qualityLabel;
 import 'common.dart';
 import 'film_sources.dart' show FilmSource;
 /// The film and TV scrapers ported from the Vyla SDK (`src/sources/*.js`) that passed VyseTV's
@@ -1185,6 +1186,35 @@ Future<List<FoundStream>> lookmovie(FilmQuery q) async {
   }
 }
 
+/// What a CNO server answers with: a list of the same film in several sizes (4K, 1080p, 720p,
+/// 480p), best first. The stream that plays is the first, as cno.js has it; the others used to
+/// be thrown away here, which left a 4K link with no smaller size to switch to, and nothing
+/// lighter than 4K for the subtitle sync to listen to. [qualities] is every size listed (empty
+/// when there is only one).
+({String? url, String quality, List<({String label, String url})> qualities}) cnoStream(String raw, String base) {
+  final lines = raw.split('\n');
+  String abs(String u) => u.startsWith('/') ? '$base$u' : u;
+  String? streamUrl;
+  var quality = 'Auto';
+  final sizes = <({String label, String url})>[];
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i].trim();
+    if (!line.startsWith('#EXT-X-STREAM-INF:')) continue;
+    final m = RegExp(r'RESOLUTION=(\d+)x(\d+)').firstMatch(line);
+    if (m != null && streamUrl == null) quality = '${m[1]}x${m[2]}';
+    final next = i + 1 < lines.length ? lines[i + 1].trim() : '';
+    if (next.isEmpty || next.startsWith('#')) continue;
+    streamUrl ??= abs(next);
+    if (m == null) continue;
+    final label = qualityLabel(int.parse(m[1]!), int.parse(m[2]!));
+    if (sizes.every((s) => s.label != label)) sizes.add((label: label, url: abs(next)));
+  }
+  streamUrl ??= lines.map((l) => l.trim()).where((l) => l.isNotEmpty && !l.startsWith('#')).map(abs).firstOrNull;
+  // (only a list that has the playing stream in it and something else to offer)
+  final listed = sizes.length > 1 && sizes.any((s) => s.url == streamUrl);
+  return (url: streamUrl, quality: quality, qualities: listed ? sizes : const []);
+}
+
 /// cno.js: asks its 50 numbered servers at once
 Future<List<FoundStream>> cno(FilmQuery q) async {
   const base = 'https://cno.to';
@@ -1201,26 +1231,8 @@ Future<List<FoundStream>> cno(FilmQuery q) async {
       final raw = await fetchText(url, headers: headers);
       if (raw.isEmpty || raw.contains('"error":')) return null;
       if (raw.contains('#EXTM3U')) {
-        final lines = raw.split('\n');
-        String? streamUrl;
-        var quality = 'Auto';
-        for (var i = 0; i < lines.length; i++) {
-          final line = lines[i].trim();
-          if (line.startsWith('#EXT-X-STREAM-INF:')) {
-            final m = RegExp(r'RESOLUTION=(\d+x\d+)').firstMatch(line);
-            if (m != null) quality = m[1]!;
-            final next = i + 1 < lines.length ? lines[i + 1].trim() : '';
-            if (next.isNotEmpty && !next.startsWith('#')) {
-              streamUrl = next;
-              break;
-            }
-          }
-        }
-        streamUrl ??= lines.map((l) => l.trim()).where((l) => l.isNotEmpty && !l.startsWith('#')).firstOrNull;
-        if (streamUrl != null) {
-          if (streamUrl.startsWith('/')) streamUrl = '$base$streamUrl';
-          return FoundStream(url: streamUrl, server: 'Cno - Server $n ($quality)', quality: quality, type: 'hls', headers: play);
-        }
+        final (:url, :quality, :qualities) = cnoStream(raw, base);
+        if (url != null) return FoundStream(url: url, server: 'Cno - Server $n ($quality)', quality: quality, type: 'hls', headers: play, qualities: qualities);
       }
       try {
         final js = json.decode(raw);

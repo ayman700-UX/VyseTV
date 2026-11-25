@@ -655,6 +655,26 @@ class StreamVariant {
   final String? name;
 
   String get label => name ?? qualityLabel(width, height);
+
+  /// How tall its picture is by its name ('4K' is 2160, '1080p' 1080): 0 when it doesn't say.
+  int get lines => linesOf(label);
+
+  /// What '4K', '1080p' and the like come to in lines; 0 for a name that is not a size.
+  static int linesOf(String label) {
+    if (label.toUpperCase() == '4K') return 2160;
+    return int.tryParse(RegExp(r'^(\d{3,4})p$').firstMatch(label)?[1] ?? '') ?? 0;
+  }
+
+  /// The smallest of [all], for anything that needs the stream's sound and not its picture:
+  /// by size, then by bitrate. Null when none of them says how big it is.
+  static StreamVariant? lightest(List<StreamVariant> all) {
+    StreamVariant? best;
+    for (final v in all) {
+      if (v.lines <= 0) continue;
+      if (best == null || v.lines < best.lines || (v.lines == best.lines && v.bandwidth > 0 && v.bandwidth < best.bandwidth)) best = v;
+    }
+    return best;
+  }
 }
 
 /// Named by width so widescreen films (1920x800) still read as 1080p.

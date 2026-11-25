@@ -18,6 +18,7 @@ class StreamSource {
     this.hls = true,
     this.audio,
     this.qualities = const [],
+    this.playsUrlFirst = false,
   });
 
   /// The master playlist when the server has one (its qualities are read from it), otherwise
@@ -26,6 +27,10 @@ class StreamSource {
 
   /// Separate streams per quality, for servers without a master playlist. Best first.
   final List<({String label, String url})> qualities;
+
+  /// Of [qualities], [url] is the one to start on (a film source's link: the size its source
+  /// picked). Otherwise the player starts on 1080p when there is one.
+  final bool playsUrlFirst;
 
   /// The source's or server's own name, as the menus show it.
   final String server;
