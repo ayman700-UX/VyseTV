@@ -122,6 +122,7 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
   bool _started = false; // the first "playing" of this load was seen
   bool _ended = false;
   bool _lost = false; // the TV took its decoder back (another app); reopened on return
+  bool _taken = false; // on a TV with one player, another of the app's players has it now
   Media? _media;
   bool _live = false;
   int _durationMs = 0;
@@ -347,6 +348,7 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
     _started = false;
     _ended = false;
     _lost = false;
+    _taken = false;
     _durationMs = 0;
     _videoW = _videoH = 0;
     _audio = [];
@@ -373,6 +375,10 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
     if (name == 'app') {
       final state = data?['state'];
       if (state is String) _appStateChanged(state);
+      return;
+    }
+    if (name == 'taken') {
+      _onTaken();
       return;
     }
     super.handlePlayerEvent(name, data);
@@ -608,13 +614,30 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
 
   void _appStateChanged(String state) {
     // (LG's embedder names them as Flutter does: AppLifecycleState.resumed, .hidden, .paused)
-    if (state.endsWith('resumed') && _lost) {
-      final media = _media;
-      if (media == null) return;
-      _lost = false;
-      final at = currentPosition;
-      unawaited(_quiet(() => open(Media(media.uri, headers: media.headers, start: at), play: _wantPlay, isLive: _live, timelineDuration: configuredTimelineDuration, timelineOffset: timelineOffset)));
-    }
+    if (state.endsWith('resumed') && _lost) unawaited(_openAgain());
+  }
+
+  /// A TV with one player for the whole app (before webOS 6): another of the app's players
+  /// has just been given it, the film in place of the music or the other way round, and what
+  /// this one was playing is unloaded. Nothing is wrong with it. It shows as paused, and is
+  /// opened again where it was when it is asked to play (not when the app comes back to the
+  /// front: that would take the player from the one that has it).
+  void _onTaken() {
+    _taken = true;
+    _loaded = false;
+    _wantPlay = false;
+    _clockPause();
+    handlePropertyChange('pause', true);
+  }
+
+  /// Opens what was playing again, where it was.
+  Future<void> _openAgain() async {
+    final media = _media;
+    if (media == null) return;
+    _lost = false;
+    _taken = false;
+    final at = currentPosition;
+    await _quiet(() => open(Media(media.uri, headers: media.headers, start: at), play: _wantPlay, isLive: _live, timelineDuration: configuredTimelineDuration, timelineOffset: timelineOffset));
   }
 
   // ── position ──
@@ -798,6 +821,11 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
   @override
   Future<void> play() async {
     _wantPlay = true;
+    if (_taken || _lost) {
+      // (its player went to another: Play is what brings it back)
+      await _openAgain();
+      return;
+    }
     if (_ended) {
       // (played out: Play starts it over, as mpv's keep-open does)
       _ended = false;
@@ -821,6 +849,8 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
   Future<void> stop() async {
     _sources++;
     _loaded = false;
+    _lost = false;
+    _taken = false;
     _stopClock();
     _say('');
     await invoke('unload');

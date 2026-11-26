@@ -2,34 +2,45 @@
 
 An LG TV build of VyseTV, made with LG's own Flutter SDK for webOS.
 
-**It is a test build, not a supported platform.** One tester has run it (late November 2026)
-and reported that it opened, played video and streamed a torrent. That is one set, told to us,
-not seen by us. Two other testers could not start it at all: their TVs are on an older webOS,
-which is the limit described next. Everything in it was written from LG's source, from other
-open-source players for webOS, and from what could be tested on a PC. "What is proven" below
-says how far each part got.
+**It is a test build, not a supported platform.** One tester has run it on a webOS 26 set (late
+November 2026) and reported that it opened, played video and streamed a torrent. That is one
+set, told to us, not seen by us. Two other testers could not start it at all: their TVs are on
+an older webOS. For those there is a second package ("Older webOS" below), and nobody has run
+that one on a TV yet. Everything here was written from LG's source, from other open-source
+players for webOS, and from what could be tested on a PC. "What is proven" below says how far
+each part got.
 
 ## Which TVs
 
-Only TVs on **webOS 26 ("Re:New")** or newer, in Developer Mode.
+One build makes two packages. Both are for a TV in Developer Mode.
 
-That is LG's limit, not this app's: their Flutter engine and the program it is built into need
-the C library of webOS 26 (glibc 2.38; webOS 24 and 25 have 2.35, a 2018 set on webOS 4 has
-2.24), and LG's SDK is written for it. LG's Re:New programme brings webOS 26 to 2022 and newer
-OLED and upper QNED sets as updates roll out.
+| Package | For | How far it got |
+|---|---|---|
+| `com.vyse.vysetv_<version>_arm.ipk` | webOS 26 ("Re:New") and newer | One tester reports it working |
+| `com.vyse.vysetv_<version>_arm_older-webos.ipk` | webOS 4 to webOS 25: sets from 2018 on | Never run on a TV |
 
-**Check before installing.** On the TV: Settings > General > About this TV (or Support > TV
+webOS 3 and older (2017 sets and before) can run neither: too much of what LG's embedder calls
+is missing from those TVs' own libraries.
+
+The first package is what LG's tool makes. LG's Flutter engine and the program it is built into
+need the C library of webOS 26 (glibc 2.38; webOS 24 and 25 have 2.35, a 2018 set on webOS 4
+has 2.24), so it starts on webOS 26 and nowhere else. LG's Re:New programme brings webOS 26 to
+2022 and newer OLED and upper QNED sets as updates roll out. The second package is the same
+build carrying a C library of its own.
+
+**Which one a TV needs.** On the TV: Settings > General > About this TV (or Support > TV
 information), "webOS TV version". On the PC: `ares-device --system-info --device <tv>`; its
-`sdkVersion` is 11 or higher on webOS 26 (10 is webOS 25, 9 is 24, 8 is 23, 7 is 22, 6 and
-below are 2021 and older sets).
+`sdkVersion` is 11 or higher on webOS 26 (10 is webOS 25, 9 is 24, 8 is 23, 7 is 22, 6 and 5
+are 2021 and 2020 sets, 4 is 2018 and 2019). 11 and up takes the first package, 4 to 10 the
+second. Installing one replaces the other.
 
-### On an older webOS: static, a black screen, or "Not Programmed"
+### The webOS 26 package on an older TV: static, a black screen, or "Not Programmed"
 
-The package installs on any webOS TV, and on an older one it cannot start: the TV's own loader
-refuses the program before a line of the app has run, the app never appears among the running
-apps, and the TV goes back to what it was showing, which for a set with no aerial is static or
-"Not Programmed". It is not a fault of how it was installed, and installing again changes
-nothing. To see the TV say so itself:
+The first package installs on any webOS TV, and on an older one it cannot start: the TV's own
+loader refuses the program before a line of the app has run, the app never appears among the
+running apps, and the TV goes back to what it was showing, which for a set with no aerial is
+static or "Not Programmed". It is not a fault of how it was installed, and installing again
+changes nothing. To see the TV say so itself:
 
 ```bash
 ares-novacom --device <tv> --run "/media/developer/apps/usr/palm/applications/com.vyse.vysetv/vysetv"
@@ -50,11 +61,69 @@ release (webOS Brew's firmware data: every library and function a TV has):
 | 5, 6 | 2020, 2021 | those, and on webOS 5 the call that gives an app more than one player |
 | 4 | 2018, 2019 | those, the whole event-loop library LG's embedder runs on (`libsystemd`), and the way the video plane is placed under an app (exported windows): a 2018 or 2019 set would need its video placed another way |
 
-The runtime itself (glibc and the C++ library) is something a package can bring along and
-start itself under, with a loader of its own; the TV's libraries then run on top of the newer
-runtime, which is the direction that works. Nobody has done that for a 32-bit webOS app that we
-could find, and it has not been tried here. It is the way to older sets if they are to be
-reached, most plainly webOS 24 and 25.
+## Older webOS
+
+The second package (`..._older-webos.ipk`) is the webOS 26 build with the following done to it
+(`tool/webos/older.sh`, run by `build.sh`). The app itself is the same, file for file.
+
+**A runtime of its own.** A folder `runtime/` holds a loader, glibc 2.41 and the C++ library,
+as Debian 13 builds them for 32-bit soft-float ARM, which is the kind of code a webOS TV runs.
+They are Debian's files unchanged, four packages, each checked against its checksum as the
+package is made (`runtime/README.txt` names them and their source). The app's program is set to
+start under that loader and to load that runtime before anything else, and the TV's own
+libraries (graphics, Wayland, the media library, Luna) then run on top of it. That is the
+direction that works: a library made for an older C library runs on a newer one, never the
+other way round. The loader's place is written into the program in full, so this package runs
+from where Developer Mode installs apps and nowhere else.
+
+**Stand-ins for what an older TV's own libraries lack** (`packages/vyse_webos/webos/older`).
+Each is used only on a TV that lacks the real thing:
+
+| webOS | Sets from | What stands in |
+|---|---|---|
+| 24, 25 | 2022 to 2025 | Nothing of LG's embedder. The player names its video window in the load request alone, since the call that also names it up front is not there |
+| 22, 23 | 2022, 2023 | That, and one Wayland call (`wl_proxy_marshal_flags`), written with the two older calls it replaced |
+| 5, 6 | 2020, 2021 | Those. On webOS 5 the TV gives an app one player where newer sets give several, so the film and the music take turns at it: the one that starts takes it, the other shows as paused and picks up where it was when Play is pressed |
+| 4 | 2018, 2019 | Those; the event loop LG's embedder runs on (webOS 4 has no `libsystemd`, so the app brings a loop of its own with the same ten functions); the drawing-window library under the name webOS 4 has it; and the picture is placed by the TV's media library itself, since webOS 4 has no exported windows |
+
+On webOS 4 that last point shows: the media library can put the whole picture in a rectangle
+and no more. Fit, Stretch, the fixed shapes and zooming out work. Fill and zooming in show as
+Fit.
+
+**A record of the start.** Nobody here has such a TV, so the package writes down how it
+started: everything the app, LG's embedder and the loader print goes to
+`appdata/vysetv-start.log` in the app's folder, headed by the TV's kernel, its webOS and every
+library that was loaded with where each came from. If the app falls in native code, the signal,
+the place and the map of what was loaded are added. To read it from the PC:
+
+```bash
+ares-novacom --device <tv> --run "cat /media/developer/apps/usr/palm/applications/com.vyse.vysetv/appdata/vysetv-start.log"
+```
+
+If there is no such file, the program did not get as far as its first line. Running it by hand
+shows why:
+
+```bash
+ares-novacom --device <tv> --run "/media/developer/apps/usr/palm/applications/com.vyse.vysetv/vysetv"
+```
+
+**What was checked without a TV.**
+
+- Every library the package asks for and every function name its files need, against one real
+  firmware of each release (webOS Brew's firmware data): all found on webOS 4.4, 4.10, 5.3,
+  6.4, 7.4 (webOS 22), 8.3 (23), 9.2 (24), 10.2 (25) and 11.2 (26). On webOS 3.9 and older they
+  are not, which is where the line above comes from.
+- A start of the program in an emulator as the package is built: its own loader runs, finds the
+  whole runtime in `runtime/` and every library of the package, and stops at the first library
+  only a TV has.
+- The player's own side of it (`test/webos_player_test.dart`: a TV with no exported windows,
+  a TV with one player, a TV that does not answer what it has).
+
+**What only a TV can say.** Whether LG's embedder, made for the compositor of webOS 26, gets
+along with an older one. Whether an older set's graphics driver takes LG's engine. Whether the
+TV lets a newer C library do all it does inside the app's sandbox. On webOS 4, whether the
+picture lands where it is put. And then everything in "What only a TV can answer" below, which
+holds for both packages. The package is also meant to run on webOS 26; that too is untried.
 
 ## Building it
 
@@ -83,11 +152,12 @@ Then, for each build:
 tool/webos/build.sh
 ```
 
-The package comes out as `build/webos/com.vyse.vysetv_<version>_arm.ipk`.
+The two packages come out in `build/webos/`: `com.vyse.vysetv_<version>_arm.ipk` and
+`com.vyse.vysetv_<version>_arm_older-webos.ipk`.
 
-Without a Linux machine: a push to GitHub whose message has `[webos]` builds the same package
-there (the `webos` job in `.github/workflows/build.yml`) and keeps it as the run's artifact for
-two days. That job runs only once the repository variable `LG_NDK_LICENSE` is set to
+Without a Linux machine: a push to GitHub whose message has `[webos]` builds the same two
+there (the `webos` job in `.github/workflows/build.yml`) and keeps them as the run's artifact
+for two days. That job runs only once the repository variable `LG_NDK_LICENSE` is set to
 `accepted`, which is the repository's owner accepting LG's agreement.
 
 The build needs `lib/data/server_config.dart`, as every platform's does (it is not in the
@@ -122,7 +192,9 @@ which runs on Linux.
    ares-install --device <tv> build/webos/com.vyse.vysetv_<version>_arm.ipk
    ```
 
-   or build and install in one go: `tool/webos/build.sh --install <tv>`.
+   (on a TV older than webOS 26, the `..._older-webos.ipk` one: see "Which TVs"), or build and
+   install in one go: `tool/webos/build.sh --install <tv>`, which asks the TV which webOS it is
+   and picks the package.
 
 Developer Mode lasts 1000 hours and is extended from its app on the TV; when it runs out, the
 TV removes what was installed with it. One TV per developer account at a time.
@@ -184,8 +256,9 @@ listens for.
 | The player page, Settings and the phone page in TV mode | Tested on a PC (`test/dpad/t4_journeys_webos_test.dart`) |
 | The player's native side (C++) | Built with LG's NDK, against the TV's real media library, with LG's own warning settings. It asks the TV for `libNDL_media.so.1` and `libglib-2.0.so.0`. Never run |
 | The JavaScript engine for plugins | Built with LG's NDK, every function the app needs present. Never run on a TV |
-| The package (.ipk) | Built by `tool/webos/build.sh` on GitHub (26 November 2026): 55 MB, 32-bit ARM, the app's code stamped for LG's engine, the torrent engine marked as a program. Opened and checked; never installed |
-| Anything on a TV | Never run |
+| The package for webOS 26 (.ipk) | Built by `tool/webos/build.sh` on GitHub (26 November 2026): 55 MB, 32-bit ARM, the app's code stamped for LG's engine, the torrent engine marked as a program. One tester reports it opening, playing video and streaming a torrent on a webOS 26 set |
+| The package for older webOS | Built the same way, the same day. Checked by name against one firmware of each release from webOS 4.4 on, and started in an emulator as far as the first library only a TV has ("Older webOS" above). Never run on a TV |
+| Anything else on a TV | Not reported yet: Back, HDR and Dolby Vision, sound formats, music, plugins |
 
 What only a TV can answer, in the order it would show up:
 

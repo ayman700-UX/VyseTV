@@ -24,8 +24,9 @@
 // webOS"). Their media library is the same one with fewer calls, so the calls that came later
 // are asked for before they are used (see "What this TV has" below), and each has an older
 // way: a player started without a window id (the id still goes in what the TV is told with the
-// address), one player instead of several, and on sets that cannot place a window under the
-// app at all (webOS 4) the picture placed by the media library itself.
+// address), one player that the film and the music take turns at instead of one each, and on
+// sets that cannot place a window under the app at all (webOS 4) the picture placed by the
+// media library itself.
 
 #include "include/vyse_webos/vyse_webos_plugin.h"
 
@@ -41,6 +42,7 @@
 #include <dlfcn.h>
 #include <glib.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <deque>
@@ -119,6 +121,14 @@ void OnSlot1(char* json) { Enqueue(1, json); }
 void OnSlot2(char* json) { Enqueue(2, json); }
 
 void (*const kOnSlot[kSlots])(char*) = {OnSlot0, OnSlot1, OnSlot2};
+
+// A TV whose library has one player (before webOS 6): the slots take turns at it, and what it
+// says goes to the slot that has it now.
+std::atomic<int> g_holder{-1};
+void OnShared(char* json) {
+  const int slot = g_holder.load();
+  if (slot >= 0) Enqueue(slot, json);
+}
 
 bool HasInitWithWindowId() { return &NDL_MediaInitWithWindowId != nullptr; }
 bool HasPlayers() { return &NDL_MediaSetPlayer != nullptr; }
@@ -302,20 +312,37 @@ class VyseWebosPlugin : public flutter::Plugin {
   }
 
   // Selects the slot in LG's library; every call below is for "the selected player". A TV
-  // whose library has one player only (before webOS 6) has slot 0 and nothing else.
-  static bool SelectQuietly(int slot) {
-    if (!HasPlayers()) return slot == 0;
+  // whose library has one player only (before webOS 6) has nothing to select: the player is
+  // this slot's or it is another's.
+  bool SelectQuietly(int slot) {
+    if (!HasPlayers()) return holder_ == slot;
     return NDL_MediaSetPlayer(slot) == 0;
   }
 
-  static bool Select(int slot, Reply& reply) {
+  bool Select(int slot, Reply& reply) {
     if (SelectQuietly(slot)) return true;
     if (!HasPlayers()) {
-      reply->Error("NO_PLAYER", "This TV has one player, and it is the video's");
+      reply->Error("NO_PLAYER", "The TV's one player is playing something else");
     } else {
       reply->Error("NO_PLAYER", "The TV gave no player: " + LastError());
     }
     return false;
+  }
+
+  // On a TV with one player: gives it to this slot. What another slot was playing is
+  // unloaded, and its Dart side is told ("taken"), so it shows itself paused and opens its
+  // video or song again where it was when it is asked to play.
+  void TakeTheOnePlayer(int index) {
+    if (holder_ >= 0 && holder_ != index) {
+      Slot& other = slots_[holder_];
+      if (other.loaded) {
+        NDL_MediaUnload();
+        other.loaded = false;
+        if (other.sink) Send(holder_, "taken", "by", std::to_string(index));
+      }
+    }
+    holder_ = index;
+    g_holder.store(index);
   }
 
   void HandleMedia(int index, const Call& call, Reply reply) {
@@ -365,23 +392,30 @@ class VyseWebosPlugin : public flutter::Plugin {
         reply->Error("NO_ADDRESS", "Nothing to open");
         return;
       }
-      if (!Select(index, reply)) return;
-      if (!slot.started) {
+      const bool one_player = !HasPlayers();
+      if (one_player) {
+        TakeTheOnePlayer(index);
+      } else if (!Select(index, reply)) {
+        return;
+      }
+      // (the one player is started once, whichever slot comes first)
+      bool& started = one_player ? one_player_started_ : slot.started;
+      if (!started) {
         // With the window's id for a picture (without one LG's library goes looking for an
         // SDL window, which this app has not); plain for sound alone. A webOS older than 26
         // has only the plain start: there the window's id reaches the TV in the payload alone.
-        const int started = window.empty() || !HasInitWithWindowId()
-                                ? NDL_MediaInit(0)
-                                : NDL_MediaInitWithWindowId(0, window.c_str());
-        if (started != 0) {
+        const int failed = window.empty() || !HasInitWithWindowId()
+                               ? NDL_MediaInit(0)
+                               : NDL_MediaInitWithWindowId(0, window.c_str());
+        if (failed != 0) {
           reply->Error("NO_PLAYER", "The TV's player did not start: " + LastError());
           return;
         }
-        if (NDL_MediaSubscribeEvents(kOnSlot[index]) != 0) {
+        if (NDL_MediaSubscribeEvents(one_player ? OnShared : kOnSlot[index]) != 0) {
           std::fprintf(stderr, "[vyse_webos] slot %d: no events: %s\n", index,
                        LastError().c_str());
         }
-        slot.started = true;
+        started = true;
       } else if (slot.loaded) {
         NDL_MediaUnload();
       }
@@ -482,6 +516,9 @@ class VyseWebosPlugin : public flutter::Plugin {
 
   FlutterDesktopViewRef view_;
   Slot slots_[kSlots];
+  // On a TV with one player: the slot that has it, and whether it was started.
+  int holder_ = -1;
+  bool one_player_started_ = false;
   std::unique_ptr<flutter::MethodChannel<EncodableValue>> window_;
 };
 

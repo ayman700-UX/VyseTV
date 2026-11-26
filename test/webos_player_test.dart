@@ -72,6 +72,20 @@ class _Tv {
     await t.pump();
   }
 
+  /// On a TV with one player: the native side saying another slot has just been given it.
+  Future<void> took(WidgetTester t, {required int from, required int by}) async {
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
+      'vyse/webos_media/$from/events',
+      _methods.encodeSuccessEnvelope(<String, Object?>{
+        'type': 'event',
+        'name': 'taken',
+        'data': <String, Object?>{'by': '$by'},
+      }),
+      (_) {},
+    );
+    await t.pump();
+  }
+
   Future<void> appIs(WidgetTester t, String state) async {
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
       'vyse/webos_media/0/events',
@@ -628,6 +642,45 @@ void main() {
     await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
     expect(tv.loads, hasLength(2));
     expect(((tv.lastPayload['option']! as Map)['transmission']! as Map)['playTime'], {'start': 600000});
+  });
+
+  tvTest('a TV with one player: the film took it from a song, and Play opens the song again where it was', (t) async {
+    final music = keep(PlayerWebos.audio());
+    await t.runAsync(() => music.open(const Media('http://127.0.0.1:8090/song.m4a')));
+    await t.pump();
+    await tv.says(t, {'loadCompleted': {}}, slot: 1);
+    await tv.says(t, {'playing': {}}, slot: 1);
+    await tv.says(t, {'currentTime': 42000}, slot: 1);
+    expect(music.state.playing, isTrue);
+    final errors = <PlayerError>[];
+    music.streams.error.listen(errors.add);
+
+    await tv.took(t, from: 1, by: 0);
+    expect(music.state.playing, isFalse, reason: 'it shows as paused');
+    expect(errors, isEmpty, reason: 'nothing is wrong with the song');
+    expect(tv.calls.where((c) => c == '1 unload'), isEmpty, reason: 'the native side has unloaded it already');
+
+    // the app coming back to the front does not take the player from the film
+    await tv.appIs(t, 'AppLifecycleState.resumed');
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    expect(tv.loads, hasLength(1));
+
+    await t.runAsync(music.play);
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    expect(tv.loads, hasLength(2));
+    expect(tv.loads.last['uri'], 'http://127.0.0.1:8090/song.m4a');
+    expect(((tv.lastPayload['option']! as Map)['transmission']! as Map)['playTime'], {'start': 42000});
+  });
+
+  tvTest('a player that was stopped is not opened again by Play', (t) async {
+    final player = await opened(t);
+    await tv.says(t, {'loadCompleted': {}});
+    await tv.says(t, {'playing': {}});
+    await tv.took(t, from: 0, by: 1);
+    await t.runAsync(player.stop);
+    await t.runAsync(player.play);
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    expect(tv.loads, hasLength(1));
   });
 
   tvTest('a link with headers of its own is opened through the relay on this device', (t) async {
