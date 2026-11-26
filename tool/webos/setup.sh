@@ -13,8 +13,8 @@
 #   1. the packages a Flutter Linux build needs (apt, asks for your password)
 #   2. LG's Flutter tool, `flutter-webos`, at the commit VyseTV was written against. It brings
 #      its own Flutter (3.38.10): the project's pinned one is never touched.
-#   3. Node.js 16 and LG's webOS CLI (the `ares-*` commands), which make the .ipk. Node 16 is
-#      what that CLI needs; it goes in a folder of its own and replaces no Node you have.
+#   3. Node.js 22 and LG's webOS CLI (the `ares-*` commands), which make the .ipk. It goes in
+#      a folder of its own and replaces no Node you have.
 #   4. LG's webOS NDK: the compiler and the TV's own libraries (a 341 MB download).
 #
 # The NDK comes under LG's "LG SDK License Agreement". Its installer shows the agreement and
@@ -43,9 +43,12 @@ NODE_DIR="$HOME_DIR/node"
 SDK_URL="https://github.com/lg-flutter-webos/flutter-webos.git"
 SDK_REF="950398131830e9bd5dc91e588c3db8f5c42322be"
 
-# Node.js 16, the newest the webOS CLI runs on (it wants 14.15.1 to 16.20.2).
-NODE_VERSION="v16.20.2"
-NODE_SHA256="874463523f26ed528634580247f403d200ba17a31adf2de98a7b124c6eb33d87" # nodejs.org's own, for linux-x64
+# Node.js for the webOS CLI. LG's guide still says 14.15.1 to 16.20.2, but the CLI it has
+# you install (3.2.6) refuses anything under 20: its packager stops with "only works on
+# Node.js version: >=20.0.0". So: the long-term-support 22, and the CLI at the version read.
+NODE_VERSION="v22.23.5"
+NODE_SHA256="cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8" # nodejs.org's own, for linux-x64
+ARES_CLI="@webos-tools/cli@3.2.6"
 
 NDK_VERSION="11.2.0"
 NDK_FILE="webos-ndk-flutter-starfish-x86_64-ca9v1-$NDK_VERSION.sh"
@@ -100,9 +103,11 @@ if [ ! -x "$NODE_DIR/bin/node" ] || [ "$("$NODE_DIR/bin/node" --version)" != "$N
 fi
 export PATH="$NODE_DIR/bin:$PATH"
 if ! command -v ares-package >/dev/null 2>&1; then
-  npm install --global --prefix "$NODE_DIR" "@webos-tools/cli@^3.2.4"
+  npm install --global --prefix "$NODE_DIR" "$ARES_CLI"
 fi
-ares -V || true
+# (asked for real: a CLI that will not run on this Node says so here, not at the end of a build)
+ares -V
+ares-package --version
 
 say "4. LG's webOS NDK $NDK_VERSION"
 NDK_ENV="$(ndk_env)"

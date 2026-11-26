@@ -67,6 +67,11 @@ flutter-webos build webos "--$MODE" --dart-define=VYSE_WEBOS=true
 IPK="$(ls -t "$STAGE"/build/webos/*/"$MODE"/ipk/*.ipk 2>/dev/null | head -n 1 || true)"
 [ -n "$IPK" ] || { echo "LG's tool finished without an .ipk under $STAGE/build/webos." >&2; exit 1; }
 
+# (out of the copy first: a package that fails the look below is still there to be looked at)
+mkdir -p "$REPO/build/webos"
+cp -f "$IPK" "$REPO/build/webos/"
+OUT="$REPO/build/webos/$(basename "$IPK")"
+
 echo "== 3. a look inside the package"
 LIST="$(ar p "$IPK" data.tar.gz | tar -tzvf -)"
 BAD=0
@@ -80,15 +85,13 @@ want "the JavaScript engine for scraper plugins"           '/lib/libquickjs_c_br
 want "the torrent engine"                                  '/lib/torrserver-linux-arm7$'
 want "the torrent engine, marked as a program"             '^-rwx[r-]-x[r-]-x .*/lib/torrserver-linux-arm7$'
 want "the app's description for the TV (appinfo.json)"     '/appinfo\.json$'
+echo "   its programs and libraries:"
+printf '%s\n' "$LIST" | grep -E '/lib/[^/]+$|/appinfo\.json$|^-rwx' | awk '{print "     " $1 "  " $3 "  " $NF}' | sort -u -k3 | head -n 60
 if [ "$BAD" != 0 ]; then
-  echo "The package is not whole: see above. What it does hold:" >&2
-  printf '%s\n' "$LIST" | grep -E '/lib/|appinfo' | head -n 60 >&2
+  echo "The package is not whole: see above." >&2
   exit 1
 fi
 
-mkdir -p "$REPO/build/webos"
-cp -f "$IPK" "$REPO/build/webos/"
-OUT="$REPO/build/webos/$(basename "$IPK")"
 echo
 echo "Built: $OUT ($(du -h "$OUT" | cut -f1))"
 

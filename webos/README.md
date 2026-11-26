@@ -33,7 +33,7 @@ Once, on that Linux:
 tool/webos/setup.sh
 ```
 
-It installs the packages a Flutter Linux build needs, LG's Flutter tool, Node.js 16 with LG's
+It installs the packages a Flutter Linux build needs, LG's Flutter tool, Node.js 22 with LG's
 webOS CLI, and LG's webOS NDK (341 MB). The NDK is under LG's "LG SDK License Agreement": its
 installer shows the agreement and asks you. `--accept-lg-ndk-license` answers yes for you; pass
 it only if you accept those terms.

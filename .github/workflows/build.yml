@@ -496,8 +496,12 @@ jobs:
         run: bash tool/webos/setup.sh --accept-lg-ndk-license
       - name: Build
         run: bash tool/webos/build.sh
+      # (also when the look inside the package found something missing: the package is then
+      # what there is to look at)
       - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
         with:
           name: vysetv-webos
           path: build/webos/*.ipk
+          if-no-files-found: ignore
           retention-days: 2 # a private repository has 500 MB for these
