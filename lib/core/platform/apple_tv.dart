@@ -30,6 +30,11 @@ abstract final class AppleTv {
 
   static const _channel = MethodChannel('vyse/apple_tv');
 
+  // The tvOS engine's own: whether the remote's Menu goes to the system (the Apple TV's home
+  // screen) instead of to the app.
+  static const _navigation = BasicMessageChannel<Object?>('flutter/tvos_system_navigation', JSONMessageCodec());
+  static bool? _menuToSystem;
+
   /// What the app needs set up before anything else on an Apple TV. Called first thing in
   /// main().
   static void install() {
@@ -53,6 +58,16 @@ abstract final class AppleTv {
   static Config cacheConfig(String key, {Duration stalePeriod = const Duration(days: 30), int maxNrOfCacheObjects = 200}) => isTv
       ? Config(key, stalePeriod: stalePeriod, maxNrOfCacheObjects: maxNrOfCacheObjects, repo: JsonCacheInfoRepository(databaseName: key))
       : Config(key, stalePeriod: stalePeriod, maxNrOfCacheObjects: maxNrOfCacheObjects);
+
+  /// Whether the remote's Menu leaves the app for the Apple TV's home screen, as it does in any
+  /// Apple TV app at its top level, or is the app's Back. The shell says which, as focus moves
+  /// (lib/screens/shell/shell.dart). The press has to go one way or the other before it
+  /// arrives, so this is a standing setting, not an answer to a press.
+  static void setMenuToSystem(bool on) {
+    if (!isTv || _menuToSystem == on) return;
+    _menuToSystem = on;
+    unawaited(_navigation.send({'menuPassthroughEnabled': on}).catchError((Object _) => null));
+  }
 
   /// No screen saver while a video plays (wakelock_plus has no Apple TV build).
   static Future<void> keepAwake(bool on) async {

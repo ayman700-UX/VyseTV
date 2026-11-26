@@ -16,6 +16,8 @@ name: Build
 #   * [webos] builds the LG TV package. It is asked for by its own name only, never by
 #     [all]: see the webos job at the end.
 #   * [tvos] builds the Apple TV package, likewise by its own name only (the tvos job).
+#     [tvos-torrent] builds the torrent engine for it (the tvos-torrent job), which is then
+#     committed to packages/torrserver_flutter/binaries.
 #
 # On a private repository the macOS and iOS jobs use up build minutes ten times
 # faster than the Linux ones, and Windows twice as fast.
@@ -26,7 +28,7 @@ on:
         description: What to build
         type: choice
         default: linux
-        options: [all, linux, linux-x64, linux-arm64, macos, ios, android, windows, webos, tvos]
+        options: [all, linux, linux-x64, linux-arm64, macos, ios, android, windows, webos, tvos, tvos-torrent]
   push:
     branches: [main]
 
@@ -46,6 +48,7 @@ jobs:
       windows: ${{ steps.pick.outputs.windows }}
       webos: ${{ steps.pick.outputs.webos }}
       tvos: ${{ steps.pick.outputs.tvos }}
+      tvos_torrent: ${{ steps.pick.outputs.tvos_torrent }}
     steps:
       - id: pick
         env:
@@ -56,7 +59,7 @@ jobs:
           if [ "$EVENT" = "workflow_dispatch" ]; then
             pick="$PLATFORM"
           else
-            pick=$(printf '%s' "$MESSAGE" | grep -oE '\[(all|linux|linux-x64|linux-arm64|macos|ios|android|windows|webos|tvos)\]' | tr -d '[]' | tr '\n' ' ' || true)
+            pick=$(printf '%s' "$MESSAGE" | grep -oE '\[(all|linux|linux-x64|linux-arm64|macos|ios|android|windows|webos|tvos|tvos-torrent)\]' | tr -d '[]' | tr '\n' ' ' || true)
           fi
           echo "Building: ${pick:-nothing}"
           has() { case " $pick " in *" all "*|*" $1 "*) return 0 ;; esac; return 1; }
@@ -75,6 +78,7 @@ jobs:
           case " $pick " in *" webos "*) echo "webos=true" >> "$GITHUB_OUTPUT" ;; *) echo "webos=false" >> "$GITHUB_OUTPUT" ;; esac
           # (the Apple TV build: likewise by its own name only)
           case " $pick " in *" tvos "*) echo "tvos=true" >> "$GITHUB_OUTPUT" ;; *) echo "tvos=false" >> "$GITHUB_OUTPUT" ;; esac
+          case " $pick " in *" tvos-torrent "*) echo "tvos_torrent=true" >> "$GITHUB_OUTPUT" ;; *) echo "tvos_torrent=false" >> "$GITHUB_OUTPUT" ;; esac
 
   # 64-bit Intel/AMD and 64-bit ARM. Flutter has no 32-bit Linux desktop build.
   linux:
@@ -599,3 +603,31 @@ jobs:
             build/tvos-build.log
           if-no-files-found: ignore
           retention-days: 2 # a private repository has 500 MB for these
+
+  # The torrent engine for Apple TV: TorrServer linked into the app as TorrServerKit.xcframework
+  # (packages/torrserver_flutter/tool/go-shim/build-tvos-xcframework.sh). Built on its own, by
+  # name ([tvos-torrent]); the .zip it makes is committed to packages/torrserver_flutter/binaries,
+  # where the tvos job takes it from.
+  tvos-torrent:
+    name: Apple TV torrent engine (TorrServerKit.xcframework)
+    needs: plan
+    if: ${{ needs.plan.outputs.tvos_torrent == 'true' }}
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build
+        run: bash packages/torrserver_flutter/tool/go-shim/build-tvos-xcframework.sh
+        env:
+          OUTPUT_DIR: ${{ github.workspace }}/dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: torrserverkit-tvos
+          path: dist/TorrServerKit-tvos.xcframework.zip
+          retention-days: 2

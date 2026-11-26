@@ -75,3 +75,7 @@ FRONTEND_PROMPT.md
 
 # the Vega runtime build's packages
 /tool/vega_runtime/node_modules/
+
+# (the Go shim's build: TorrServer's source and the frameworks it makes)
+packages/torrserver_flutter/tool/go-shim/torrserver-src/
+packages/torrserver_flutter/dist/

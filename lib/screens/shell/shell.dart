@@ -29,6 +29,7 @@ import '../../dpad/dpad_root.dart' show DpadBackScope;
 import '../../dpad/dpad_traversal.dart';
 import '../../dpad/input_mode_tracker.dart';
 import '../../dpad/key_event_utils.dart';
+import '../../core/platform/apple_tv.dart';
 import '../../core/platform/platform_detector.dart' show PlatformDetector;
 import '../../widgets/dialogs/update_dialog.dart';
 import '../../widgets/common.dart';
@@ -290,6 +291,7 @@ class _AppShellState extends State<AppShell> {
     FloatingLayer.onLeave = () => Dpad.enter(_navRegion);
     Updater.instance.addListener(_updateChanged);
     unawaited(Updater.instance.initialize());
+    if (AppleTv.isTv) FocusManager.instance.addListener(_menuToSystem);
     // a tapped notification: the conversation, or the room, in the Party tab (also when the
     // navbar hides Party: it opens anyway, with nothing lit in the bar)
     PartyAlerts.onOpen = (target) {
@@ -367,6 +369,10 @@ class _AppShellState extends State<AppShell> {
     NavLayout.changes.removeListener(_layoutChanged);
     hideBottomBar.removeListener(_barAsked);
     Updater.instance.removeListener(_updateChanged);
+    if (AppleTv.isTv) {
+      FocusManager.instance.removeListener(_menuToSystem);
+      AppleTv.setMenuToSystem(false);
+    }
     _dms?.cancel();
     _replies?.cancel();
     _p2pAsks?.cancel();
@@ -384,6 +390,21 @@ class _AppShellState extends State<AppShell> {
   /// One navigator per tab, so details pages open beside the rail instead of over it.
   final _navigators = <String, GlobalKey<NavigatorState>>{};
   GlobalKey<NavigatorState> _nav(String id) => _navigators.putIfAbsent(id, GlobalKey<NavigatorState>.new);
+
+  /// Apple TV: at the top (the first section, its navbar entry focused, nothing open over it)
+  /// the remote's Menu goes to the system and the Apple TV's home screen comes up, as in any
+  /// Apple TV app; anywhere else it is the app's Back ([_onSystemBack]). Asked again whenever
+  /// focus moves, which it does whenever any of those changes.
+  void _menuToSystem() {
+    if (!mounted) return;
+    final top =
+        _current == NavLayout.visible.first.id &&
+        _navRegion.hasFocus &&
+        !FloatingLayer.region.hasFocus &&
+        !(_nav(_current).currentState?.canPop() ?? false) &&
+        !(rootNavigatorKey.currentState?.canPop() ?? false);
+    AppleTv.setMenuToSystem(top);
+  }
 
   void _go(String id) {
     setState(() {

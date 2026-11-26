@@ -54,7 +54,11 @@ import UIKit
   }
 
   override func remoteControlReceived(with event: UIEvent?) {
-    switch event?.subtype {
+    guard let subtype = event?.subtype else {
+      super.remoteControlReceived(with: event)
+      return
+    }
+    switch subtype {
     case .remoteControlPlay, .remoteControlPause, .remoteControlTogglePlayPause:
       remoteChannel.sendMessage(["type": "play_pause", "source": "remote_control"])
     default:
