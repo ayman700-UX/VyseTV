@@ -520,12 +520,13 @@ jobs:
   #
   # Flutter's tool has no Apple TV target: the app is built by Xcode from tvos/Runner.xcodeproj,
   # on a Flutter engine made for tvOS (tvos/engine.version), and the Dart by that engine's own
-  # compiler (tvos/scripts/xcode_appletv.sh). Apple silicon: that engine's tools are for it.
+  # compiler (tvos/scripts/xcode_appletv.sh). On an Intel Mac, as the iPhone job: GitHub's
+  # Apple silicon Macs with macOS 26 (macos-26) are so few that a job can wait for one for good.
   tvos:
     name: Apple TV (unsigned .ipa, for sideloading)
     needs: plan
     if: ${{ needs.plan.outputs.tvos == 'true' }}
-    runs-on: macos-26
+    runs-on: macos-26-intel
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -556,7 +557,14 @@ jobs:
           python3 tool/tvos/make_project.py
           git diff --exit-code -- tvos/ || { echo "::error::tvos/ is not what tool/tvos/make_project.py makes: run it and commit the result."; exit 1; }
       - name: Fetch the Flutter engine for tvOS
-        run: bash tvos/scripts/fetch_engine.sh
+        run: |
+          bash tvos/scripts/fetch_engine.sh
+          # (which of the engine's tools this Mac can run: the Dart compiler for the TV must be one)
+          ENGINE="$(sed -n 's/^FLUTTER_LOCAL_ENGINE=//p' tvos/Flutter/Generated.xcconfig)"
+          echo "this Mac: $(uname -m)"
+          find "$ENGINE/out" -maxdepth 3 \( -name 'gen_snapshot*' -o -name dartaotruntime \) -type f | while read -r f; do
+            echo "  ${f#"$ENGINE/out/"}: $(lipo -archs "$f" 2>/dev/null || echo '?')"
+          done
       - name: Resolve Swift packages (MPVKit)
         run: xcodebuild -resolvePackageDependencies -workspace tvos/Runner.xcworkspace -scheme Runner
       # Xcode says a great deal; the whole of it is kept as a file of the run, and what matters
@@ -612,7 +620,7 @@ jobs:
     name: Apple TV torrent engine (TorrServerKit.xcframework)
     needs: plan
     if: ${{ needs.plan.outputs.tvos_torrent == 'true' }}
-    runs-on: macos-26
+    runs-on: macos-26-intel
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

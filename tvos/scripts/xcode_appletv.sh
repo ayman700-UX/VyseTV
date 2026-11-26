@@ -509,13 +509,17 @@ BuildAppRelease() {
   # Locate gen_snapshot. Use the cross-compile variant that targets iOS/tvOS
   # arm64 (emits arm64-ios assembly). The plain host gen_snapshot targets
   # macOS and its snapshots are rejected at runtime by the iOS/tvOS VM.
+  # VyseTV: the first one this Mac can run (an Intel Mac cannot run an arm64-only one; upstream
+  # builds on Apple silicon only).
   GEN_SNAPSHOT=""
+  local host_arch
+  host_arch="$(uname -m)"
   for cand in \
       "$DEVICE_TOOLS/artifacts_arm64/gen_snapshot_arm64" \
       "$DEVICE_TOOLS/universal/gen_snapshot_arm64" \
       "$DEVICE_TOOLS/artifacts_x64/gen_snapshot_arm64" \
       "$DEVICE_TOOLS/gen_snapshot_arm64"; do
-    if [ -x "$cand" ]; then
+    if [ -x "$cand" ] && lipo -archs "$cand" 2>/dev/null | tr ' ' '\n' | grep -qx "$host_arch"; then
       GEN_SNAPSHOT="$cand"
       break
     fi
