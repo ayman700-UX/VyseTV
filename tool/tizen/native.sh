@@ -75,11 +75,15 @@ for lib in "$OUT"/*.so; do
   file "$lib"
   readelf -d "$lib" | grep -E 'SONAME|NEEDED' || true
 done
-# (what flutter_js and the app look up in each; a name missing here fails every plugin or torrent)
+# (what flutter_js and the app look up in each; a name missing here fails every plugin or torrent.
+# The symbol tables are read whole first: `grep -q` in a pipe ends it early, which pipefail calls
+# a failure.)
+qjs_syms="$(readelf --dyn-syms -W "$OUT/libquickjs_c_bridge_plugin.so" | grep -v ' UND ')"
 for sym in jsSetMemoryLimit jsNewRuntime jsNewContext jsEval jsFreeRuntime jsCall jsNewString; do
-  readelf --dyn-syms -W "$OUT/libquickjs_c_bridge_plugin.so" | grep -v " UND " | grep -qw "$sym" || { echo "libquickjs_c_bridge_plugin.so has no $sym"; exit 1; }
+  grep -qw "$sym" <<<"$qjs_syms" || { echo "libquickjs_c_bridge_plugin.so has no $sym"; exit 1; }
 done
+torr_syms="$(readelf --dyn-syms -W "$OUT/libtorrserver.so" | grep -v ' UND ')"
 for sym in TorrServerStart TorrServerStop TorrServerIsRunning TorrServerFree; do
-  readelf --dyn-syms -W "$OUT/libtorrserver.so" | grep -v " UND " | grep -qw "$sym" || { echo "libtorrserver.so has no $sym"; exit 1; }
+  grep -qw "$sym" <<<"$torr_syms" || { echo "libtorrserver.so has no $sym"; exit 1; }
 done
 echo "native libraries ready in $OUT"

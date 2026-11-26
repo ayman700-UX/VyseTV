@@ -26,6 +26,11 @@ abstract final class TizenTv {
   /// The package's id (tizen/tizen-manifest.xml).
   static const packageId = 'com.vyse.vysetv';
 
+  /// Which of the Samsung packages this is: the Tizen version it was built for (6.0, 6.5 or
+  /// 10.0; tool/tizen/build.sh says it with --dart-define=VYSE_TIZEN_API). Updates name the
+  /// package for it.
+  static const packageApi = String.fromEnvironment('VYSE_TIZEN_API', defaultValue: '6.5');
+
   /// The full path of a library the package carries in its lib/ folder (tool/tizen/native.sh
   /// builds them: the JavaScript engine plugins run in, the torrent engine), or null when the
   /// package has none by that name.

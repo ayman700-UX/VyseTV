@@ -12,11 +12,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:vyse_tv/core/nav.dart';
 import 'package:vyse_tv/data/app_settings.dart';
 import 'package:vyse_tv/data/updates/updater.dart';
 import 'package:vyse_tv/dpad/dpad_root.dart';
 import 'package:vyse_tv/core/platform/platform_detector.dart';
+import 'package:vyse_tv/core/platform/tizen_tv.dart';
 import 'package:vyse_tv/screens/home/home_page.dart';
 import 'package:vyse_tv/screens/shell/shell.dart' show AppShell, SideRail;
 import 'package:vyse_tv/widgets/dialogs/update_dialog.dart';
@@ -311,5 +313,33 @@ void main() {
     expect(find.text('VyseTV 9.0.0 is ready'), findsOneWidget);
     expect(_label(), 'Update');
     await Bed.back(t);
+  }, variant: tv);
+
+  testWidgets('a TV that cannot install it (LG, Samsung, Apple TV): a code for a phone, focus on Done, Skip beside it, Back closes', (t) async {
+    TizenTv.debugIs = true;
+    addTearDown(() => TizenTv.debugIs = null);
+    final (card, _) = await _onHome(t);
+    addTearDown(_reset);
+    Updater.instance
+      ..info = UpdateInfo(version: '9.0.0', notes: 'Fixes for the TV.', date: '2026-11-26', files: const {}, page: 'https://example.com/releases/v9.0.0')
+      ..stage = UpdateStage.available
+      ..shownThisRun = false;
+    _tell();
+    unawaited(showUpdateDialog(t.element(find.byType(AppShell))));
+    await Bed.settle(t, rounds: 4);
+    expect(find.text('VyseTV 9.0.0 is ready'), findsOneWidget);
+    expect(find.byType(QrImageView), findsOneWidget, reason: 'the code that takes a phone to the release');
+    expect(find.text('Update'), findsNothing, reason: 'nothing to download on this TV');
+    expect(_label(), 'Done');
+    await Bed.left(t);
+    expect(_label(), 'Skip this version');
+    await Bed.left(t);
+    expect(_label(), 'Skip this version', reason: 'Left stays in the box');
+    await Bed.right(t);
+    expect(_label(), 'Done');
+    await Bed.picture(t, 'tv3/update_box_by_phone');
+    await Bed.back(t);
+    expect(find.text('VyseTV 9.0.0 is ready'), findsNothing);
+    expect(identical(_focus, card), isTrue, reason: 'focus is back where it was');
   }, variant: tv);
 }

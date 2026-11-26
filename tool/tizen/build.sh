@@ -39,7 +39,7 @@ for api in "${apis[@]}"; do
     set -e
     echo '$PASSWORD' | gnome-keyring-daemon --unlock >/dev/null
     cd '$stage'
-    flutter-tizen build tpk --release --device-profile tv --security-profile '$PROFILE' --dart-define=VYSE_TIZEN=true
+    flutter-tizen build tpk --release --device-profile tv --security-profile '$PROFILE' --dart-define=VYSE_TIZEN=true --dart-define=VYSE_TIZEN_API=$api
   "
   made=("$stage"/build/tizen/tpk/*.tpk)
   if [ ! -f "${made[0]}" ]; then

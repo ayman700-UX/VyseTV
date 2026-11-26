@@ -20,6 +20,10 @@ enum VoiceState { off, connecting, on }
 class Voice {
   static final state = ValueNotifier<VoiceState>(VoiceState.off);
   static final micOn = ValueNotifier<bool>(true);
+
+  /// This device gave no microphone when the call started (most TVs have none an app can use):
+  /// you are in the call listening, and nothing is sent.
+  static final noMic = ValueNotifier<bool>(false);
   static final deafened = ValueNotifier<bool>(false);
 
   /// Who's talking right now (user ids).
@@ -62,10 +66,10 @@ class Voice {
   );
 
   /// Whether your mic should be sending right now.
-  static bool get _sending => canTalk && !deafened.value && (pushToTalk.value ? talking.value : micOn.value);
+  static bool get _sending => canTalk && !noMic.value && !deafened.value && (pushToTalk.value ? talking.value : micOn.value);
 
   static Future<void> _applyMic() async {
-    await _room?.localParticipant?.setMicrophoneEnabled(_sending);
+    if (!noMic.value) await _room?.localParticipant?.setMicrophoneEnabled(_sending);
     _refresh();
   }
 
@@ -183,9 +187,16 @@ class Voice {
         });
       // the call's signalling goes to the same server: through the same DNS workaround
       await withResilientHttp(() => room.connect(j['url'] as String, j['token'] as String));
-      // the first publish always sets up the mic (muted straight away for push to talk)
-      await room.localParticipant?.setMicrophoneEnabled(canTalk && !deafened.value, audioCaptureOptions: _capture);
-      if (!_sending) await room.localParticipant?.setMicrophoneEnabled(false);
+      // the first publish always sets up the mic (muted straight away for push to talk). A
+      // device with none (a TV) stays in the call, listening.
+      noMic.value = false;
+      try {
+        await room.localParticipant?.setMicrophoneEnabled(canTalk && !deafened.value, audioCaptureOptions: _capture);
+        if (!_sending) await room.localParticipant?.setMicrophoneEnabled(false);
+      } catch (_) {
+        noMic.value = true;
+        micOn.value = false;
+      }
       state.value = VoiceState.on;
       _refresh();
       unawaited(VoiceBackground.start());
@@ -218,6 +229,7 @@ class Voice {
   }
 
   static Future<void> toggleMic() async {
+    if (noMic.value) return; // (nothing to turn on)
     if (deafened.value) return toggleDeafen(); // talking again also means hearing again
     micOn.value = !micOn.value;
     await _applyMic();
@@ -235,7 +247,7 @@ class Voice {
         if (t != null) await _applyListening(p.identity, t);
       }
     }
-    if (!deafened.value) micOn.value = true;
+    if (!deafened.value && !noMic.value) micOn.value = true;
     await _applyMic();
   }
 

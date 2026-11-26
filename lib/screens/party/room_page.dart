@@ -7,7 +7,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../core/layout.dart';
 import '../../core/platform/apple_tv.dart';
-import '../../core/platform/tizen_tv.dart';
+import '../../core/platform/webos.dart';
 import '../../core/nav.dart' show rootNavigatorKey;
 import '../../core/theme.dart';
 import '../../data/account/account.dart';
@@ -212,8 +212,9 @@ class _RoomPageState extends State<RoomPage> {
   static void _tellOthers() => WidgetsBinding.instance.addPostFrameCallback((_) => RoomPage._openChanged.value++);
 
   Future<void> _joinVoice() async {
-    // (the voice library has no LG webOS side, and no Apple TV one)
-    if (LinuxTv.isTv || AppleTv.isTv) return _toast(context, 'Voice calls are not available on this TV');
+    // (the voice library has no LG webOS side, and no Apple TV one yet; a Samsung TV has
+    // Samsung's, added by tool/tizen/stage.py)
+    if (WebOS.isTv || AppleTv.isTv) return _toast(context, 'Voice calls are not available on this TV');
     try {
       await Voice.join();
     } catch (e) {
@@ -877,7 +878,7 @@ class _VoiceBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([Voice.state, Voice.micOn, Voice.deafened, Voice.pushToTalk, Voice.talking, Voice.pttKey]),
+    listenable: Listenable.merge([Voice.state, Voice.micOn, Voice.noMic, Voice.deafened, Voice.pushToTalk, Voice.talking, Voice.pttKey]),
     builder: (context, _) {
       final state = Voice.state.value;
       final phone = Layout.isPhone(context);
@@ -903,7 +904,9 @@ class _VoiceBar extends StatelessWidget {
               else if (state == VoiceState.connecting)
                 const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2, color: VyseColors.textDim))
               else ...[
-                if (ptt) ...[if (!pttBelow) const HoldToTalk()] else
+                if (Voice.noMic.value)
+                  const SizedBox.shrink()
+                else if (ptt) ...[if (!pttBelow) const HoldToTalk()] else
                   _RoundToggle(
                     icon: Voice.micOn.value ? Icons.mic_rounded : Icons.mic_off_rounded,
                     tooltip: Voice.micOn.value ? 'Mute' : 'Unmute',
@@ -946,6 +949,7 @@ class _VoiceBar extends StatelessWidget {
                       ? 'The owner muted you'
                       : switch (state) {
                           VoiceState.on when Voice.deafened.value => 'Deafened',
+                          VoiceState.on when Voice.noMic.value => 'Listening: no microphone on this device',
                           VoiceState.on when Voice.pushToTalk.value =>
                             Voice.talking.value ? 'Talking' : (phone || hasSoftKeyboard ? 'Hold the talk button' : 'Hold ${keyName(Voice.pttKey.value)} to talk'),
                           VoiceState.on => Voice.micOn.value ? 'Mic on' : 'Mic off',

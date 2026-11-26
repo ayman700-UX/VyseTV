@@ -48,6 +48,10 @@ TIZEN_PLUGINS = {
     "package_info_plus_tizen": "the app's own version",
     "connectivity_plus_tizen": "whether the TV is online",
     "url_launcher_tizen": "opening a link in the TV's browser",
+    # (flutter_webrtc's Tizen side, for a party's voice call: it shares no version constraint
+    # with flutter_webrtc itself, and handles the same calls as flutter_webrtc 1.6.3. A TV with
+    # no microphone listens only: lib/data/party/voice.dart)
+    "flutter_webrtc_tizen": "a party's voice call",
 }
 # Left out on purpose:
 #  flutter_secure_storage_tizen  sign-ins and keys are kept by lib/core/platform/tv_secrets.dart

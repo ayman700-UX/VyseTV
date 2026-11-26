@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/theme.dart';
 import '../../data/updates/updater.dart';
@@ -170,9 +171,30 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 ),
               ],
               const SizedBox(height: 12),
-              Text('${up.how}.', style: const TextStyle(fontSize: 12.5, color: VyseColors.textFaint)),
+              if (Updater.byPhone && up.phoneLink != null) ...[
+                // A TV that can't install it: the code takes a phone to it (see Updater.byPhone)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _PhoneCode(up.phoneLink!),
+                    const SizedBox(width: 16),
+                    Expanded(child: Text('${up.how}.', style: const TextStyle(fontSize: 13, color: VyseColors.textDim, height: 1.45))),
+                  ],
+                ),
+              ] else
+                Text('${up.how}.', style: const TextStyle(fontSize: 12.5, color: VyseColors.textFaint)),
             ];
-            actions = [
+            actions = Updater.byPhone ? [
+              TextButton(
+                key: const ValueKey('skip'),
+                onPressed: () {
+                  up.skip(u.version);
+                  close();
+                },
+                child: const Text('Skip this version'),
+              ),
+              _primary('Done', close),
+            ] : [
               TextButton(
                 key: const ValueKey('skip'),
                 onPressed: () {
@@ -263,4 +285,27 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   /// On a TV the notes show a scrollbar when there is more of them than fits (a remote can't
   /// feel for it); a phone and a desktop are left as they were.
   Widget _scrollbarOnTv(bool tv, Widget notes) => tv ? Scrollbar(controller: _notes, thumbVisibility: true, child: notes) : notes;
+}
+
+/// The QR code a TV shows for an update it can't install itself: a phone opens the release.
+class _PhoneCode extends StatelessWidget {
+  const _PhoneCode(this.url);
+  final String url;
+
+  static const _size = 132.0;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: _size,
+    height: _size,
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+    child: QrImageView(
+      data: url,
+      errorCorrectionLevel: QrErrorCorrectLevel.M,
+      padding: EdgeInsets.zero,
+      backgroundColor: Colors.white,
+      semanticsLabel: 'QR code for the new version',
+    ),
+  );
 }

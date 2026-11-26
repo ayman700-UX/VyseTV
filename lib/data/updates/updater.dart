@@ -154,8 +154,18 @@ class Updater extends ChangeNotifier {
 
   UpdateFile? get _setupFile => _installed ? info?.files[_setupKey] : null;
 
+  /// A TV that cannot put a package in place by itself (LG, Samsung, Apple TV: each is installed
+  /// from a computer or a phone). The update box there shows a QR code to [phoneLink] instead of
+  /// an Update button, and nothing is downloaded on the TV.
+  static bool get byPhone => LinuxTv.isTv || AppleTv.isTv;
+
+  /// What the QR code on such a TV opens: the release page (it says which file is for which TV
+  /// and how to put it on), or this TV's file when the release has no page.
+  String? get phoneLink => newer?.page ?? file?.urls.first;
+
   /// What pressing Update does here, in a few words.
   String get how {
+    if (byPhone) return 'Scan the code with your phone: it opens the new version for this TV and how to put it on';
     if (file == null) return 'Opens the download page';
     if (Platform.isAndroid) return 'Downloads it, then Android asks to install';
     if (Platform.isWindows) return 'Downloads it, then VyseTV restarts';
@@ -176,10 +186,8 @@ class Updater extends ChangeNotifier {
     } catch (_) {}
     _platform = await _platformKey();
     notifyListeners();
-    // An LG or a Samsung TV cannot install a package from inside an app, nor can an Apple TV
-    // (the app is signed and put on it from a computer), so there is nothing to offer there and
-    // nothing is asked.
-    if (LinuxTv.isTv || AppleTv.isTv) return;
+    // (an LG, Samsung or Apple TV is asked too: it cannot put a package in place by itself,
+    // but it can say there is a new one, and show a code that takes a phone to it: [byPhone])
     // quietly, a little after start-up and then a few times a day while VyseTV stays open
     if (AppSettings.updateAuto.value) {
       Timer(const Duration(seconds: 6), () => unawaited(check()));
@@ -201,9 +209,11 @@ class Updater extends ChangeNotifier {
       return 'android-arm64-v8a';
     }
     if (Platform.isWindows) return 'windows-x64';
-    // (an LG TV says it is Linux; a Linux desktop's build is not for it)
-    if (WebOS.isTv) return 'webos';
-    if (TizenTv.isTv) return 'tizen';
+    // (an LG TV says it is Linux; a Linux desktop's build is not for it. The package for older
+    // webOS brings a runtime of its own, in runtime/ beside the program: tool/webos/older.sh)
+    if (WebOS.isTv) return Directory('${File(Platform.resolvedExecutable).parent.path}/runtime').existsSync() ? 'webos-older' : 'webos';
+    // (a Samsung TV: the package for its Tizen version)
+    if (TizenTv.isTv) return 'tizen-${TizenTv.packageApi}';
     // (an Apple TV says it is iOS; an iPhone's build is not for it)
     if (AppleTv.isTv) return 'tvos';
     if (Platform.isLinux) return Abi.current() == Abi.linuxArm64 ? 'linux-arm64' : 'linux-x64';
@@ -313,7 +323,7 @@ class Updater extends ChangeNotifier {
   /// Where there's nothing to fetch for this platform, the download page is opened instead.
   Future<void> update() async {
     final u = newer;
-    if (u == null || busy) return;
+    if (u == null || busy || byPhone) return;
     final f = file;
     final external = f == null || Platform.isIOS || (Platform.isLinux && _appImage == null);
     if (external) {

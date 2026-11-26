@@ -62,16 +62,27 @@ connected (its DUID is filled in), and sign the package again with it:
   seeking, speed, the end of a film, faults, where the picture goes, and the app going to the
   background and back.
 - Nothing has run on a Samsung TV yet. Samsung's player plugin does not run on the TV emulator,
-  so there is no video without a real TV.
+  so there is no video without a real TV. Scraper plugins and torrents are built for the TV and
+  never tried on one: the engine inside a C# app's process is the least certain part.
+
+## The TV's own libraries
+
+Besides Flutter's, each package carries two libraries built for the TV by
+`tool/tizen/native.sh` (32-bit ARM, against Tizen 6.0, so they load on every newer TV too):
+
+- `libquickjs_c_bridge_plugin.so`: the JavaScript engine scraper plugins run in (QuickJS, from
+  the commit the LG build uses), built by the Tizen SDK's own `tizen build-native`.
+- `libtorrserver.so`: the torrent engine, inside the app's process (a Samsung TV starts no
+  program of an app's own). Started through dart:ffi, it answers this TV only (127.0.0.1).
+  Torrents show in the app only when the package has it.
 
 ## Not in the Samsung build
 
-- Downloads (little room on a TV, and its player is never handed a file).
-- Torrents: the engine is a program of its own beside the app, and a Samsung TV runs no program
-  Samsung has not signed.
+- Downloads: on no TV (Android TV, LG and Apple TV neither).
 - Voice calls in a party, and party sounds.
-- JavaScript scraper plugins: their engine's library is not built for Tizen yet.
-- Updates from inside the app: a new package is installed as the first one was.
+- Updates from inside the app: a TV can't put a package in place by itself. When there is a new
+  version, the update box shows a QR code; a phone opens the release page, which says which file
+  is for this TV, and it goes on the TV the way the first one did.
 - Fill (crop to the screen) and zooming in show the picture cropped only when the video fills
   the whole screen; in a smaller box the whole picture shows.
 
@@ -82,6 +93,6 @@ connected (its DUID is filled in), and sign the package again with it:
 3. If it opens: does a video play, with sound; does switching the audio track work; do
    subtitles show (a track inside the video, and one picked from the subtitle list); does the
    picture sit right; does Back, Play/Pause and seeking work; does a sign-in stay after the TV
-   is turned off and on.
+   is turned off and on; does a scraper plugin find links; does a torrent play.
 4. If a video does not play: a photo of the player's report card (Stream info, or Settings >
    Playback > Last playback).

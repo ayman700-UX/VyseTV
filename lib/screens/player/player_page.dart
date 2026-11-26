@@ -5851,14 +5851,17 @@ class _VoiceButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([Voice.state, Voice.micOn, Voice.deafened, Voice.pushToTalk, Voice.talking]),
+    listenable: Listenable.merge([Voice.state, Voice.micOn, Voice.noMic, Voice.deafened, Voice.pushToTalk, Voice.talking]),
     builder: (context, _) {
       if (Voice.state.value != VoiceState.on) return const SizedBox.shrink();
       final deaf = Voice.deafened.value;
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (Voice.pushToTalk.value)
+          // (a device with no microphone listens only: no mic button)
+          if (Voice.noMic.value)
+            const SizedBox.shrink()
+          else if (Voice.pushToTalk.value)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Icon(

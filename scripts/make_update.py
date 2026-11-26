@@ -29,8 +29,11 @@ A release, start to finish:
      in build/update/ to look at first.
 
 Platforms the app knows: android-arm64-v8a, android-armeabi-v7a, android-x86_64, windows-x64,
-windows-x64-setup, linux-x64, linux-arm64, macos, ios. A platform left out keeps working; its
-users are sent to --page (a web page about the release) when you give one.
+windows-x64-setup, linux-x64, linux-arm64, macos, ios, and the TVs: webos (LG, webOS 26),
+webos-older (LG, webOS 4 to 25), tizen-6.0, tizen-6.5, tizen-10.0 (Samsung) and tvos (Apple TV).
+A platform left out keeps working; its users are sent to --page (a web page about the release)
+when you give one. A TV never downloads its file: it shows a QR code to --page (the page should
+say, per TV, which file is for it and how to put it on), or to its file without a page.
 
 Windows has two entries, and a release should list both: windows-x64-setup is the installer
 (VyseTV-Setup.exe), used by copies that were installed with it; windows-x64 is the zip of the
@@ -61,7 +64,10 @@ import os
 import subprocess
 import sys
 
-PLATFORMS = ['android-arm64-v8a', 'android-armeabi-v7a', 'android-x86_64', 'windows-x64', 'windows-x64-setup', 'linux-x64', 'linux-arm64', 'macos', 'ios']
+PLATFORMS = ['android-arm64-v8a', 'android-armeabi-v7a', 'android-x86_64', 'windows-x64', 'windows-x64-setup', 'linux-x64', 'linux-arm64', 'macos', 'ios',
+             # TVs that can't install an update by themselves: their update box shows a QR code
+             # to --page (or to the file when there is no page), see lib/data/updates/updater.dart
+             'webos', 'webos-older', 'tizen-6.0', 'tizen-6.5', 'tizen-10.0', 'tvos']
 KEY = os.path.join(os.path.expanduser('~'), '.vyse', 'update-signing-key.pem')
 SERVER_FILE = os.path.join(os.path.expanduser('~'), '.vyse', 'release-server.json')
 
@@ -74,6 +80,72 @@ def release_server():
         return s['ssh'], os.path.expanduser(s['ssh_key']), s['remote_dir'].rstrip('/'), s['public_url']
     except (OSError, ValueError, KeyError) as e:
         sys.exit(f'--publish needs {SERVER_FILE} (see the top of this file): {e}')
+
+
+# The TVs that cannot install an update by themselves can still be kept up to date by a tool the
+# tester runs once, which then fetches each new version from a list of ours (the research and
+# the sources are in docs/tv-ports/PLAN.md):
+#
+#   * Apple TV: atvloadly (github.com/bitxeno/atvloadly) re-signs and reinstalls sideloaded apps,
+#     and follows an AltStore source, installing new versions by itself. altstore.json is one.
+#   * LG: webOS Homebrew Channel (github.com/webosbrew) installs from repositories; the details
+#     page of an app shows Update when the repository's version is newer. webosbrew.json (the
+#     package for webOS 26) and webosbrew-older.json (webOS 4 to 25) are two such repositories.
+#
+# They are written beside latest.json when the release has files for those TVs, and published
+# with it. Unsigned: each tool checks the file it fetches against the hash given here.
+TVOS_BUNDLE = 'com.vyse.vyseTv'  # tool/tvos/make_project.py
+WEBOS_ID = 'com.vyse.vysetv'  # webos/meta/appinfo.json
+ICON = 'https://updates.vysetv.cc/icon.png'
+
+
+def altstore_source(version, date, notes, f, page):
+    """An AltStore source with the Apple TV build (atvloadly tells a tvOS build by "tvos" in its name)."""
+    return {
+        'name': 'VyseTV for Apple TV',
+        'identifier': 'cc.vysetv.source',
+        'website': page or 'https://vysetv.cc',
+        'apps': [{
+            'name': 'VyseTV tvOS',
+            'bundleIdentifier': TVOS_BUNDLE,
+            'developerName': 'VyseTV',
+            'localizedDescription': 'VyseTV for Apple TV.',
+            'iconURL': ICON,
+            'versions': [{
+                'version': version,
+                'buildVersion': version,
+                'date': date,
+                'localizedDescription': notes or f'VyseTV {version}',
+                'downloadURL': f['urls'][0],
+                'size': f['size'],
+                'minOSVersion': '15.0',
+            }],
+        }],
+    }
+
+
+def webosbrew_repo(version, notes, f, page, older):
+    """A Homebrew Channel repository with one of the two LG packages."""
+    manifest = {
+        'id': WEBOS_ID,
+        'version': version,
+        'type': 'native',
+        'title': 'VyseTV',
+        'appDescription': notes or f'VyseTV {version}',
+        'iconUri': ICON,
+        'sourceUrl': page or 'https://vysetv.cc',
+        'rootRequired': False,
+        'ipkUrl': f['urls'][0],
+        'ipkHash': {'sha256': f['sha256']},
+        'ipkSize': f['size'],
+    }
+    return {'packages': [{
+        'id': WEBOS_ID,
+        'title': 'VyseTV',
+        'iconUri': ICON,
+        'shortDescription': 'VyseTV for webOS 4 to 25' if older else 'VyseTV for webOS 26',
+        'manifest': manifest,
+    }]}
 
 
 def sha256_of(path):
@@ -141,16 +213,31 @@ def main():
     with open(path + '.sig', 'wb') as f:
         f.write(sig + b'\n')
     print(f'Wrote {path} and {path}.sig for version {a.version}')
+    feeds = []
+    for name, made in (
+        ('altstore.json', altstore_source(a.version, manifest['date'], notes, files['tvos'], a.page) if 'tvos' in files else None),
+        ('webosbrew.json', webosbrew_repo(a.version, notes, files['webos'], a.page, older=False) if 'webos' in files else None),
+        ('webosbrew-older.json', webosbrew_repo(a.version, notes, files['webos-older'], a.page, older=True) if 'webos-older' in files else None),
+    ):
+        if made is None:
+            continue
+        feed = os.path.join(a.out, name)
+        with open(feed, 'wb') as f:
+            f.write((json.dumps(made, indent=2, ensure_ascii=False) + '\n').encode('utf-8'))
+        feeds.append(feed)
+        print(f'Wrote {feed} (for the TV tool that follows it)')
     if not files:
         print('No files listed: installed copies will be told about this version only if it is newer than theirs, and sent to --page.')
 
     if a.publish:
         SERVER, SSH_KEY, REMOTE_DIR, PUBLIC_URL = release_server()
         opts = ['-i', SSH_KEY, '-o', 'BatchMode=yes']
+        names = ['latest.json', 'latest.json.sig'] + [os.path.basename(x) for x in feeds]
+        remote = ' '.join(f'{REMOTE_DIR}/{n}' for n in names)
         steps = [
             ['ssh', *opts, SERVER, f'install -d -o vyse -g vyse {REMOTE_DIR}'],
-            ['scp', '-q', *opts, path, path + '.sig', f'{SERVER}:{REMOTE_DIR}/'],
-            ['ssh', *opts, SERVER, f'chown vyse:vyse {REMOTE_DIR}/latest.json {REMOTE_DIR}/latest.json.sig && chmod 644 {REMOTE_DIR}/latest.json {REMOTE_DIR}/latest.json.sig'],
+            ['scp', '-q', *opts, path, path + '.sig', *feeds, f'{SERVER}:{REMOTE_DIR}/'],
+            ['ssh', *opts, SERVER, f'chown vyse:vyse {remote} && chmod 644 {remote}'],
         ]
         for step in steps:
             r = subprocess.run(step, capture_output=True, text=True)

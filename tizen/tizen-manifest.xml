@@ -18,5 +18,7 @@
         <privilege>http://tizen.org/privilege/externalstorage</privilege>
         <!-- opening a link in the TV's browser (url_launcher) -->
         <privilege>http://tizen.org/privilege/appmanager.launch</privilege>
+        <!-- talking in a party's voice call, on a TV with a USB microphone (flutter_webrtc_tizen) -->
+        <privilege>http://tizen.org/privilege/recorder</privilege>
     </privileges>
 </manifest>
