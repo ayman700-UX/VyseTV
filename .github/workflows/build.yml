@@ -520,15 +520,25 @@ jobs:
   #
   # Flutter's tool has no Apple TV target: the app is built by Xcode from tvos/Runner.xcodeproj,
   # on a Flutter engine made for tvOS (tvos/engine.version), and the Dart by that engine's own
-  # compiler (tvos/scripts/xcode_appletv.sh). On an Intel Mac, as the iPhone job: GitHub's
-  # Apple silicon Macs with macOS 26 (macos-26) are so few that a job can wait for one for good.
+  # compiler (tvos/scripts/xcode_appletv.sh). That engine's tools are for Apple silicon only, so
+  # an Intel Mac cannot build it; and GitHub's Apple silicon Macs with macOS 26 (macos-26) are so
+  # few that a job can wait for one for good. So macOS 15 on Apple silicon, with the Xcode 26 it
+  # carries beside its own (the player's Swift needs Xcode 26's SDKs, as on iPhone).
   tvos:
     name: Apple TV (unsigned .ipa, for sideloading)
     needs: plan
     if: ${{ needs.plan.outputs.tvos == 'true' }}
-    runs-on: macos-26-intel
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - name: Use Xcode 26
+        run: |
+          X="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -v -i beta | sort -V | tail -n 1)"
+          [ -n "$X" ] || X="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1)"
+          [ -n "$X" ] || { echo "::error::No Xcode 26 on this runner: $(ls -d /Applications/Xcode*.app | tr '\n' ' ')"; exit 1; }
+          sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
+          echo "this Mac: $(uname -m)"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
