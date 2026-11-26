@@ -25,8 +25,13 @@
 //    inside the video file is switched on in the TV's player.
 //  * No volume of its own: the remote's volume is the TV's.
 //
-// Never run on a TV by the time this was written (2026-11-26): see webos/README.md for
-// what is proven and what is not.
+// Older webOS. LG's Flutter is for webOS 26; the same build is also packaged for older sets
+// (webos/README.md, "Older webOS"). Their media player is the same one with less to it, so the
+// native side says what this TV has ([_tvHas]) and the player goes the older way where it has
+// to: on a set that cannot put a window of its video plane under an app (webOS 4), no window
+// is asked for and the picture is placed by the media library itself.
+//
+// See webos/README.md for what is proven and what is not.
 
 import 'dart:async';
 import 'dart:convert';
@@ -170,13 +175,49 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
     }
   }
 
+  // ── what this TV has ──
+
+  static Future<Map<String, bool>>? _tv;
+
+  /// What the TV's media library and compositor have, by the native side's names for it
+  /// (`exportedWindows`, `displayWindow`, `players`, `muteDisplay`, `initWithWindowId`). Asked
+  /// once. A webOS 26 set has all of it; anything not said counts as there, so a native side
+  /// that does not know the question changes nothing.
+  Future<bool> _tvHas(String what) async {
+    final has = await (_tv ??= () async {
+      try {
+        final said = await invoke<Map<Object?, Object?>>('capabilities');
+        return <String, bool>{
+          for (final e in (said ?? const <Object?, Object?>{}).entries)
+            if (e.key is String && e.value is bool) e.key! as String: e.value! as bool,
+        };
+      } catch (_) {
+        return const <String, bool>{};
+      }
+    }());
+    return has[what] ?? true;
+  }
+
+  /// Tests: the next player asks its TV again.
+  @visibleForTesting
+  static void debugForgetTv() => _tv = null;
+
+  // True once it is known that this TV cannot put a window under the app: the picture is then
+  // placed by the media library ([_placeWindow]).
+  bool _noWindows = false;
+
   /// The id of the window the TV's video plane shows in, made the first time it is needed.
+  /// Null for sound alone, and on a TV that has no such windows.
   Future<String?> _window() {
     if (audioOnly) return Future.value(null);
     final have = _windowId;
     if (have != null) return Future.value(have);
     return _windowFuture ??= () async {
       try {
+        if (!await _tvHas('exportedWindows')) {
+          _noWindows = true;
+          return null;
+        }
         final id = await _windows.invokeMethod<String>('create', <String, Object?>{});
         if (id != null && id.isNotEmpty && id != 'invalid') _windowId = id;
       } catch (e) {
@@ -223,7 +264,8 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
       final address = await _addressFor(media);
       final windowId = await _window();
       if (disposed || id != _sources) return;
-      if (!audioOnly && windowId == null) {
+      // (a TV that has no such windows shows the picture without one: see [_placeWindow])
+      if (!audioOnly && windowId == null && !_noWindows) {
         throw PlatformException(code: 'NO_WINDOW', message: 'The TV gave no window for the picture');
       }
       // (subtitle files handed over with the video: read before it starts, so the first line
@@ -397,6 +439,8 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
   void _onLoaded() {
     _loaded = true;
     handlePlayerEvent('file-loaded', {'sourceId': _sources});
+    // (without a window the media library is told where the picture goes, once it has one)
+    if (_noWindows) unawaited(_placeWindow());
     if (_rate != 1.0) unawaited(_quiet(() => invoke('setRate', {'rate': _rate})));
     _applySubtitleChoice();
     if (_wantPlay) {
@@ -1008,7 +1052,7 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
 
   Future<void> _placeWindow() async {
     final rect = _rect, id = _windowId;
-    if (rect == null || id == null) return;
+    if (rect == null || (id == null && !_noWindows)) return;
     final par = _now.video['pixelAspectRatio'];
     final parW = par is Map ? par['width'] : null, parH = par is Map ? par['height'] : null;
     // Until the TV has said the picture's size there is nothing to cut the plane from.
@@ -1025,7 +1069,28 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
       zoom: _zoom,
     );
     if (p == null) return;
-    await _quiet(() => _windows.invokeMethod<void>('resize', {'windowId': id, 'srcRect': p.src, 'dstRect': p.dst}));
+    if (id != null) {
+      await _quiet(() => _windows.invokeMethod<void>('resize', {'windowId': id, 'srcRect': p.src, 'dstRect': p.dst}));
+      return;
+    }
+    // No window (webOS 4): the media library takes a rectangle on the screen and nothing else.
+    // It cannot be told to show a part of the picture, so the whole picture goes into the
+    // rectangle it would have had uncropped: Fill and zooming in show as Fit there.
+    if (!_loaded || !await _tvHas('displayWindow')) return;
+    final whole = plane(
+      x: rect.x,
+      y: rect.y,
+      w: rect.w,
+      h: rect.h,
+      videoW: _videoW,
+      videoH: _videoH,
+      pixelAspect: parW is num && parH is num && parW > 0 && parH > 0 ? parW / parH : 1,
+      fit: _fit == 2 ? 2 : 0,
+      forcedAspect: _forcedAspect,
+      zoom: _zoom > 1 ? 1 : _zoom,
+    );
+    if (whole == null) return;
+    await _quiet(() => invoke('setDisplayWindow', {'x': whole.dst[0], 'y': whole.dst[1], 'w': whole.dst[2], 'h': whole.dst[3]}));
   }
 
   static Future<T?> _quiet<T>(Future<T?> Function() call) async {

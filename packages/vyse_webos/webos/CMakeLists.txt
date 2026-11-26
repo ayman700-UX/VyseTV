@@ -40,7 +40,22 @@ target_link_libraries(${PLUGIN_NAME} PRIVATE
   ${GLIB_LIBRARIES}
   ${NDLMEDIA_LIBRARIES}
   atomic
+  dl
 )
+
+# The one call that places the picture on a TV without exported windows (webOS 4). Every
+# webOS has it in its library; whether LG's header for webOS 26 still declares it is found out
+# here, and the code that uses it is only compiled when it does (with the header's own
+# declaration: should that not be four numbers, the build stops and says so).
+include(CheckCXXSymbolExists)
+set(CMAKE_REQUIRED_INCLUDES ${NDLMEDIA_INCLUDE_DIRS})
+set(CMAKE_REQUIRED_LIBRARIES ${NDLMEDIA_LIBRARIES})
+check_cxx_symbol_exists(NDL_MediaSetDisplayWindow "NDL/NDL_media.h" VYSE_HAVE_NDL_SET_DISPLAY_WINDOW)
+unset(CMAKE_REQUIRED_INCLUDES)
+unset(CMAKE_REQUIRED_LIBRARIES)
+if(VYSE_HAVE_NDL_SET_DISPLAY_WINDOW)
+  target_compile_definitions(${PLUGIN_NAME} PRIVATE VYSE_HAVE_NDL_SET_DISPLAY_WINDOW)
+endif()
 
 # ── the JavaScript engine scraper plugins run in ──
 #
@@ -89,8 +104,48 @@ set_target_properties(quickjs_c_bridge_plugin PROPERTIES
 find_package(Threads REQUIRED)
 target_link_libraries(quickjs_c_bridge_plugin PRIVATE m Threads::Threads atomic)
 
+# ── stand-ins for older webOS ──
+#
+# LG's engine and embedder are made for webOS 26. The package for older sets (tool/webos/
+# build.sh, "older webOS") runs the same build on a runtime of its own, and these four small
+# libraries give LG's embedder what an older TV's own libraries lack. Each file says what it
+# is for; webos/README.md has the whole of it. In the package for webOS 26 they are files in
+# lib/ that nothing asks for.
+#
+#   vyse_start     the record of how the app started (made part of the program)
+#   vyse_sdevent   the embedder's event loop: the TV's libsystemd, or its own on webOS 4
+#   vyse_wlegl     the window the embedder draws into, whatever the TV's library is called
+#   vyse_fallback  what is looked for last: one Wayland call and the description of exported
+#                  windows, for TVs whose libraries have neither
+add_library(vyse_fallback SHARED "older/vyse_fallback.c")
+# (it uses four names of the TV's Wayland library, which is always loaded before it; it is
+# not linked against that library, so the build needs no Wayland files of its own)
+target_link_options(vyse_fallback PRIVATE "-Wl,--unresolved-symbols=ignore-all")
+
+add_library(vyse_sdevent SHARED "older/vyse_sdevent.c")
+# (it needs vyse_fallback by name alone, with nothing of it used: that is what puts
+# vyse_fallback after every library of the TV when the loader looks a name up)
+target_link_options(vyse_sdevent PRIVATE "-Wl,--no-as-needed")
+target_link_libraries(vyse_sdevent PRIVATE vyse_fallback dl)
+
+add_library(vyse_wlegl SHARED "older/vyse_wlegl.c")
+target_link_libraries(vyse_wlegl PRIVATE dl)
+
+add_library(vyse_start SHARED "older/vyse_start.c")
+
+foreach(standin vyse_fallback vyse_sdevent vyse_wlegl vyse_start)
+  target_compile_options(${standin} PRIVATE -O2 -Wall -Werror)
+  set_target_properties(${standin} PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    C_VISIBILITY_PRESET hidden)
+endforeach()
+
 # What goes into lib/ beside the runner, next to the plugin itself.
 set(vyse_webos_bundled_libraries
   "$<TARGET_FILE:quickjs_c_bridge_plugin>"
+  "$<TARGET_FILE:vyse_fallback>"
+  "$<TARGET_FILE:vyse_sdevent>"
+  "$<TARGET_FILE:vyse_wlegl>"
+  "$<TARGET_FILE:vyse_start>"
   PARENT_SCOPE
 )

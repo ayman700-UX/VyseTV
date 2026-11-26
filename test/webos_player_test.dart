@@ -21,8 +21,13 @@ class _Tv {
   final calls = <String>[]; // "0 load", "windows create", …
   final loads = <Map<Object?, Object?>>[];
   final resizes = <Map<Object?, Object?>>[];
+  final placed = <Map<Object?, Object?>>[]; // where the media library was told to put the picture
   var windows = 0;
   int? position;
+
+  /// What this TV says it has, when asked (null: it does not know the question, as a
+  /// webOS 26 build's native side before the question existed).
+  Map<String, bool>? has;
 
   void install() {
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -43,6 +48,8 @@ class _Tv {
         if (slot[2] != null) return Future.value(_methods.encodeSuccessEnvelope(null)); // listen / cancel
         calls.add('${slot[1]} ${call.method}');
         if (call.method == 'initialize') return Future.value(_methods.encodeSuccessEnvelope(true));
+        if (call.method == 'capabilities') return Future.value(_methods.encodeSuccessEnvelope(has));
+        if (call.method == 'setDisplayWindow') placed.add(args);
         if (call.method == 'load') loads.add(args);
         if (call.method == 'position') return Future.value(_methods.encodeSuccessEnvelope(position));
         return Future.value(_methods.encodeSuccessEnvelope(null));
@@ -110,6 +117,7 @@ void main() {
   setUp(() {
     tv = _Tv()..install();
     WebOS.debugIs = true;
+    PlayerWebos.debugForgetTv();
   });
 
   tearDown(() {
@@ -541,6 +549,45 @@ void main() {
     expect(stats, containsPair('videoFps', 23.976));
     expect(stats, containsPair('audioCodec', 'eac3'));
     expect(stats, containsPair('audioImmersive', 'atmos'));
+  });
+
+  tvTest('an older TV with no window for the picture: none is asked for, and the media library is told where it goes', (t) async {
+    // (webOS 4: no exported windows; its library places the picture itself)
+    tv.has = {'exportedWindows': false, 'displayWindow': true, 'players': true, 'muteDisplay': false, 'initWithWindowId': false};
+    final player = await opened(t);
+    expect(tv.calls.where((c) => c.startsWith('windows')), isEmpty, reason: 'no window is asked of a TV that has none');
+    expect(tv.loads.single['windowId'], '');
+    expect((tv.lastPayload['option']! as Map).containsKey('windowId'), isFalse);
+
+    await player.setVideoRect(left: 0, top: 0, right: 1920, bottom: 1080, devicePixelRatio: 1);
+    expect(tv.placed, isEmpty, reason: 'nothing to place before the video has loaded');
+    await tv.says(t, {'loadCompleted': {}});
+    await tv.says(t, {
+      'videoInfo': {'width': 1920, 'height': 800},
+    });
+    // (the call to the TV is a real one: given real time to be made)
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+    expect(tv.placed.last, {'x': 0, 'y': 140, 'w': 1920, 'h': 800}, reason: 'the whole picture, with its black bars left to the app');
+
+    // the library cannot show a part of the picture: Fill and zooming in show as Fit
+    await t.runAsync(() => player.setBoxFitMode(1));
+    expect(tv.placed.last, {'x': 0, 'y': 140, 'w': 1920, 'h': 800});
+    await t.runAsync(() => player.setVideoZoom(1.5));
+    expect(tv.placed.last, {'x': 0, 'y': 140, 'w': 1920, 'h': 800});
+    // smaller and stretched it can do
+    await t.runAsync(() => player.setVideoZoom(.5));
+    expect(tv.placed.last, {'x': 480, 'y': 340, 'w': 960, 'h': 400});
+    await t.runAsync(() => player.setVideoZoom(1));
+    await t.runAsync(() => player.setBoxFitMode(2));
+    expect(tv.placed.last, {'x': 0, 'y': 0, 'w': 1920, 'h': 1080});
+    expect(tv.resizes, isEmpty);
+  });
+
+  tvTest('a TV that says nothing of what it has is taken to have it all', (t) async {
+    tv.has = null;
+    await opened(t);
+    expect(tv.calls, contains('windows create'));
+    expect(tv.loads.single['windowId'], 'window-1');
   });
 
   tvTest('faults: said in words, and a failed seek is not one', (t) async {

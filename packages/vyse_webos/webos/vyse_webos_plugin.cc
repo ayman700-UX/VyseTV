@@ -19,7 +19,13 @@
 //     says it wants it (_WEBOS_ACCESS_POLICY_KEYS_BACK); otherwise the TV answers Back itself
 //     with its "close the app?" question.
 //
-// Not compiled or run on a TV by the time this was written (2026-11-26): webos/README.md.
+// Older webOS. LG's Flutter SDK is for webOS 26, and this file is built against webOS 26's
+// libraries; the same build is also packaged for older sets (tool/webos/build.sh, "older
+// webOS"). Their media library is the same one with fewer calls, so the calls that came later
+// are asked for before they are used (see "What this TV has" below), and each has an older
+// way: a player started without a window id (the id still goes in what the TV is told with the
+// address), one player instead of several, and on sets that cannot place a window under the
+// app at all (webOS 4) the picture placed by the media library itself.
 
 #include "include/vyse_webos/vyse_webos_plugin.h"
 
@@ -32,6 +38,7 @@
 #include <flutter_webos.h>
 
 #include <NDL/NDL_media.h>
+#include <dlfcn.h>
 #include <glib.h>
 
 #include <cstdint>
@@ -42,6 +49,20 @@
 #include <sstream>
 #include <string>
 #include <utility>
+
+// What this TV has. These calls of LG's media library came with a later webOS than the oldest
+// set this is packaged for (the first webOS that has each, from webOS Brew's firmware data).
+// Declared weak, the app still loads where one is missing, and its address says whether it is
+// there.
+#pragma weak NDL_MediaInitWithWindowId  // webOS 26
+#pragma weak NDL_MediaSetPlayer         // webOS 6
+#pragma weak NDL_MediaMuteDisplay       // webOS 5
+
+#ifdef VYSE_HAVE_NDL_SET_DISPLAY_WINDOW
+// Every webOS has this one. It is how the picture is placed where there are no exported
+// windows (webOS 4); newer sets place the window instead.
+#pragma weak NDL_MediaSetDisplayWindow
+#endif
 
 namespace {
 
@@ -98,6 +119,29 @@ void OnSlot1(char* json) { Enqueue(1, json); }
 void OnSlot2(char* json) { Enqueue(2, json); }
 
 void (*const kOnSlot[kSlots])(char*) = {OnSlot0, OnSlot1, OnSlot2};
+
+bool HasInitWithWindowId() { return &NDL_MediaInitWithWindowId != nullptr; }
+bool HasPlayers() { return &NDL_MediaSetPlayer != nullptr; }
+bool HasMuteDisplay() { return &NDL_MediaMuteDisplay != nullptr; }
+
+bool HasDisplayWindow() {
+#ifdef VYSE_HAVE_NDL_SET_DISPLAY_WINDOW
+  return &NDL_MediaSetDisplayWindow != nullptr;
+#else
+  return false;
+#endif
+}
+
+// Whether the TV can put a window of its video plane under the app ("exported windows",
+// webOS 5 and later): asked of the TV's own library, which has the protocol for it or has not.
+bool HasExportedWindows() {
+  void* lib = dlopen("libwayland-webos-client.so.1", RTLD_LAZY | RTLD_NOLOAD);
+  if (lib == nullptr) lib = dlopen("libwayland-webos-client.so.1", RTLD_LAZY);
+  if (lib == nullptr) return false;
+  const bool has = dlsym(lib, "wl_webos_foreign_interface") != nullptr;
+  dlclose(lib);
+  return has;
+}
 
 // What LG's library says went wrong, whatever type it says it in.
 std::string LastError() {
@@ -213,7 +257,7 @@ class VyseWebosPlugin : public flutter::Plugin {
 
   ~VyseWebosPlugin() override {
     for (int i = 0; i < kSlots; ++i) {
-      if (slots_[i].loaded && NDL_MediaSetPlayer(i) == 0) NDL_MediaUnload();
+      if (slots_[i].loaded && SelectQuietly(i)) NDL_MediaUnload();
       slots_[i].loaded = false;
       slots_[i].sink = nullptr;
     }
@@ -257,10 +301,20 @@ class VyseWebosPlugin : public flutter::Plugin {
     slots_[slot].sink->Success(EncodableValue(event));
   }
 
-  // Selects the slot in LG's library; every call below is for "the selected player".
+  // Selects the slot in LG's library; every call below is for "the selected player". A TV
+  // whose library has one player only (before webOS 6) has slot 0 and nothing else.
+  static bool SelectQuietly(int slot) {
+    if (!HasPlayers()) return slot == 0;
+    return NDL_MediaSetPlayer(slot) == 0;
+  }
+
   static bool Select(int slot, Reply& reply) {
-    if (NDL_MediaSetPlayer(slot) == 0) return true;
-    reply->Error("NO_PLAYER", "The TV gave no player: " + LastError());
+    if (SelectQuietly(slot)) return true;
+    if (!HasPlayers()) {
+      reply->Error("NO_PLAYER", "This TV has one player, and it is the video's");
+    } else {
+      reply->Error("NO_PLAYER", "The TV gave no player: " + LastError());
+    }
     return false;
   }
 
@@ -275,10 +329,27 @@ class VyseWebosPlugin : public flutter::Plugin {
       return;
     }
 
+    // What this TV's media library and compositor have (see the top of the file): the Dart
+    // side picks its way by it.
+    if (method == "capabilities") {
+      EncodableMap has;
+      has[EncodableValue(std::string("initWithWindowId"))] =
+          EncodableValue(HasInitWithWindowId());
+      has[EncodableValue(std::string("players"))] = EncodableValue(HasPlayers());
+      has[EncodableValue(std::string("muteDisplay"))] =
+          EncodableValue(HasMuteDisplay());
+      has[EncodableValue(std::string("displayWindow"))] =
+          EncodableValue(HasDisplayWindow());
+      has[EncodableValue(std::string("exportedWindows"))] =
+          EncodableValue(HasExportedWindows());
+      reply->Success(EncodableValue(has));
+      return;
+    }
+
     if (method == "dispose") {
       const int64_t who = IntArg(args, "instanceId", 0);
       if (who == slot.owner) {
-        if (slot.loaded && NDL_MediaSetPlayer(index) == 0) NDL_MediaUnload();
+        if (slot.loaded && SelectQuietly(index)) NDL_MediaUnload();
         slot.loaded = false;
         slot.owner = 0;
       }
@@ -297,8 +368,9 @@ class VyseWebosPlugin : public flutter::Plugin {
       if (!Select(index, reply)) return;
       if (!slot.started) {
         // With the window's id for a picture (without one LG's library goes looking for an
-        // SDL window, which this app has not); plain for sound alone.
-        const int started = window.empty()
+        // SDL window, which this app has not); plain for sound alone. A webOS older than 26
+        // has only the plain start: there the window's id reaches the TV in the payload alone.
+        const int started = window.empty() || !HasInitWithWindowId()
                                 ? NDL_MediaInit(0)
                                 : NDL_MediaInitWithWindowId(0, window.c_str());
         if (started != 0) {
@@ -324,7 +396,7 @@ class VyseWebosPlugin : public flutter::Plugin {
     }
 
     if (method == "unload") {
-      if (slot.loaded && NDL_MediaSetPlayer(index) == 0) NDL_MediaUnload();
+      if (slot.loaded && SelectQuietly(index)) NDL_MediaUnload();
       slot.loaded = false;
       reply->Success();
       return;
@@ -360,7 +432,19 @@ class VyseWebosPlugin : public flutter::Plugin {
     } else if (method == "setSubtitleSync") {
       failed = NDL_MediaSetSubtitleSync(static_cast<int>(IntArg(args, "ms", 0)));
     } else if (method == "muteDisplay") {
-      failed = NDL_MediaMuteDisplay(FlagArg(args, "mute", false));
+      // (a TV without it shows the picture until the video is unloaded)
+      if (HasMuteDisplay()) failed = NDL_MediaMuteDisplay(FlagArg(args, "mute", false));
+    } else if (method == "setDisplayWindow") {
+      // Where the picture goes, on a TV that cannot place a window under the app (webOS 4):
+      // the media library is told the rectangle itself, in the screen's own pixels.
+#ifdef VYSE_HAVE_NDL_SET_DISPLAY_WINDOW
+      if (HasDisplayWindow()) {
+        failed = NDL_MediaSetDisplayWindow(static_cast<int>(IntArg(args, "x", 0)),
+                                           static_cast<int>(IntArg(args, "y", 0)),
+                                           static_cast<int>(IntArg(args, "w", 0)),
+                                           static_cast<int>(IntArg(args, "h", 0)));
+      }
+#endif
     } else if (method == "position") {
       const long long at = NDL_MediaGetCurrentPosition();
       reply->Success(EncodableValue(static_cast<int64_t>(at)));

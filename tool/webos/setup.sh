@@ -78,7 +78,9 @@ say "1. packages (apt)"
 sudo apt-get update
 sudo apt-get install -y --no-install-recommends \
   curl wget unzip xz-utils cmake make pkg-config file git git-lfs ninja-build clang binutils python3 ca-certificates \
-  libgtk-3-0 libgtk-3-dev liblzma-dev libglu1-mesa
+  libgtk-3-0 libgtk-3-dev liblzma-dev libglu1-mesa patchelf dpkg
+# (to try the older-webOS package's start without a TV; the build goes on without it)
+sudo apt-get install -y --no-install-recommends qemu-user-static >/dev/null 2>&1 || true
 # (the C++ library's headers, by whichever name this Ubuntu has them: LG's recipe names one)
 for p in libstdc++-12-dev libstdc++-10-dev; do
   if sudo apt-get install -y --no-install-recommends "$p" >/dev/null 2>&1; then break; fi
