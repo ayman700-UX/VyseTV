@@ -121,7 +121,7 @@ echo
 echo "Built: $OUT ($(du -h "$OUT" | cut -f1))"
 
 echo "== 4. the package for older webOS"
-bash "$REPO/tool/webos/older.sh" "$IPK_DIR/data" "$REPO/build/webos"
+bash "$REPO/tool/webos/older.sh" "$IPK_DIR/data" "$REPO/build/webos" "$STAGE/build/webos"
 OLDER="$(ls -t "$REPO/build/webos"/*_older-webos.ipk 2>/dev/null | head -n 1 || true)"
 [ -n "$OLDER" ] || { echo "The package for older webOS did not come out." >&2; exit 1; }
 LIST="$(ar p "$OLDER" data.tar.gz | tar -tzvf -)"

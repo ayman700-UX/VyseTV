@@ -77,14 +77,24 @@ other way round. The loader's place is written into the program in full, so this
 from where Developer Mode installs apps and nowhere else.
 
 **Stand-ins for what an older TV's own libraries lack** (`packages/vyse_webos/webos/older`).
-Each is used only on a TV that lacks the real thing:
+Each does something only on a TV that lacks the real thing:
 
 | webOS | Sets from | What stands in |
 |---|---|---|
 | 24, 25 | 2022 to 2025 | Nothing of LG's embedder. The player names its video window in the load request alone, since the call that also names it up front is not there |
-| 22, 23 | 2022, 2023 | That, and one Wayland call (`wl_proxy_marshal_flags`), written with the two older calls it replaced |
-| 5, 6 | 2020, 2021 | Those. On webOS 5 the TV gives an app one player where newer sets give several, so the film and the music take turns at it: the one that starts takes it, the other shows as paused and picks up where it was when Play is pressed |
+| 22, 23 | 2022, 2023 | That, and the call every request to the compositor is sent with (`wl_proxy_marshal_flags`), written with the older calls it replaced |
+| 5, 6 | 2020, 2021 | Those, and the version the app's window interface is asked for (below). On webOS 5 the TV gives an app one player where newer sets give several, so the film and the music take turns at it: the one that starts takes it, the other shows as paused and picks up where it was when Play is pressed |
 | 4 | 2018, 2019 | Those; the event loop LG's embedder runs on (webOS 4 has no `libsystemd`, so the app brings a loop of its own with the same ten functions); the drawing-window library under the name webOS 4 has it; and the picture is placed by the TV's media library itself, since webOS 4 has no exported windows |
+
+*The window interface's version.* LG's embedder asks the compositor for version 2 of
+`wl_webos_shell`, the interface a webOS app gets its window through, whatever the compositor
+says it has. Version 2 is from the middle of 2020 (the history of webOS's own protocol files,
+`webos-wayland-extensions`). A compositor asked for a version it does not have ends the
+connection, so on a 2018 to 2020 set the app would be gone before its first picture. In this
+package a small library sits between the embedder and the TV's Wayland library
+(`older/vyse_wayland.c`): it hears what the compositor offers, and an interface is never asked
+for at a higher version than that. Everything the embedder then uses of the interface is in
+version 1.
 
 On webOS 4 that last point shows: the media library can put the whole picture in a rectangle
 and no more. Fit, Stretch, the fixed shapes and zooming out work. Fill and zooming in show as
@@ -116,11 +126,21 @@ ares-novacom --device <tv> --run "/media/developer/apps/usr/palm/applications/co
 - A start of the program in an emulator as the package is built: its own loader runs, finds the
   whole runtime in `runtime/` and every library of the package, and stops at the first library
   only a TV has.
+- The library between the embedder and the TV's Wayland library, run for real in that
+  emulator each time the package is made, on the packaged runtime, against a stand-in for an
+  older TV's Wayland library and for a newer one's (`older/test`): version 2 asked of a
+  compositor that has 1 goes out as 1, and everything else goes out as it came in.
+- LG's embedder itself, read from its machine code: every interface it binds and at which
+  version, every request it sends, set against webOS's protocol files as they stood in 2018.
+  The window interface's version is the one thing a 2018 compositor would refuse. The kernel
+  side was checked against the configuration of a real 2021 set (the helpers this runtime
+  needs from the kernel are on, and the kernel filters no system calls).
 - The player's own side of it (`test/webos_player_test.dart`: a TV with no exported windows,
   a TV with one player, a TV that does not answer what it has).
 
 **What only a TV can say.** Whether LG's embedder, made for the compositor of webOS 26, gets
-along with an older one. Whether an older set's graphics driver takes LG's engine. Whether the
+along with an older one in what cannot be read from its code. Whether an older set's graphics
+driver takes LG's engine. Whether the
 TV lets a newer C library do all it does inside the app's sandbox. On webOS 4, whether the
 picture lands where it is put. And then everything in "What only a TV can answer" below, which
 holds for both packages. The package is also meant to run on webOS 26; that too is untried.

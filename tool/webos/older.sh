@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Makes the package for older webOS out of the one LG's tool built for webOS 26.
 #
-#     tool/webos/older.sh <the folder LG's tool packed from> <where the new .ipk goes>
+#     tool/webos/older.sh <the folder LG's tool packed from> <where the new .ipk goes> [<LG's build folder>]
 #
 # Called by build.sh; nothing to run by hand. See webos/README.md, "Older webOS".
 #
@@ -24,8 +24,9 @@
 #      piece of the TV's own older runtime beside it. Its name and place stay what they were:
 #      the TV still starts the same file.
 #   3. LG's embedder is pointed at two stand-ins instead of two libraries of the TV that an
-#      older webOS lacks or calls otherwise (packages/vyse_webos/webos/older); and a small
-#      library that keeps a record of the start is made part of the program.
+#      older webOS lacks or calls otherwise (packages/vyse_webos/webos/older); and two small
+#      libraries are made part of the program: one keeps a record of the start, one stands
+#      between the embedder and the TV's Wayland library.
 #
 # The loader's place is written into the program in full, so this package runs from where
 # Developer Mode installs apps and nowhere else.
@@ -34,6 +35,7 @@ set -euo pipefail
 
 PACKED="${1:?the folder the webOS 26 package was made from}"
 OUT_DIR="${2:?where the new .ipk goes}"
+BUILT="${3:-}"
 HOME_DIR="${VYSE_WEBOS_HOME:-$HOME/.cache/vysetv-webos}"
 WORK="$HOME_DIR/older"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -112,7 +114,7 @@ You may replace these files with builds of your own: they are found by name, in 
 NOTICE
 
 echo "   the program: its own loader, its own runtime first"
-ADD=(--add-needed libvyse_start.so)
+ADD=(--add-needed libvyse_start.so --add-needed libvyse_wayland.so)
 for f in "${RUNTIME_FIRST[@]}"; do ADD+=(--add-needed "$f"); done
 # (single quotes: $ORIGIN is the loader's word for "where this program is", not the shell's)
 patchelf --set-interpreter "$INSTALLED/runtime/ld-linux.so.3" \
@@ -130,7 +132,7 @@ echo "     loader:  $(patchelf --print-interpreter "$APP/$MAIN")"
 echo "     looks in: $(patchelf --print-rpath "$APP/$MAIN")"
 echo "     program needs:  $(patchelf --print-needed "$APP/$MAIN" | tr '\n' ' ')"
 echo "     embedder needs: $(patchelf --print-needed "$APP/lib/libflutter_webos_media.so" | tr '\n' ' ')"
-for want in libvyse_start.so libvyse_sdevent.so libvyse_wlegl.so libvyse_fallback.so; do
+for want in libvyse_start.so libvyse_wayland.so libvyse_sdevent.so libvyse_wlegl.so libvyse_fallback.so; do
   [ -f "$APP/lib/$want" ] || { echo "lib/$want is not in the package LG's tool built" >&2; exit 1; }
 done
 
@@ -153,7 +155,7 @@ if command -v qemu-arm-static >/dev/null 2>&1; then
       BAD=1
     fi
   done
-  for f in libvyse_start.so libvyse_sdevent.so libvyse_wlegl.so libvyse_fallback.so libflutter_webos_media.so libflutter_engine.so libvyse_webos_plugin.so; do
+  for f in libvyse_start.so libvyse_wayland.so libvyse_sdevent.so libvyse_wlegl.so libvyse_fallback.so libflutter_webos_media.so libflutter_engine.so libvyse_webos_plugin.so; do
     if ! printf '%s\n' "$FOUND" | grep -F "$f =>" | grep -q "/lib/$f"; then
       echo "   $f of the package is not found" >&2
       BAD=1
@@ -168,11 +170,36 @@ if command -v qemu-arm-static >/dev/null 2>&1; then
     echo "   a stand-in lacks a version name the embedder asks for" >&2
     BAD=1
   fi
+  # (the app's requests must go through vyse_wayland: named before LG's embedder, which is
+  # before the TV's own Wayland library)
+  ORDER="$(printf '%s\n' "$FOUND" | grep -n -E 'libvyse_wayland\.so =>|libflutter_webos_media\.so =>' | cut -d: -f1 | tr '\n' ' ')"
+  set -- $ORDER
+  if [ "$#" -ne 2 ] || [ "$1" -ge "$2" ]; then
+    echo "   libvyse_wayland.so is not ahead of LG's embedder" >&2
+    BAD=1
+  fi
   [ "$BAD" = 0 ] || { echo "The package for older webOS would not start right." >&2; exit 1; }
   # (and for the record, what the program says when run for real here: it stops at the first
   # library only a TV has)
   QEMU_LD_PREFIX="$ROOT" timeout 60 qemu-arm-static "$ROOT$INSTALLED/$MAIN" 2>&1 | head -n 3 | sed "s#$ROOT##" | sed 's/^/     run: /' || true
   rm -rf "$ROOT"
+
+  # The library between the embedder and the TV's Wayland library, tried for real: the test
+  # program of packages/vyse_webos/webos/older/test, with the packaged libvyse_wayland.so, on
+  # the packaged runtime, against a stand-in for an older TV's Wayland library and a newer's.
+  TEST="$([ -n "$BUILT" ] && find "$BUILT" -type f -name vyse_wayland_test 2>/dev/null | head -n 1 || true)"
+  if [ -n "$TEST" ]; then
+    for shape in old new; do
+      echo "   requests to the compositor, tried against a stand-in for the Wayland library of a TV ($shape)"
+      FAKE="$(dirname "$TEST")/fake-$shape"
+      [ -f "$FAKE/libvyse_fake_wayland.so" ] || { echo "no stand-in library in $FAKE" >&2; exit 1; }
+      (cd "$WORK" && timeout 120 qemu-arm-static "$APP/runtime/ld-linux.so.3" --library-path "$APP/runtime:$APP/lib:$FAKE" "$TEST" "$shape") \
+        || { echo "The package for older webOS would not talk to the compositor right." >&2; exit 1; }
+    done
+  elif [ -n "$BUILT" ]; then
+    echo "The test of libvyse_wayland.so was not built (looked under $BUILT)." >&2
+    exit 1
+  fi
 else
   echo "   (no qemu-arm-static here: the start without a TV is skipped)"
 fi

@@ -107,20 +107,25 @@ target_link_libraries(quickjs_c_bridge_plugin PRIVATE m Threads::Threads atomic)
 # ── stand-ins for older webOS ──
 #
 # LG's engine and embedder are made for webOS 26. The package for older sets (tool/webos/
-# build.sh, "older webOS") runs the same build on a runtime of its own, and these four small
+# build.sh, "older webOS") runs the same build on a runtime of its own, and these five small
 # libraries give LG's embedder what an older TV's own libraries lack. Each file says what it
 # is for; webos/README.md has the whole of it. In the package for webOS 26 they are files in
 # lib/ that nothing asks for.
 #
 #   vyse_start     the record of how the app started (made part of the program)
+#   vyse_wayland   how requests reach the compositor, and at which version an interface of
+#                  it is asked for (made part of the program, ahead of the TV's own library)
 #   vyse_sdevent   the embedder's event loop: the TV's libsystemd, or its own on webOS 4
 #   vyse_wlegl     the window the embedder draws into, whatever the TV's library is called
-#   vyse_fallback  what is looked for last: one Wayland call and the description of exported
-#                  windows, for TVs whose libraries have neither
+#   vyse_fallback  what is looked for last: the description of exported windows, for TVs
+#                  whose library has none
 add_library(vyse_fallback SHARED "older/vyse_fallback.c")
-# (it uses four names of the TV's Wayland library, which is always loaded before it; it is
+# (it uses two names of the TV's Wayland library, which is always loaded before it; it is
 # not linked against that library, so the build needs no Wayland files of its own)
 target_link_options(vyse_fallback PRIVATE "-Wl,--unresolved-symbols=ignore-all")
+
+add_library(vyse_wayland SHARED "older/vyse_wayland.c")
+target_link_libraries(vyse_wayland PRIVATE dl Threads::Threads)
 
 add_library(vyse_sdevent SHARED "older/vyse_sdevent.c")
 # (it is the one library that needs vyse_fallback: that is what puts vyse_fallback after
@@ -136,17 +141,38 @@ target_link_libraries(vyse_wlegl PRIVATE dl)
 
 add_library(vyse_start SHARED "older/vyse_start.c")
 
-foreach(standin vyse_fallback vyse_sdevent vyse_wlegl vyse_start)
+foreach(standin vyse_fallback vyse_wayland vyse_sdevent vyse_wlegl vyse_start)
   target_compile_options(${standin} PRIVATE -O2 -Wall -Werror)
   set_target_properties(${standin} PROPERTIES
     POSITION_INDEPENDENT_CODE ON
     C_VISIBILITY_PRESET hidden)
 endforeach()
 
+# vyse_wayland tried without a TV: a stand-in for the TV's Wayland library, in an older TV's
+# shape and in a newer one's, and a program that plays the app and the compositor around it.
+# tool/webos/older.sh runs it in an emulator as the package is made. None of it is packaged.
+foreach(shape old new)
+  add_library(vyse_fake_wayland_${shape} SHARED "older/test/fake_wayland.c")
+  target_compile_options(vyse_fake_wayland_${shape} PRIVATE -O1 -Wall -Werror)
+  set_target_properties(vyse_fake_wayland_${shape} PROPERTIES
+    OUTPUT_NAME vyse_fake_wayland
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/wayland_test/fake-${shape}"
+    POSITION_INDEPENDENT_CODE ON)
+endforeach()
+target_compile_definitions(vyse_fake_wayland_new PRIVATE VYSE_FAKE_NEW)
+add_executable(vyse_wayland_test "older/test/wayland_test.c")
+target_compile_options(vyse_wayland_test PRIVATE -O1 -Wall -Werror)
+# (vyse_wayland first: as in the package, its two functions are the ones the program gets)
+target_link_libraries(vyse_wayland_test PRIVATE vyse_wayland vyse_fake_wayland_old)
+set_target_properties(vyse_wayland_test PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/wayland_test"
+  SKIP_BUILD_RPATH TRUE)
+
 # What goes into lib/ beside the runner, next to the plugin itself.
 set(vyse_webos_bundled_libraries
   "$<TARGET_FILE:quickjs_c_bridge_plugin>"
   "$<TARGET_FILE:vyse_fallback>"
+  "$<TARGET_FILE:vyse_wayland>"
   "$<TARGET_FILE:vyse_sdevent>"
   "$<TARGET_FILE:vyse_wlegl>"
   "$<TARGET_FILE:vyse_start>"
