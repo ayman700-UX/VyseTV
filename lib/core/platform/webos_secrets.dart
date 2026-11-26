@@ -57,8 +57,12 @@ class WebosSecrets extends FlutterSecureStoragePlatform {
   Future<void> _ready() => _decided ??= _decide();
 
   Future<bool> _decide() async {
-    final file = await _file();
-    final hasFile = await _exists(file);
+    var hasFile = false;
+    try {
+      hasFile = await _exists(await _file());
+    } catch (_) {
+      // (no folder to look in: there is no file)
+    }
     if (hasFile) {
       // This TV's store did not work before. The file is used at once (nothing waits on a
       // service that may never answer), and the TV is asked again beside it: an update may
@@ -72,11 +76,7 @@ class WebosSecrets extends FlutterSecureStoragePlatform {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     if (await _tvKeeps()) return _useTv = true;
     _kept = <String, String>{};
-    try {
-      await _oneAtATime(_save);
-    } catch (_) {
-      // (a folder that cannot be written: the values live as long as the app runs)
-    }
+    await _oneAtATime(_save);
     return _useTv = false;
   }
 
@@ -162,12 +162,18 @@ class WebosSecrets extends FlutterSecureStoragePlatform {
   }
 
   Future<void> _save() async {
-    final file = await _file();
-    await file.parent.create(recursive: true);
-    // (written beside it and moved into place: a TV switched off mid-write keeps the old file)
-    final next = File('${file.path}.new');
-    await next.writeAsString(jsonEncode(_kept ?? _none), flush: true);
-    await next.rename(file.path);
+    try {
+      final file = await _file();
+      await file.parent.create(recursive: true);
+      // (written beside it and moved into place: a TV switched off mid-write keeps the old file)
+      final next = File('${file.path}.new');
+      await next.writeAsString(jsonEncode(_kept ?? _none), flush: true);
+      await next.rename(file.path);
+    } catch (e) {
+      // A folder that cannot be written: the values live as long as the app runs, and the
+      // record of the start says why they will be gone after.
+      stderr.writeln('[vyse] sign-ins and keys could not be saved: $e');
+    }
   }
 
   Future<T> _oneAtATime<T>(Future<T> Function() work) {

@@ -162,6 +162,18 @@ void main() {
     expect(jsonDecode(file().readAsStringSync()), {'debrid': 'k'});
   });
 
+  test('no folder to keep a file in: values live while the app runs, and nothing throws', () async {
+    final secrets = WebosSecrets(
+      _TvStore(_Tv.keepsNothing),
+      folder: () async => throw const FileSystemException('no such folder'),
+      wait: const Duration(milliseconds: 150),
+    );
+    await secrets.write(key: 'debrid', value: 'k-123', options: _o);
+    expect(await secrets.read(key: 'debrid', options: _o), 'k-123');
+    await secrets.delete(key: 'debrid', options: _o);
+    expect(await secrets.readAll(options: _o), isEmpty);
+  });
+
   test('put in front of the plugin\'s own store once, however often it is asked', () {
     final before = FlutterSecureStoragePlatform.instance;
     addTearDown(() => FlutterSecureStoragePlatform.instance = before);
