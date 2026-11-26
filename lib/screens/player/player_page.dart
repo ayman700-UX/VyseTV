@@ -15,6 +15,8 @@ import '../../core/nav.dart' show rootNavigatorKey;
 import '../../core/logs/sub_log.dart';
 import '../../core/theme.dart';
 import '../../data/app_settings.dart';
+import '../../data/network/network_modes.dart';
+import '../../data/network/network_route.dart' show isLocalHost;
 import '../../data/playback/audio_focus.dart';
 import '../../data/anime/anilist.dart' show Anime, AniList;
 import '../../data/sources/addons.dart';
@@ -1188,7 +1190,10 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   /// [_prepOpen]), and puts it on.
   Future<void> _open(pz.Media m, {bool play = true}) async {
     _lastOpened = m;
-    if (!_media3) return _player.open(m, play: play);
+    if (!_media3) {
+      await _viaGateway(m.uri);
+      return _player.open(m, play: play);
+    }
     final path = _subPath;
     await _player.open(m, play: play, externalSubtitles: path == null ? null : [_subFile(path)]);
     // a file picked while this open was on its way reached the player before the video did,
@@ -1197,6 +1202,16 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     if (now != null && now != path && mounted) {
       await _player.addSubtitleFile(Uri.file(now).toString(), title: _activeSubTrack?.language, language: _activeSubTrack?.lang);
     }
+  }
+
+  /// A network mode (WARP, Anti-DPI, Secure DNS) is on: mpv's own network layer goes through the local gateway too, except for
+  /// this device and its local network (a torrent is played from a local address).
+  Future<void> _viaGateway(String uri) async {
+    final gateway = NetworkModes.instance.gatewayPort;
+    final host = Uri.tryParse(uri)?.host ?? '';
+    try {
+      await _player.setProperty('stream-lavf-o', gateway == null || host.isEmpty || isLocalHost(host) ? '' : 'http_proxy=http://127.0.0.1:$gateway');
+    } catch (_) {}
   }
 
   /// A subtitle file of ours, the way Media3 is handed one.
@@ -1692,8 +1707,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
         room.now > 5) {
       _resumeOverride = Duration(milliseconds: (room.now * 1000).round());
     }
-    _resumeAt = _resumeOverride ??
-        (saved != null && saved.season == ep?.season && saved.episode == ep?.number && saved.fraction < WatchProgress.finishedAt ? saved.position : null);
+    _resumeAt = _resumeOverride ?? (saved == null ? null : WatchProgress.resumeAt(saved, season: ep?.season, episode: ep?.number));
     _resumeOverride = null;
     // carrying on with this film or episode: the subtitle and timing you had beat Settings
     final sameEp = saved != null && saved.season == ep?.season && saved.episode == ep?.number;
@@ -4374,6 +4388,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       subtitle: _subMemo,
       subDelay: _subMemo == null ? 0 : _subOffset,
       server: _films ? _playingLink?.partyKey : null,
+      pick: _pick == null || _follower ? null : {'a': _pick!.stream.addon.manifestUrl, 'b': _pick!.stream.bingeGroup, 'q': _pick!.stream.quality, 'c': _pick!.stream.cached},
     );
     _savedAt = DateTime.now();
     // an anime episode (or film) watched to VyseTV's "finished" point: AniList
