@@ -1,0 +1,549 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 54;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		00CD66AD259BD5002B917F8A /* PathMonitorConnectivityProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2022E7199E4DE3036A745862 /* PathMonitorConnectivityProvider.swift */; };
+		09E645BC14B4DD18548BBD21 /* TorrserverFlutterPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACEA41BC252E699F308E0A6A /* TorrserverFlutterPlugin.swift */; };
+		2141D8C03547CF695BBA7EC7 /* DeviceInfoPlusPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1DA0771F71F611C96BA0C38 /* DeviceInfoPlusPlugin.swift */; };
+		2284D3C023774EAFCBDE1511 /* messages.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = E09901CF067912FD69FE661B /* messages.g.swift */; };
+		28F54DC97840F7E5993E4EF1 /* MpvPlayerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2D3A748E447E708BCE15C2 /* MpvPlayerPlugin.swift */; };
+		374F1F142F1509A247B51167 /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = FD59BD086A0E738D0BDBFB87 /* MPVKit */; };
+		3CAA1B8F11A6A8178B0EEFB8 /* PathProviderPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 988DEDEDE40B93F3EA6CCDFA /* PathProviderPlugin.swift */; };
+		4B806482BBC9DAF1921908E5 /* ConnectivityProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA9B77A1E9923937F97CB30D /* ConnectivityProvider.swift */; };
+		78C7F5430DCA7A7477F38208 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BDC1EDA2DAC83C45EEE2421E /* Assets.xcassets */; };
+		7B1546251FE2C95668AF76B2 /* KeychainPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D36A9B385C7EE2E4E2B7B8FC /* KeychainPlugin.swift */; };
+		7DD19C75648D0456E53C00E8 /* MpvPipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99633CB4C746B610857D1F74 /* MpvPipController.swift */; };
+		8C4C31D7619BF21EF86237F3 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = C171E0A94E489518B61528B7 /* Main.storyboard */; };
+		92A7CDE18727E8F4FAFCD088 /* MpvAudioPlayerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D57AD67562DCD88188DBC5E0 /* MpvAudioPlayerPlugin.swift */; };
+		94EDFF24D9E6E47D480D0BB0 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 8D118EAE0B8B33AC37991945 /* LaunchScreen.storyboard */; };
+		9E93B309DD0D7781B77A1689 /* ConnectivityPlusPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 310D9EEB7F6313D223C814EE /* ConnectivityPlusPlugin.swift */; };
+		A87F737659A1E8205588986A /* MpvPlayerCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 668B21287ABD71A0A99483C0 /* MpvPlayerCore.swift */; };
+		B9EC66334E3DDF785319A5BE /* AppleTvPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 884C91616F3A3A4A60AB04A5 /* AppleTvPlugin.swift */; };
+		C94EA84881F8210A1D969695 /* MpvPlayerCoreBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B7ACC08A357D594FF8DD039 /* MpvPlayerCoreBase.swift */; };
+		CB64B7B2214000AAA31483CB /* MpvAudioPlayerCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5AFAB45798DD99FCFB1B41E /* MpvAudioPlayerCore.swift */; };
+		D377AF4BFB29FA12B7303C0E /* MpvPlayerPluginShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C6A073E5E4179221F40B27F /* MpvPlayerPluginShared.swift */; };
+		E9F799B89C2B4926FE100F16 /* PackageInfoPlusPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63A9C7A299C8591E837F1F55 /* PackageInfoPlusPlugin.swift */; };
+		EBBFE21E8103E66F4CD7AD23 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF6543C58AFDF095146036D7 /* AppDelegate.swift */; };
+		F64E0CB285C71A72B5C45EBA /* SharedPreferencesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21CA9C2FCA12ECC6D1F0541D /* SharedPreferencesPlugin.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0B7ACC08A357D594FF8DD039 /* MpvPlayerCoreBase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvPlayerCoreBase.swift; path = ../ios/Runner/MpvPlayer/MpvPlayerCoreBase.swift; sourceTree = SOURCE_ROOT; };
+		2022E7199E4DE3036A745862 /* PathMonitorConnectivityProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PathMonitorConnectivityProvider.swift; path = Runner/Plugins/connectivity_plus/PathMonitorConnectivityProvider.swift; sourceTree = SOURCE_ROOT; };
+		21CA9C2FCA12ECC6D1F0541D /* SharedPreferencesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharedPreferencesPlugin.swift; path = Runner/Plugins/shared_preferences_foundation/SharedPreferencesPlugin.swift; sourceTree = SOURCE_ROOT; };
+		310D9EEB7F6313D223C814EE /* ConnectivityPlusPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConnectivityPlusPlugin.swift; path = Runner/Plugins/connectivity_plus/ConnectivityPlusPlugin.swift; sourceTree = SOURCE_ROOT; };
+		4269D64D8308759DFC7BC916 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = SOURCE_ROOT; };
+		63A9C7A299C8591E837F1F55 /* PackageInfoPlusPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PackageInfoPlusPlugin.swift; path = Runner/Plugins/package_info_plus/PackageInfoPlusPlugin.swift; sourceTree = SOURCE_ROOT; };
+		668B21287ABD71A0A99483C0 /* MpvPlayerCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvPlayerCore.swift; path = ../ios/Runner/MpvPlayer/MpvPlayerCore.swift; sourceTree = SOURCE_ROOT; };
+		6C6A073E5E4179221F40B27F /* MpvPlayerPluginShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvPlayerPluginShared.swift; path = ../ios/Runner/MpvPlayer/MpvPlayerPluginShared.swift; sourceTree = SOURCE_ROOT; };
+		8557AF3CDE8D4176F2F3D115 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = Runner/Info.plist; sourceTree = SOURCE_ROOT; };
+		87AA67157C2CB763F4AAB1CA /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		884C91616F3A3A4A60AB04A5 /* AppleTvPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppleTvPlugin.swift; path = Runner/AppleTvPlugin.swift; sourceTree = SOURCE_ROOT; };
+		8D118EAE0B8B33AC37991945 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = Runner/Base.lproj/LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
+		988DEDEDE40B93F3EA6CCDFA /* PathProviderPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PathProviderPlugin.swift; path = Runner/Plugins/path_provider/PathProviderPlugin.swift; sourceTree = SOURCE_ROOT; };
+		99633CB4C746B610857D1F74 /* MpvPipController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvPipController.swift; path = ../ios/Runner/MpvPlayer/MpvPipController.swift; sourceTree = SOURCE_ROOT; };
+		A5AFAB45798DD99FCFB1B41E /* MpvAudioPlayerCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvAudioPlayerCore.swift; path = ../ios/Runner/MpvPlayer/MpvAudioPlayerCore.swift; sourceTree = SOURCE_ROOT; };
+		ACEA41BC252E699F308E0A6A /* TorrserverFlutterPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TorrserverFlutterPlugin.swift; path = ../packages/torrserver_flutter/ios/Classes/TorrserverFlutterPlugin.swift; sourceTree = SOURCE_ROOT; };
+		AF2D3A748E447E708BCE15C2 /* MpvPlayerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvPlayerPlugin.swift; path = ../ios/Runner/MpvPlayer/MpvPlayerPlugin.swift; sourceTree = SOURCE_ROOT; };
+		AF6543C58AFDF095146036D7 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Runner/AppDelegate.swift; sourceTree = SOURCE_ROOT; };
+		BDC1EDA2DAC83C45EEE2421E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = Runner/Assets.xcassets; sourceTree = SOURCE_ROOT; };
+		C171E0A94E489518B61528B7 /* Main.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Main.storyboard; path = Runner/Base.lproj/Main.storyboard; sourceTree = SOURCE_ROOT; };
+		C1DA0771F71F611C96BA0C38 /* DeviceInfoPlusPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DeviceInfoPlusPlugin.swift; path = Runner/Plugins/device_info_plus/DeviceInfoPlusPlugin.swift; sourceTree = SOURCE_ROOT; };
+		C81E23E0033061DB05D2B452 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = SOURCE_ROOT; };
+		D36A9B385C7EE2E4E2B7B8FC /* KeychainPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KeychainPlugin.swift; path = Runner/Plugins/flutter_secure_storage/KeychainPlugin.swift; sourceTree = SOURCE_ROOT; };
+		D57AD67562DCD88188DBC5E0 /* MpvAudioPlayerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvAudioPlayerPlugin.swift; path = ../ios/Runner/MpvPlayer/MpvAudioPlayerPlugin.swift; sourceTree = SOURCE_ROOT; };
+		D5E355512A0454C385CC9A7E /* Generated.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = SOURCE_ROOT; };
+		E09901CF067912FD69FE661B /* messages.g.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = messages.g.swift; path = Runner/Plugins/shared_preferences_foundation/messages.g.swift; sourceTree = SOURCE_ROOT; };
+		EA9B77A1E9923937F97CB30D /* ConnectivityProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConnectivityProvider.swift; path = Runner/Plugins/connectivity_plus/ConnectivityProvider.swift; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		F845A3CC75B2C88E09C8099E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				374F1F142F1509A247B51167 /* MPVKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2AC8BA37DAC32D5437812408 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				87AA67157C2CB763F4AAB1CA /* Runner.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		30A539F433154D468C4FB712 /* Plugins */ = {
+			isa = PBXGroup;
+			children = (
+				4804126749A8FAF54B4F120D /* connectivity_plus */,
+				7A03E881807FC7EA2073A0C2 /* device_info_plus */,
+				94DD2367B4655CAD52692160 /* flutter_secure_storage */,
+				9C0E6F8C84A57C25B9443140 /* package_info_plus */,
+				E6505DE2359C0AA95688B6E3 /* path_provider */,
+				6208B0289308DEC5533CA12A /* shared_preferences_foundation */,
+			);
+			name = Plugins;
+			sourceTree = "<group>";
+		};
+		45282832C54C334B384A66AC /* Flutter */ = {
+			isa = PBXGroup;
+			children = (
+				C81E23E0033061DB05D2B452 /* Debug.xcconfig */,
+				4269D64D8308759DFC7BC916 /* Release.xcconfig */,
+				D5E355512A0454C385CC9A7E /* Generated.xcconfig */,
+			);
+			name = Flutter;
+			sourceTree = "<group>";
+		};
+		4804126749A8FAF54B4F120D /* connectivity_plus */ = {
+			isa = PBXGroup;
+			children = (
+				310D9EEB7F6313D223C814EE /* ConnectivityPlusPlugin.swift */,
+				EA9B77A1E9923937F97CB30D /* ConnectivityProvider.swift */,
+				2022E7199E4DE3036A745862 /* PathMonitorConnectivityProvider.swift */,
+			);
+			name = connectivity_plus;
+			sourceTree = "<group>";
+		};
+		4EAE695AD1F489F78EA3E1C6 = {
+			isa = PBXGroup;
+			children = (
+				45282832C54C334B384A66AC /* Flutter */,
+				AA998C3DFC7BC7BC16B1412D /* Runner */,
+				9D10A42589C8F5479091BEBD /* Shared with iPhone */,
+				2AC8BA37DAC32D5437812408 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		6208B0289308DEC5533CA12A /* shared_preferences_foundation */ = {
+			isa = PBXGroup;
+			children = (
+				21CA9C2FCA12ECC6D1F0541D /* SharedPreferencesPlugin.swift */,
+				E09901CF067912FD69FE661B /* messages.g.swift */,
+			);
+			name = shared_preferences_foundation;
+			sourceTree = "<group>";
+		};
+		7A03E881807FC7EA2073A0C2 /* device_info_plus */ = {
+			isa = PBXGroup;
+			children = (
+				C1DA0771F71F611C96BA0C38 /* DeviceInfoPlusPlugin.swift */,
+			);
+			name = device_info_plus;
+			sourceTree = "<group>";
+		};
+		94DD2367B4655CAD52692160 /* flutter_secure_storage */ = {
+			isa = PBXGroup;
+			children = (
+				D36A9B385C7EE2E4E2B7B8FC /* KeychainPlugin.swift */,
+			);
+			name = flutter_secure_storage;
+			sourceTree = "<group>";
+		};
+		9C0E6F8C84A57C25B9443140 /* package_info_plus */ = {
+			isa = PBXGroup;
+			children = (
+				63A9C7A299C8591E837F1F55 /* PackageInfoPlusPlugin.swift */,
+			);
+			name = package_info_plus;
+			sourceTree = "<group>";
+		};
+		9D10A42589C8F5479091BEBD /* Shared with iPhone */ = {
+			isa = PBXGroup;
+			children = (
+				A5AFAB45798DD99FCFB1B41E /* MpvAudioPlayerCore.swift */,
+				D57AD67562DCD88188DBC5E0 /* MpvAudioPlayerPlugin.swift */,
+				99633CB4C746B610857D1F74 /* MpvPipController.swift */,
+				668B21287ABD71A0A99483C0 /* MpvPlayerCore.swift */,
+				0B7ACC08A357D594FF8DD039 /* MpvPlayerCoreBase.swift */,
+				AF2D3A748E447E708BCE15C2 /* MpvPlayerPlugin.swift */,
+				6C6A073E5E4179221F40B27F /* MpvPlayerPluginShared.swift */,
+				ACEA41BC252E699F308E0A6A /* TorrserverFlutterPlugin.swift */,
+			);
+			name = "Shared with iPhone";
+			sourceTree = "<group>";
+		};
+		AA998C3DFC7BC7BC16B1412D /* Runner */ = {
+			isa = PBXGroup;
+			children = (
+				AF6543C58AFDF095146036D7 /* AppDelegate.swift */,
+				884C91616F3A3A4A60AB04A5 /* AppleTvPlugin.swift */,
+				BDC1EDA2DAC83C45EEE2421E /* Assets.xcassets */,
+				8D118EAE0B8B33AC37991945 /* LaunchScreen.storyboard */,
+				C171E0A94E489518B61528B7 /* Main.storyboard */,
+				8557AF3CDE8D4176F2F3D115 /* Info.plist */,
+				30A539F433154D468C4FB712 /* Plugins */,
+			);
+			name = Runner;
+			sourceTree = "<group>";
+		};
+		E6505DE2359C0AA95688B6E3 /* path_provider */ = {
+			isa = PBXGroup;
+			children = (
+				988DEDEDE40B93F3EA6CCDFA /* PathProviderPlugin.swift */,
+			);
+			name = path_provider;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		96A4E8D9A9BBE3E3056C5AF0 /* Runner */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 873CD41BB52F525EF2C8B4BA /* Build configuration list for PBXNativeTarget "Runner" */;
+			buildPhases = (
+				E2F23EFDD94EA7017FC3A0E7 /* Run Script */,
+				6C521AF8D6B34123C882A873 /* Sources */,
+				F845A3CC75B2C88E09C8099E /* Frameworks */,
+				987A4C32CF05F65AC894E5F6 /* Resources */,
+				35DDA4A8361323CBD63E65DA /* Thin Binary */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Runner;
+			packageProductDependencies = (
+				FD59BD086A0E738D0BDBFB87 /* MPVKit */,
+			);
+			productName = Runner;
+			productReference = 87AA67157C2CB763F4AAB1CA /* Runner.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		46F86FAA6BBF9AC94A7E4595 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1600;
+				ORGANIZATIONNAME = "";
+				TargetAttributes = {
+					96A4E8D9A9BBE3E3056C5AF0 = {
+						CreatedOnToolsVersion = 7.3.1;
+						LastSwiftMigration = 1100;
+					};
+				};
+			};
+			buildConfigurationList = AB4EFD76C6EDCAA0365666C6 /* Build configuration list for PBXProject "Runner" */;
+			compatibilityVersion = "Xcode 9.3";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 4EAE695AD1F489F78EA3E1C6;
+			packageReferences = (
+				A9F79AE4B4D982D529FADA83 /* XCRemoteSwiftPackageReference "mpv-build" */,
+			);
+			productRefGroup = 2AC8BA37DAC32D5437812408 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				96A4E8D9A9BBE3E3056C5AF0 /* Runner */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		987A4C32CF05F65AC894E5F6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				78C7F5430DCA7A7477F38208 /* Assets.xcassets in Resources */,
+				94EDFF24D9E6E47D480D0BB0 /* LaunchScreen.storyboard in Resources */,
+				8C4C31D7619BF21EF86237F3 /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		35DDA4A8361323CBD63E65DA /* Thin Binary */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Thin Binary";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/bash \"$SOURCE_ROOT/scripts/xcode_appletv.sh\" sync_version\n";
+		};
+		E2F23EFDD94EA7017FC3A0E7 /* Run Script */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Run Script";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/bash \"$SOURCE_ROOT/scripts/xcode_appletv.sh\" build\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6C521AF8D6B34123C882A873 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EBBFE21E8103E66F4CD7AD23 /* AppDelegate.swift in Sources */,
+				B9EC66334E3DDF785319A5BE /* AppleTvPlugin.swift in Sources */,
+				9E93B309DD0D7781B77A1689 /* ConnectivityPlusPlugin.swift in Sources */,
+				4B806482BBC9DAF1921908E5 /* ConnectivityProvider.swift in Sources */,
+				00CD66AD259BD5002B917F8A /* PathMonitorConnectivityProvider.swift in Sources */,
+				2141D8C03547CF695BBA7EC7 /* DeviceInfoPlusPlugin.swift in Sources */,
+				7B1546251FE2C95668AF76B2 /* KeychainPlugin.swift in Sources */,
+				E9F799B89C2B4926FE100F16 /* PackageInfoPlusPlugin.swift in Sources */,
+				3CAA1B8F11A6A8178B0EEFB8 /* PathProviderPlugin.swift in Sources */,
+				F64E0CB285C71A72B5C45EBA /* SharedPreferencesPlugin.swift in Sources */,
+				2284D3C023774EAFCBDE1511 /* messages.g.swift in Sources */,
+				CB64B7B2214000AAA31483CB /* MpvAudioPlayerCore.swift in Sources */,
+				92A7CDE18727E8F4FAFCD088 /* MpvAudioPlayerPlugin.swift in Sources */,
+				7DD19C75648D0456E53C00E8 /* MpvPipController.swift in Sources */,
+				A87F737659A1E8205588986A /* MpvPlayerCore.swift in Sources */,
+				C94EA84881F8210A1D969695 /* MpvPlayerCoreBase.swift in Sources */,
+				28F54DC97840F7E5993E4EF1 /* MpvPlayerPlugin.swift in Sources */,
+				D377AF4BFB29FA12B7303C0E /* MpvPlayerPluginShared.swift in Sources */,
+				09E645BC14B4DD18548BBD21 /* TorrserverFlutterPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		13E959DF82A0CC553AC57DD5 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4269D64D8308759DFC7BC916 /* Release.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_BITCODE = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Flutter",
+				);
+				INFOPLIST_FILE = Runner/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Flutter",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vyse.vyseTv;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 15.0;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Profile;
+		};
+		2C8FCBEA1B9304CD586AD73E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				SDKROOT = appletvos;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 15.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		30F09F441336FCC9E01D1FAA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C81E23E0033061DB05D2B452 /* Debug.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_BITCODE = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Flutter",
+				);
+				INFOPLIST_FILE = Runner/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Flutter",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vyse.vyseTv;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 15.0;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
+		4FE8AB8E06A8B8FAC88059A9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4269D64D8308759DFC7BC916 /* Release.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_BITCODE = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Flutter",
+				);
+				INFOPLIST_FILE = Runner/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Flutter",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vyse.vyseTv;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 15.0;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		B22B8C33E12681397AC5CBA1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = appletvos;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 15.0;
+			};
+			name = Debug;
+		};
+		F277A27E6884D49DF5520E56 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				SDKROOT = appletvos;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 15.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Profile;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		873CD41BB52F525EF2C8B4BA /* Build configuration list for PBXNativeTarget "Runner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				30F09F441336FCC9E01D1FAA /* Debug */,
+				4FE8AB8E06A8B8FAC88059A9 /* Release */,
+				13E959DF82A0CC553AC57DD5 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AB4EFD76C6EDCAA0365666C6 /* Build configuration list for PBXProject "Runner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B22B8C33E12681397AC5CBA1 /* Debug */,
+				2C8FCBEA1B9304CD586AD73E /* Release */,
+				F277A27E6884D49DF5520E56 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A9F79AE4B4D982D529FADA83 /* XCRemoteSwiftPackageReference "mpv-build" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/edde746/mpv-build";
+			requirement = {
+				kind = revision;
+				revision = 6dbda06021b128b7adc30161bf7870977e575135;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		FD59BD086A0E738D0BDBFB87 /* MPVKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A9F79AE4B4D982D529FADA83 /* XCRemoteSwiftPackageReference "mpv-build" */;
+			productName = MPVKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+
+	};
+	rootObject = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
+}

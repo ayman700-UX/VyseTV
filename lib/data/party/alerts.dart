@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../core/platform/apple_tv.dart';
 import '../../core/platform/webos.dart';
 import '../account/account.dart';
 import '../app_settings.dart';
@@ -85,8 +86,9 @@ class PartyAlerts {
   static Future<void> play(PartySound s) async {
     if (!AppSettings.partySounds.value) return;
     // An LG TV has one media player with a few slots, and the film and the music have them:
-    // a tone over a film would take one. No tones there.
-    if (WebOS.isTv) return;
+    // a tone over a film would take one. No tones there. (Nor on an Apple TV: audioplayers has
+    // no tvOS side.)
+    if (WebOS.isTv || AppleTv.isTv) return;
     try {
       // Short bundled tones: audioplayers, so they never take one of the mpv cores
       // the video and music players use.
@@ -183,7 +185,8 @@ class PartyAlerts {
   }
 
   static Future<void> _initNotifications() async {
-    if (WebOS.isTv) return; // (a TV app can put up no notification: the in-app pop-up is all there is)
+    // (a TV app can put up no notification: the in-app pop-up is all there is)
+    if (WebOS.isTv || AppleTv.isTv) return;
     try {
       await _notes.initialize(
         settings: const InitializationSettings(

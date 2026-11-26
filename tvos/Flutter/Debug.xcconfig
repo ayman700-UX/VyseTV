@@ -1,0 +1,7 @@
+#include "Generated.xcconfig"
+
+// AVKit owns UIWindow.avDisplayManager (the player's frame-rate and dynamic-range matching);
+// Swift's autolinking does not always ask for it, so it is linked here (as upstream does).
+OTHER_LDFLAGS = $(inherited) -framework AVKit
+// The engine's simulator Flutter.framework is arm64 only.
+EXCLUDED_ARCHS[sdk=appletvsimulator*] = x86_64

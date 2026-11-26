@@ -39,10 +39,11 @@ import 'core/logs/perf.dart';
 import 'core/theme.dart';
 import 'dpad/dpad_root.dart';
 import 'dpad/input_mode_tracker.dart';
+import 'core/platform/apple_tv.dart';
 import 'core/platform/device_performance.dart';
 import 'core/platform/platform_detector.dart' show PlatformDetector, TvDetectionService;
 import 'core/platform/webos.dart';
-import 'core/platform/webos_secrets.dart';
+import 'core/platform/tv_secrets.dart';
 import 'core/platform/webos_window.dart';
 import 'screens/home/up_next.dart' show UpNext;
 import 'screens/shell/intro_screen.dart';
@@ -55,10 +56,13 @@ void _hideSystemBars() => SystemChrome.setEnabledSystemUIMode(SystemUiMode.immer
 Future<void> main() async {
   VyseBinding.ensureInitialized(); // (Flutter's own, with reduce-motion in the app's hands: core/lean.dart)
   // An LG TV older than webOS 24 has no key service for sign-ins and keys: see the class.
-  if (WebOS.isTv) WebosSecrets.install();
+  if (WebOS.isTv) TvSecrets.install();
+  // Apple TV: the plugins Flutter's tool does not register there, and the rest of what an
+  // Apple TV needs first (core/platform/apple_tv.dart)
+  AppleTv.install();
   // Android TV and Google TV: known before anything is drawn, so the app opens in D-pad mode
-  // there, with the ring on its first control (an LG TV likewise)
-  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || WebOS.isTv)) {
+  // there, with the ring on its first control (an LG TV and an Apple TV likewise)
+  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || WebOS.isTv || AppleTv.isTv)) {
     try {
       await TvDetectionService.getInstance();
     } catch (_) {}
@@ -69,7 +73,8 @@ Future<void> main() async {
       await DevicePerformance.getInstance();
     } catch (_) {}
   }
-  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS)) {
+  // (an Apple TV says it is iOS, and has no system bars)
+  if (!kIsWeb && !AppleTv.isTv && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS)) {
     _hideSystemBars();
     SystemChrome.setSystemUIChangeCallback((barsShowing) async {
       if (barsShowing) Future.delayed(const Duration(seconds: 3), _hideSystemBars);

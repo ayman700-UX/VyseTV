@@ -5,30 +5,35 @@ import 'dart:io';
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Where the app keeps its sign-ins and keys on an LG TV.
+/// Where the app keeps its sign-ins and keys on a TV whose keychain may not answer.
 ///
-/// On every platform they go to the system's own keychain, through flutter_secure_storage. LG's
-/// webOS side of that plugin seals each value with the TV's key service (keymanager3), and LG's
-/// own reference says apps have that service from webOS TV 24. On an older set nothing
-/// answers, and LG's plugin then keeps nothing and reads nothing back, without a word: a debrid
-/// key or a sign-in would be gone the moment it was saved.
+/// On every platform they go to the system's own keychain, through flutter_secure_storage. On a
+/// TV that store is not always there:
 ///
-/// So on a TV this sits in front of LG's store. The first time anything is asked, LG's store is
+///  * LG webOS: LG's side of the plugin seals each value with the TV's key service
+///    (keymanager3), and LG's own reference says apps have that service from webOS TV 24. On an
+///    older set nothing answers, and LG's plugin then keeps nothing and reads nothing back,
+///    without a word: a debrid key or a sign-in would be gone the moment it was saved.
+///  * Apple TV: the Keychain is there, but the plugin's own Apple code is not built for tvOS;
+///    the app brings a small one of its own (tvos/Runner/Plugins/flutter_secure_storage), and
+///    should that ever not answer, the same holds as on an old LG set.
+///
+/// So on a TV this sits in front of the store. The first time anything is asked, the store is
 /// tried (a value written, read back, removed). Where that works nothing changes. Where it does
 /// not, values are kept in a file in the app's own folder on the TV. That file is not sealed by
 /// the TV: this app can read it, and so can whoever has the TV in Developer Mode, which is what
-/// holds for everything a web app stores on a TV. Should the TV gain the key service later (an
-/// update to webOS 24 or newer), what the file holds is moved into it and the file is removed.
-class WebosSecrets extends FlutterSecureStoragePlatform {
-  WebosSecrets(this._tv, {Future<Directory> Function()? folder, this.wait = const Duration(seconds: 6)})
+/// holds for everything a web app stores on a TV. Should the store start working later (an
+/// update), what the file holds is moved into it and the file is removed.
+class TvSecrets extends FlutterSecureStoragePlatform {
+  TvSecrets(this._tv, {Future<Directory> Function()? folder, this.wait = const Duration(seconds: 6)})
     : _folder = folder ?? getApplicationSupportDirectory;
 
   /// Puts this in front of the store the plugin registered. Called once, as the app starts on
-  /// an LG TV (lib/main.dart).
+  /// an LG TV or an Apple TV (lib/main.dart, lib/core/platform/apple_tv.dart).
   static void install() {
     final current = FlutterSecureStoragePlatform.instance;
-    if (current is WebosSecrets) return;
-    FlutterSecureStoragePlatform.instance = WebosSecrets(current);
+    if (current is TvSecrets) return;
+    FlutterSecureStoragePlatform.instance = TvSecrets(current);
   }
 
   /// The file's name, in the app's own data folder.

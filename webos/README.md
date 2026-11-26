@@ -103,7 +103,7 @@ version 1.
 **Sign-ins and keys.** LG's webOS side of the keychain plugin seals each value with the TV's
 key service, which LG's reference gives to apps from webOS 24. On an older set nothing answers
 and LG's plugin then keeps nothing, without a word: a debrid key or a tracker sign-in would be
-gone as it was saved. The app tries the TV's store once (`lib/core/platform/webos_secrets.dart`,
+gone as it was saved. The app tries the TV's store once (`lib/core/platform/tv_secrets.dart`,
 in both packages), and where it does not keep what it is given, values go to a file in the
 app's own folder on the TV instead. That file is not sealed by the TV: this app reads it, and
 so can whoever has the TV in Developer Mode, as with everything a web app stores on a TV. If the
@@ -147,7 +147,7 @@ ares-novacom --device <tv> --run "/media/developer/apps/usr/palm/applications/co
   needs from the kernel are on, and the kernel filters no system calls).
 - The player's own side of it (`test/webos_player_test.dart`: a TV with no exported windows,
   a TV with one player, a TV that does not answer what it has), and where sign-ins are kept
-  (`test/webos_secrets_test.dart`: a TV's store that works, one that keeps nothing, one that
+  (`test/tv_secrets_test.dart`: a TV's store that works, one that keeps nothing, one that
   refuses, one that never answers, and one that starts working after an update).
 
 **What only a TV can say.** Whether LG's embedder, made for the compositor of webOS 26, gets

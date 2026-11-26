@@ -25,6 +25,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../core/platform/apple_tv.dart';
 import '../core/platform/webos.dart';
 import 'player/platform/player_linux.dart';
 import 'player/player.dart';
@@ -126,6 +127,8 @@ class _VyseVideoState extends State<VyseVideo> {
     // (not on an LG TV: it stays awake by itself while its own player shows a video, and the
     // wakelock's Linux side asks a desktop's session bus, which a TV does not have)
     if (WebOS.isTv) return;
+    // (an Apple TV: wakelock_plus has no tvOS side; the app's own does the same)
+    if (AppleTv.isTv) return unawaited(AppleTv.keepAwake(on));
     unawaited((on ? WakelockPlus.enable() : WakelockPlus.disable()).catchError((Object _) {}));
   }
 

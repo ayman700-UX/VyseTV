@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/app_settings.dart';
+import 'platform/apple_tv.dart';
 
 /// One section of the navbar: the rail on a desktop or tablet, the bottom bar on a phone.
 class NavItem {
@@ -52,14 +53,14 @@ abstract final class NavLayout {
   /// out; a section the saved order doesn't know yet (added by an update) goes right after the
   /// one it follows by default.
   static List<NavItem> get all {
-    final byId = {for (final s in navItems) s.id: s};
+    final byId = {for (final s in navItems) if (_here(s)) s.id: s};
     final out = <NavItem>[];
     for (final id in _ids(AppSettings.navOrder.value)) {
       final s = byId[id];
       if (s != null && !out.contains(s)) out.add(s);
     }
     for (var i = 0; i < navItems.length; i++) {
-      if (out.contains(navItems[i])) continue;
+      if (out.contains(navItems[i]) || !_here(navItems[i])) continue;
       var at = 0;
       for (var j = i - 1; j >= 0; j--) {
         final k = out.indexOf(navItems[j]);
@@ -72,6 +73,10 @@ abstract final class NavLayout {
     }
     return out;
   }
+
+  /// Whether this device has the section at all. Downloads are not on an Apple TV: an app
+  /// there has no storage the system will not clear when it runs short (as upstream has it).
+  static bool _here(NavItem s) => !(s.id == 'downloads' && AppleTv.isTv);
 
   /// What the navbar shows, in order. Never empty: if the saved value hides everything this
   /// version has, the first section shows anyway.

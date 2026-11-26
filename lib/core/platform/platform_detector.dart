@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../logs/app_logger.dart';
+import 'apple_tv.dart';
 import 'async_singleton.dart';
 import 'device_channel.dart';
 import 'webos.dart';
@@ -326,6 +327,7 @@ class PlatformDetector {
 
   static bool supportsExternalPlayers() {
     if (WebOS.isTv) return false; // VyseTV: nothing on an LG TV takes a link from another app
+    if (AppleTv.isTv) return false; // (nor here: the app has no way to open another on an Apple TV)
     return Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isLinux || Platform.isWindows;
   }
 

@@ -64,6 +64,8 @@ dependencies:
   url_launcher: ^6.3.3
   html: ^0.15.5
   shared_preferences: ^2.3.3
+  # (registered by hand on an Apple TV, where Flutter's tool writes no plugin registrant: lib/core/platform/apple_tv.dart)
+  shared_preferences_foundation: ^2.5.7
   crypto: ^3.0.5
   pointycastle: 4.0.0
   # Edit on your phone: the QR code a TV shows

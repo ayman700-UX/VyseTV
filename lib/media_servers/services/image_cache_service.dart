@@ -5,9 +5,12 @@
 
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
+import '../../core/platform/apple_tv.dart';
+
 /// Server artwork (posters, backdrops, trickplay sheets): kept two weeks.
 class PlexImageCacheManager extends CacheManager with ImageCacheManager {
-  PlexImageCacheManager._() : super(Config('vyseMediaServerArtwork', stalePeriod: const Duration(days: 14), maxNrOfCacheObjects: 3000));
+  // (its index in a JSON file on an Apple TV, which has no SQLite plugin: AppleTv.cacheConfig)
+  PlexImageCacheManager._() : super(AppleTv.cacheConfig('vyseMediaServerArtwork', stalePeriod: const Duration(days: 14), maxNrOfCacheObjects: 3000));
 
   static final PlexImageCacheManager instance = PlexImageCacheManager._();
 }

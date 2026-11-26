@@ -1,4 +1,4 @@
-// Where sign-ins and keys are kept on an LG TV (lib/core/platform/webos_secrets.dart), with
+// Where sign-ins and keys are kept on a TV (lib/core/platform/tv_secrets.dart), with
 // this test playing the TV's own store: one that works (webOS 24 and later), and one that
 // behaves as LG's plugin does where the TV has no key service (it takes a value without a
 // word and gives nothing back).
@@ -9,7 +9,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vyse_tv/core/platform/webos_secrets.dart';
+import 'package:vyse_tv/core/platform/tv_secrets.dart';
 
 enum _Tv { works, keepsNothing, refuses, neverAnswers }
 
@@ -67,8 +67,8 @@ const _o = <String, String>{};
 
 void main() {
   late Directory folder;
-  File file() => File('${folder.path}${Platform.pathSeparator}${WebosSecrets.fileName}');
-  WebosSecrets over(FlutterSecureStoragePlatform tv) => WebosSecrets(tv, folder: () async => folder, wait: const Duration(milliseconds: 150));
+  File file() => File('${folder.path}${Platform.pathSeparator}${TvSecrets.fileName}');
+  TvSecrets over(FlutterSecureStoragePlatform tv) => TvSecrets(tv, folder: () async => folder, wait: const Duration(milliseconds: 150));
 
   setUp(() async => folder = await Directory.systemTemp.createTemp('vyse_secrets_test'));
   tearDown(() async {
@@ -112,7 +112,7 @@ void main() {
 
   test('a file already in use is read at once: nothing waits on a service that does not answer', () async {
     file().writeAsStringSync(jsonEncode({'debrid': 'k-123'}));
-    final secrets = WebosSecrets(_TvStore(_Tv.neverAnswers), folder: () async => folder, wait: const Duration(seconds: 30));
+    final secrets = TvSecrets(_TvStore(_Tv.neverAnswers), folder: () async => folder, wait: const Duration(seconds: 30));
     final watch = Stopwatch()..start();
     expect(await secrets.read(key: 'debrid', options: _o), 'k-123');
     await secrets.write(key: 'trakt', value: 'token', options: _o);
@@ -163,7 +163,7 @@ void main() {
   });
 
   test('no folder to keep a file in: values live while the app runs, and nothing throws', () async {
-    final secrets = WebosSecrets(
+    final secrets = TvSecrets(
       _TvStore(_Tv.keepsNothing),
       folder: () async => throw const FileSystemException('no such folder'),
       wait: const Duration(milliseconds: 150),
@@ -178,10 +178,10 @@ void main() {
     final before = FlutterSecureStoragePlatform.instance;
     addTearDown(() => FlutterSecureStoragePlatform.instance = before);
     FlutterSecureStoragePlatform.instance = _TvStore(_Tv.works);
-    WebosSecrets.install();
+    TvSecrets.install();
     final first = FlutterSecureStoragePlatform.instance;
-    expect(first, isA<WebosSecrets>());
-    WebosSecrets.install();
+    expect(first, isA<TvSecrets>());
+    TvSecrets.install();
     expect(FlutterSecureStoragePlatform.instance, same(first));
   });
 }

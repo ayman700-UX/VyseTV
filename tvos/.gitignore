@@ -1,0 +1,12 @@
+**/xcuserdata/
+**/DerivedData/
+**/.generated/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+# written by scripts/fetch_engine.sh (where the engine is on this machine)
+Flutter/Generated.xcconfig
+Flutter/flutter_export_environment.sh
+Flutter/App.framework
+Flutter/Flutter.framework

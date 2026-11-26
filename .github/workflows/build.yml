@@ -15,6 +15,7 @@ name: Build
 #     [windows] or [all]. A push that names none builds nothing.
 #   * [webos] builds the LG TV package. It is asked for by its own name only, never by
 #     [all]: see the webos job at the end.
+#   * [tvos] builds the Apple TV package, likewise by its own name only (the tvos job).
 #
 # On a private repository the macOS and iOS jobs use up build minutes ten times
 # faster than the Linux ones, and Windows twice as fast.
@@ -25,7 +26,7 @@ on:
         description: What to build
         type: choice
         default: linux
-        options: [all, linux, linux-x64, linux-arm64, macos, ios, android, windows, webos]
+        options: [all, linux, linux-x64, linux-arm64, macos, ios, android, windows, webos, tvos]
   push:
     branches: [main]
 
@@ -44,6 +45,7 @@ jobs:
       android: ${{ steps.pick.outputs.android }}
       windows: ${{ steps.pick.outputs.windows }}
       webos: ${{ steps.pick.outputs.webos }}
+      tvos: ${{ steps.pick.outputs.tvos }}
     steps:
       - id: pick
         env:
@@ -54,7 +56,7 @@ jobs:
           if [ "$EVENT" = "workflow_dispatch" ]; then
             pick="$PLATFORM"
           else
-            pick=$(printf '%s' "$MESSAGE" | grep -oE '\[(all|linux|linux-x64|linux-arm64|macos|ios|android|windows|webos)\]' | tr -d '[]' | tr '\n' ' ' || true)
+            pick=$(printf '%s' "$MESSAGE" | grep -oE '\[(all|linux|linux-x64|linux-arm64|macos|ios|android|windows|webos|tvos)\]' | tr -d '[]' | tr '\n' ' ' || true)
           fi
           echo "Building: ${pick:-nothing}"
           has() { case " $pick " in *" all "*|*" $1 "*) return 0 ;; esac; return 1; }
@@ -71,6 +73,8 @@ jobs:
           done
           # (the LG TV build: by its own name only, "all" does not ask for it)
           case " $pick " in *" webos "*) echo "webos=true" >> "$GITHUB_OUTPUT" ;; *) echo "webos=false" >> "$GITHUB_OUTPUT" ;; esac
+          # (the Apple TV build: likewise by its own name only)
+          case " $pick " in *" tvos "*) echo "tvos=true" >> "$GITHUB_OUTPUT" ;; *) echo "tvos=false" >> "$GITHUB_OUTPUT" ;; esac
 
   # 64-bit Intel/AMD and 64-bit ARM. Flutter has no 32-bit Linux desktop build.
   linux:
@@ -503,5 +507,95 @@ jobs:
         with:
           name: vysetv-webos
           path: build/webos/*.ipk
+          if-no-files-found: ignore
+          retention-days: 2 # a private repository has 500 MB for these
+
+  # Apple TV: an .ipa without a signature, put on an Apple TV with a sideloading tool that signs
+  # it with your own Apple ID (tvos/README.md). Not run on an Apple TV yet, so it is built only
+  # when asked for by name, [tvos], and is not part of [all].
+  #
+  # Flutter's tool has no Apple TV target: the app is built by Xcode from tvos/Runner.xcodeproj,
+  # on a Flutter engine made for tvOS (tvos/engine.version), and the Dart by that engine's own
+  # compiler (tvos/scripts/xcode_appletv.sh). Apple silicon: that engine's tools are for it.
+  tvos:
+    name: Apple TV (unsigned .ipa, for sideloading)
+    needs: plan
+    if: ${{ needs.plan.outputs.tvos == 'true' }}
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      # The real server settings (the account server, the update addresses) are not in the
+      # repository: they come from the SERVER_CONFIG secret (lib/data/server_config.dart in
+      # base64). A build without them would have no accounts, so it stops instead.
+      - name: Write the server settings
+        shell: bash
+        env:
+          SERVER_CONFIG: ${{ secrets.SERVER_CONFIG }}
+        run: |
+          if [ -z "$SERVER_CONFIG" ]; then
+            echo "::error::No SERVER_CONFIG secret: this build would have no accounts."
+            exit 1
+          fi
+          printf '%s' "$SERVER_CONFIG" | base64 -d > lib/data/server_config.dart
+          grep -q updateListAddresses lib/data/server_config.dart
+      - run: flutter pub get
+      # The project and the plugin copies in it are made by scripts; what is committed must be
+      # what they make from this checkout, or the app would build with stale pieces.
+      - name: Check the project and its plugin copies are current
+        run: |
+          python3 tool/tvos/vendor_plugins.py --check
+          python3 tool/tvos/make_project.py
+          git diff --exit-code -- tvos/ || { echo "::error::tvos/ is not what tool/tvos/make_project.py makes: run it and commit the result."; exit 1; }
+      - name: Fetch the Flutter engine for tvOS
+        run: bash tvos/scripts/fetch_engine.sh
+      - name: Resolve Swift packages (MPVKit)
+        run: xcodebuild -resolvePackageDependencies -workspace tvos/Runner.xcworkspace -scheme Runner
+      # Xcode says a great deal; the whole of it is kept as a file of the run, and what matters
+      # (the Dart build's own lines, errors, warnings of our Swift) is shown here.
+      - name: Build for Apple TV
+        run: |
+          mkdir -p build
+          set +e
+          xcodebuild -workspace tvos/Runner.xcworkspace -scheme Runner -configuration Release \
+            -sdk appletvos -destination 'generic/platform=tvOS' -derivedDataPath build/tvos-derived \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build > build/tvos-build.log 2>&1
+          status=$?
+          set -e
+          grep -E '└─|error:|ERROR|warning: .*(tvos/|MpvPlayer/|torrserver)' build/tvos-build.log | head -n 300 || true
+          if [ "$status" != 0 ]; then
+            echo "::error::xcodebuild failed ($status); the last of its output:"
+            tail -n 150 build/tvos-build.log
+            exit "$status"
+          fi
+      - name: Look inside the app
+        run: |
+          APP=build/tvos-derived/Build/Products/Release-appletvos/Runner.app
+          ls -la "$APP" "$APP/Frameworks"
+          for f in App Flutter; do
+            B="$APP/Frameworks/$f.framework/$f"
+            [ -f "$B" ] || { echo "::error::$f.framework is not in the app"; exit 1; }
+            echo "$f.framework: $(stat -f%z "$B") bytes, $(lipo -archs "$B")"
+          done
+          [ "$(stat -f%z "$APP/Frameworks/App.framework/App")" -gt 5000000 ] || { echo "::error::App.framework is too small to hold the app's Dart"; exit 1; }
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' -c 'Print :MinimumOSVersion' -c 'Print :DTPlatformName' "$APP/Info.plist"
+          otool -L "$APP/Runner" | head -n 30
+      - name: Package an unsigned .ipa
+        run: |
+          rm -rf Payload && mkdir -p Payload
+          cp -R build/tvos-derived/Build/Products/Release-appletvos/Runner.app Payload/
+          zip -qry VyseTV-tvOS-unsigned.ipa Payload
+          ls -la VyseTV-tvOS-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: vysetv-tvos-unsigned
+          path: |
+            VyseTV-tvOS-unsigned.ipa
+            build/tvos-build.log
           if-no-files-found: ignore
           retention-days: 2 # a private repository has 500 MB for these
