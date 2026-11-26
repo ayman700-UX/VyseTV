@@ -1,6 +1,6 @@
 # Notice & GPL-3.0 Compliance
 
-## iOS Target Compliance Notice
+## iOS and Apple TV Target Compliance Notice
 > **The iOS target statically links TorrServer (GPL-3.0). Apps embedding `torrserver_flutter`'s iOS build inherit GPLv3 source-availability obligations for the combined work. This is not legal advice — consult counsel before App Store submission.**
 
 ## Upstream Project

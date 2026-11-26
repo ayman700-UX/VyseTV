@@ -558,6 +558,12 @@ jobs:
           python3 tool/tvos/vendor_plugins.py --check
           python3 tool/tvos/make_project.py
           git diff --exit-code -- tvos/ || { echo "::error::tvos/ is not what tool/tvos/make_project.py makes: run it and commit the result."; exit 1; }
+      # The torrent engine, TorrServer built for tvOS (the tvos-torrent job made the .zip).
+      - name: Unpack the torrent engine
+        run: |
+          rm -rf tvos/Frameworks && mkdir -p tvos/Frameworks
+          unzip -q packages/torrserver_flutter/binaries/TorrServerKit-tvos.xcframework.zip -d tvos/Frameworks
+          plutil -p tvos/Frameworks/TorrServerKit.xcframework/Info.plist | grep -E 'LibraryIdentifier|SupportedPlatform'
       - name: Fetch the Flutter engine for tvOS
         run: |
           # (Flutter's own iPhone tools: the Dart compiler for the TV where the engine's cannot run)
@@ -601,6 +607,9 @@ jobs:
             echo "$f.framework: $(stat -f%z "$B") bytes, $(lipo -archs "$B")"
           done
           [ "$(stat -f%z "$APP/Frameworks/App.framework/App")" -gt 5000000 ] || { echo "::error::App.framework is too small to hold the app's Dart"; exit 1; }
+          # (the torrent engine is linked into the app's own program: tens of megabytes of it)
+          echo "Runner: $(stat -f%z "$APP/Runner") bytes"
+          [ "$(stat -f%z "$APP/Runner")" -gt 30000000 ] && echo "torrent engine linked in" || { echo "::error::the app's program is too small to hold the torrent engine"; exit 1; }
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' -c 'Print :MinimumOSVersion' -c 'Print :DTPlatformName' "$APP/Info.plist"
           otool -L "$APP/Runner" | head -n 30
       - name: Package an unsigned .ipa

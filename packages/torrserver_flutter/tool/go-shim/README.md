@@ -1,5 +1,9 @@
 # torrserver-mobile-shim
 
+VyseTV: `build-xcframework.sh` makes the iPhone framework, `build-tvos-xcframework.sh` the Apple
+TV one (with NetBird's gomobile fork, which has tvOS targets). Their results are kept in
+`../../binaries/` (`TorrServerKit.xcframework.zip`, `TorrServerKit-tvos.xcframework.zip`).
+
 Go mobile shim wrapping **TorrServer** (`github.com/YouROK/TorrServer`, GPL-3.0) for in-process embedding on **iOS** as an XCFramework (`TorrServerKit.xcframework`).
 
 ## Architecture & Shutdown Resolution

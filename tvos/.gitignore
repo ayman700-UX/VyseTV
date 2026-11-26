@@ -10,3 +10,5 @@ Flutter/Generated.xcconfig
 Flutter/flutter_export_environment.sh
 Flutter/App.framework
 Flutter/Flutter.framework
+# unpacked from packages/torrserver_flutter/binaries/TorrServerKit-tvos.xcframework.zip
+Frameworks/

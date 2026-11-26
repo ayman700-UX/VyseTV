@@ -3,8 +3,8 @@
 The Apple TV build of VyseTV: the iPhone app's code on a Flutter engine made for tvOS.
 
 **It is a test build.** It is built on GitHub (the `tvos` job, a push whose message has
-`[tvos]`) and has not been run on an Apple TV yet. "What is proven" at the end says how far
-each part got.
+`[tvos]`; first built 26 November 2026) and has not been run on an Apple TV yet. "What is
+proven" at the end says how far each part got.
 
 ## Which Apple TVs
 
@@ -35,8 +35,13 @@ downloads it, checks the checksum, and writes `tvos/Flutter/Generated.xcconfig`,
 Xcode where it is.
 
 **The Dart.** The project's first build phase runs `tvos/scripts/xcode_appletv.sh build`: the
-app's assets with `flutter build bundle`, then `lib/main.dart` compiled by that engine's own
-front end and `gen_snapshot` with `TVOS_BUILD=true`. To Dart an Apple TV is an iPhone; that
+app's assets with `flutter build bundle`, then `lib/main.dart` compiled with `TVOS_BUILD=true`
+by that engine's own front end and `gen_snapshot`. Those are for Apple silicon only, and the
+build runs on GitHub's Intel Macs (no Apple silicon Mac has ever taken a job of this repository):
+there the script uses Flutter's own Dart runtime, front end and iPhone `gen_snapshot` instead,
+only when they are the same Dart version as the engine's. The result was checked: the app's
+snapshot carries the version hash and features the tvOS engine expects
+(`webos-research/tools/snapshot_match.py` on the built `.ipa`). To Dart an Apple TV is an iPhone; that
 setting is what tells them apart (`lib/core/platform/apple_tv.dart`, `AppleTv.isTv`).
 
 **The plugins.** No plugin is built for tvOS on its own. The few the app needs are compiled into
@@ -48,7 +53,7 @@ the app and registered by hand (`tvos/Runner/AppDelegate.swift`):
 | Settings (`shared_preferences`), network state (`connectivity_plus`) | copies of the locked versions, made by `tool/tvos/vendor_plugins.py` |
 | Paths, device and app info | ports from upstream (`tvos/Runner/Plugins`) |
 | Sign-ins and keys | `KeychainPlugin.swift`: the Keychain, which the system never clears |
-| The torrent plugin | `packages/torrserver_flutter`; without the engine built for tvOS it answers "no engine", and torrents are hidden |
+| Torrents | `packages/torrserver_flutter`'s plugin, with TorrServer linked into the app: `TorrServerKit-tvos.xcframework.zip` in its `binaries/`, built by the `tvos-torrent` job (`[tvos-torrent]`, `tool/go-shim/build-tvos-xcframework.sh`: TorrServer MatriX.151 with NetBird's gomobile fork, which knows tvOS). Device only: there is no simulator build |
 | No screen saver during a video | `AppleTvPlugin.swift` |
 
 The Dart halves the tool would register from Dart are registered in `AppleTv.install()`.
@@ -61,8 +66,6 @@ not what the scripts make.
 
 - **Downloads.** An app on an Apple TV has no storage the system will not clear when it runs
   short. The Downloads section and the player's Download are not shown.
-- **Torrents**, until TorrServer is built for tvOS (the Go shim in `torrserver_flutter`, with a
-  gomobile that knows tvOS).
 - **Voice calls in a party, party alert tones, notifications.** Their libraries have no tvOS
   side.
 - **Links that open another app or a browser.** There is no browser; the TV's settings QR and the
@@ -85,7 +88,7 @@ the first Siri Remote (no ring) is driven by.
 | Part | How far it got |
 |---|---|
 | The Dart | Analyzed and tested on a PC (`test/apple_tv_remote_test.dart`, `test/tv_secrets_test.dart`) |
-| The project, the engine, the Swift | Built on GitHub, when the `tvos` job passes |
+| The project, the engine, the Swift | Built on GitHub (26 November 2026): a 45 MB `.ipa`, tvOS 15 and up, arm64, with App.framework (20 MB), the tvOS Flutter engine and the mpv frameworks. The Dart snapshot matches the engine's version hash |
 | Anything on an Apple TV | Not run yet |
 
 What only an Apple TV can answer, in the order it would show up: does it open; do the remote's

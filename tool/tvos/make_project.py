@@ -10,7 +10,9 @@ What the target does, in order:
   Run Script     tvos/scripts/xcode_appletv.sh build: the app's Dart, assets, App.framework and
                  the engine's Flutter.framework (Flutter's tool has no Apple TV target)
   Sources        the Swift below
-  Frameworks     MPVKit (libmpv and FFmpeg, the same package and revision as the iPhone app)
+  Frameworks     MPVKit (libmpv and FFmpeg, the same package and revision as the iPhone app), and
+                 TorrServerKit (the torrent engine: tvos/Frameworks, unpacked from
+                 packages/torrserver_flutter/binaries/TorrServerKit-tvos.xcframework.zip)
   Resources      icons, storyboards
   Thin Binary    tvos/scripts/xcode_appletv.sh sync_version: version from pubspec.yaml, and
                  App.framework and Flutter.framework put into the app
@@ -164,10 +166,7 @@ def main():
     shared_group = group('Shared', 'Shared with iPhone', shared_children)
     flutter_group = group('Flutter', 'Flutter', flutter_children)
     products = group('Products', 'Products', [(app, 'Runner.app')])
-    main_group = oid('group', 'main')
-    kids = '\n'.join(f'\t\t\t\t{c} /* {n} */,' for c, n in [(flutter_group, 'Flutter'), (runner_group, 'Runner'), (shared_group, 'Shared with iPhone'), (products, 'Products')])
-    add('PBXGroup', main_group,
-        f'{main_group} = {{\n\t\t\tisa = PBXGroup;\n\t\t\tchildren = (\n{kids}\n\t\t\t);\n\t\t\tsourceTree = "<group>";\n\t\t}};')
+    frameworks_children = []
 
     # ── build files and phases ──
     def build_files(items, phase):
@@ -192,7 +191,15 @@ def main():
     mpvkit = oid('product', 'MPVKit')
     mpvkit_build = oid('build', 'Frameworks', 'MPVKit')
     add('PBXBuildFile', mpvkit_build, f'{mpvkit_build} /* MPVKit in Frameworks */ = {{isa = PBXBuildFile; productRef = {mpvkit} /* MPVKit */; }};')
-    frameworks_phase = phase('PBXFrameworksBuildPhase', 'Frameworks', [(mpvkit_build, 'MPVKit in Frameworks')])
+    torrent_ref = oid('file', 'Frameworks/TorrServerKit.xcframework')
+    add('PBXFileReference', torrent_ref,
+        f'{torrent_ref} /* TorrServerKit.xcframework */ = {{isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; '
+        f'name = TorrServerKit.xcframework; path = Frameworks/TorrServerKit.xcframework; sourceTree = SOURCE_ROOT; }};')
+    frameworks_children.append((torrent_ref, 'TorrServerKit.xcframework'))
+    torrent_build = oid('build', 'Frameworks', torrent_ref)
+    add('PBXBuildFile', torrent_build, f'{torrent_build} /* TorrServerKit.xcframework in Frameworks */ = {{isa = PBXBuildFile; fileRef = {torrent_ref} /* TorrServerKit.xcframework */; }};')
+    frameworks_phase = phase('PBXFrameworksBuildPhase', 'Frameworks',
+                             [(mpvkit_build, 'MPVKit in Frameworks'), (torrent_build, 'TorrServerKit.xcframework in Frameworks')])
 
     def script(name, command):
         ident = oid('phase', name)
@@ -293,6 +300,12 @@ def main():
     add('XCSwiftPackageProductDependency', mpvkit,
         f'{mpvkit} /* MPVKit */ = {{\n\t\t\tisa = XCSwiftPackageProductDependency;\n'
         f'\t\t\tpackage = {mpv_ref} /* XCRemoteSwiftPackageReference "mpv-build" */;\n\t\t\tproductName = MPVKit;\n\t\t}};')
+
+    frameworks_group = group('Frameworks', 'Frameworks', frameworks_children)
+    main_group = oid('group', 'main')
+    kids = '\n'.join(f'\t\t\t\t{c} /* {n} */,' for c, n in [(flutter_group, 'Flutter'), (runner_group, 'Runner'), (shared_group, 'Shared with iPhone'), (frameworks_group, 'Frameworks'), (products, 'Products')])
+    add('PBXGroup', main_group,
+        f'{main_group} = {{\n\t\t\tisa = PBXGroup;\n\t\t\tchildren = (\n{kids}\n\t\t\t);\n\t\t\tsourceTree = "<group>";\n\t\t}};')
 
     project = oid('project')
     add('PBXProject', project,
