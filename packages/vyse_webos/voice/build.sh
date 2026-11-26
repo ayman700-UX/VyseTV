@@ -34,12 +34,27 @@ echo "== the Go modules"
   # shellcheck disable=SC1090
   . "$NDK_ENV"
   unset SSL_CERT_FILE SSL_CERT_DIR CURL_CA_BUNDLE REQUESTS_CA_BUNDLE
+  # (what LG's compiler says when asked to make a program and a library: for the log)
+  echo "== LG's compiler: $CC"
+  printf 'int main(void){return 0;}\n' > "$WORK/t.c"
+  $CC $CFLAGS $LDFLAGS "$WORK/t.c" -o "$WORK/t" 2>&1 | tail -n 8 && echo "   a program: made" || echo "   a program: NOT made"
+  $CC $CFLAGS -fPIC -shared $LDFLAGS "$WORK/t.c" -o "$WORK/t.so" 2>&1 | tail -n 8 && echo "   a library: made" || echo "   a library: NOT made"
   if [ ! -f "$PREFIX/lib/libopus.a" ]; then
-    echo "== libopus $OPUS_VERSION with LG's compiler ($CC)"
-    (cd "$WORK/opus-src" && ./configure ${CONFIGURE_FLAGS:-} --prefix="$PREFIX" --disable-shared --enable-static \
-      --disable-doc --disable-extra-programs --with-pic CFLAGS="${CFLAGS:-} -O2 -fPIC" >/dev/null && make -j"$(nproc)" >/dev/null && make install >/dev/null)
+    # With CMake, and its compiler checks made as libraries (a program is never linked: only
+    # a library is wanted, and LG's settings make libraries, as LG's own tool does).
+    echo "== libopus $OPUS_VERSION with LG's compiler"
+    rm -rf "$WORK/opus-build"
+    cmake -S "$WORK/opus-src" -B "$WORK/opus-build" -G "Unix Makefiles" \
+      -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=arm \
+      -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
+      -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="${CFLAGS:-} -O2" \
+      -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+      -DOPUS_BUILD_SHARED_LIBRARY=OFF -DOPUS_BUILD_TESTING=OFF -DOPUS_BUILD_PROGRAMS=OFF \
+      -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_INSTALL_LIBDIR=lib >"$WORK/opus-cmake.log" 2>&1 || { tail -n 40 "$WORK/opus-cmake.log"; exit 1; }
+    cmake --build "$WORK/opus-build" -j"$(nproc)" >"$WORK/opus-make.log" 2>&1 || { tail -n 40 "$WORK/opus-make.log"; exit 1; }
+    cmake --install "$WORK/opus-build" >/dev/null
   fi
-  ls -l "$PREFIX/lib/libopus.a"
+  ls -l "$PREFIX/lib/libopus.a" "$PREFIX/include/opus/opus.h"
 
   echo "== libvyse_voice.so (linux/arm, cgo with LG's compiler)"
   cd "$HERE"

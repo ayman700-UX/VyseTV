@@ -54,7 +54,13 @@ export PATH="$SDK/bin:$NODE_DIR/bin:$PATH"
 command -v ares-package >/dev/null 2>&1 || missing "The webOS CLI (ares-package) is not installed."
 
 echo "== 0. the party's voice for LG TVs (Go, with this NDK)"
-bash "$REPO/packages/vyse_webos/voice/build.sh" "$NDK_ENV"
+# (without it the package is still made: the app then says voice calls are not on this TV)
+VOICE=1
+if ! bash "$REPO/packages/vyse_webos/voice/build.sh" "$NDK_ENV"; then
+  VOICE=0
+  rm -f "$REPO/packages/vyse_webos/webos/prebuilt/libvyse_voice.so"
+  echo "::warning::The party's voice for LG TVs did not build: this package has no voice calls." >&2
+fi
 
 echo "== 1. the copy LG's tool builds"
 python3 "$REPO/tool/webos/stage.py" --out "$STAGE"
@@ -111,7 +117,11 @@ want "LG's Flutter engine"                                 '/lib/libflutter_engi
 want "the player's native side (libvyse_webos_plugin.so)"  '/lib/libvyse_webos_plugin\.so$'
 want "the JavaScript engine for scraper plugins"           '/lib/libquickjs_c_bridge_plugin\.so$'
 want "the torrent engine"                                  '/lib/torrserver-linux-arm7$'
-want "the party's voice (libvyse_voice.so)"                '/lib/libvyse_voice\.so$'
+if [ "$VOICE" = 1 ]; then
+  want "the party's voice (libvyse_voice.so)"              '/lib/libvyse_voice\.so$'
+else
+  echo "   none     the party's voice (it did not build: see step 0)"
+fi
 want "the torrent engine, marked as a program"             '^-rwx[r-]-x[r-]-x .*/lib/torrserver-linux-arm7$'
 want "the app's description for the TV (appinfo.json)"     '/appinfo\.json$'
 echo "   its programs and libraries:"
