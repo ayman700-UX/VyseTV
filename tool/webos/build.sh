@@ -67,6 +67,22 @@ flutter-webos build webos "--$MODE" --dart-define=VYSE_WEBOS=true
 IPK="$(ls -t "$STAGE"/build/webos/*/"$MODE"/ipk/*.ipk 2>/dev/null | head -n 1 || true)"
 [ -n "$IPK" ] || { echo "LG's tool finished without an .ipk under $STAGE/build/webos." >&2; exit 1; }
 
+# The torrent engine is a program, and LG's tool does not keep it one: it copies the app into
+# the package file by file, which drops every "this is a program" mark, and then puts the mark
+# back on the app's main program only. So the engine is marked here, in the folder the tool
+# packed from, and the package is made again the same way the tool made it.
+IPK_DIR="$(dirname "$IPK")"
+ENGINE="$(find "$IPK_DIR/data" -type f -path '*/lib/torrserver-linux-arm7' 2>/dev/null | head -n 1 || true)"
+if [ -n "$ENGINE" ] && [ ! -x "$ENGINE" ]; then
+  echo "== 2b. the torrent engine marked as a program, and the package made again"
+  chmod 755 "$ENGINE"
+  APP_DIR="$(dirname "$(dirname "$ENGINE")")"
+  rm -f "$IPK_DIR"/*.ipk
+  (cd "$IPK_DIR" && ares-package --no-minify "$APP_DIR" -o "$IPK_DIR")
+  IPK="$(ls -t "$IPK_DIR"/*.ipk 2>/dev/null | head -n 1 || true)"
+  [ -n "$IPK" ] || { echo "ares-package made no .ipk in $IPK_DIR." >&2; exit 1; }
+fi
+
 # (out of the copy first: a package that fails the look below is still there to be looked at)
 mkdir -p "$REPO/build/webos"
 cp -f "$IPK" "$REPO/build/webos/"

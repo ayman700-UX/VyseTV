@@ -8,14 +8,9 @@ project(runner LANGUAGES CXX)
 include(${CMAKE_CURRENT_SOURCE_DIR}/flutter/ephemeral/webos_build.cmake)
 
 # The torrent engine travels in lib/ as a plugin's "bundled library" (packages/
-# torrserver_flutter/webos), and LG's graph installs those as plain files. It is a program:
-# mark it so, here, after their install rules have run. (An app on a TV cannot change the
-# modes of its own files: they are root's. Should the mark be lost on the way to the TV all
-# the same, the app copies the engine to its data folder and marks it there.)
-install(CODE "
-  set(_engine \"${INSTALL_BUNDLE_LIB_DIR}/torrserver-linux-arm7\")
-  if(EXISTS \"\${_engine}\")
-    file(CHMOD \"\${_engine}\" PERMISSIONS
-      OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-  endif()
-  " COMPONENT Runtime)
+# torrserver_flutter/webos). It is a program, and nothing here can keep it marked as one:
+# LG's graph installs bundled libraries as plain files, and their tool then copies the bundle
+# into the package file by file, which drops the mark from everything but the main program.
+# tool/webos/build.sh puts it back in the folder the package is made from. (Should it be lost
+# on the way to the TV all the same, the app copies the engine to its data folder and marks
+# it there.)
