@@ -24,7 +24,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 TVOS = REPO / 'tvos'
 BUNDLE_ID = 'com.vyse.vyseTv'
-DEPLOYMENT = '15.0'
+# (17: the WebRTC build the voice call runs on has its Apple TV slices from tvOS 17. Every Apple TV
+# that ran tvOS 15 runs 17.)
+DEPLOYMENT = '17.0'
 
 # The mpv package, pinned as in ios/Runner.xcodeproj (read from there, so the two never part).
 IOS_PROJECT = REPO / 'ios' / 'Runner.xcodeproj' / 'project.pbxproj'
@@ -56,6 +58,22 @@ SHARED_SOURCES = [
 ]
 RESOURCES = ['Assets.xcassets', 'Base.lproj/LaunchScreen.storyboard', 'Base.lproj/Main.storyboard']
 
+# Plugins copied whole by tool/tvos/vendor_plugins.py (a party's voice call): every source file in
+# their folders under tvos/Runner/Plugins is compiled. Their Objective-C reaches the Swift through
+# Runner/Runner-Bridging-Header.h.
+TREE_PLUGINS = ['flutter_webrtc', 'livekit_client']
+BRIDGING_HEADER = 'Runner/Runner-Bridging-Header.h'
+
+
+def tree_sources():
+    out = []
+    for name in TREE_PLUGINS:
+        root = TVOS / 'Runner' / 'Plugins' / name
+        if not root.exists():
+            raise SystemExit(f'{root} is missing: run python tool/tvos/vendor_plugins.py')
+        out += sorted('Plugins/' + name + '/' + p.relative_to(root).as_posix() for p in root.rglob('*') if p.suffix in ('.m', '.mm', '.cpp', '.swift'))
+    return out
+
 
 def oid(*key):
     return hashlib.md5('/'.join(key).encode()).hexdigest()[:24].upper()
@@ -72,6 +90,11 @@ def file_type(path):
     ext = path.rsplit('.', 1)[-1]
     return {
         'swift': 'sourcecode.swift',
+        'm': 'sourcecode.c.objc',
+        'mm': 'sourcecode.cpp.objcpp',
+        'cpp': 'sourcecode.cpp.cpp',
+        'h': 'sourcecode.c.h',
+        'xcframework': 'wrapper.xcframework',
         'xcassets': 'folder.assetcatalog',
         'storyboard': 'file.storyboard',
         'plist': 'text.plist.xml',
@@ -121,7 +144,7 @@ def main():
     sources, resources = [], []
     runner_children = []
     plugin_groups = {}
-    for rel in RUNNER_SOURCES:
+    for rel in RUNNER_SOURCES + tree_sources():
         name = rel.rsplit('/', 1)[-1]
         ref = file_ref('Runner/' + rel, name, 'Runner/' + rel, 'SOURCE_ROOT')
         sources.append((ref, name))
@@ -198,8 +221,27 @@ def main():
     frameworks_children.append((torrent_ref, 'TorrServerKit.xcframework'))
     torrent_build = oid('build', 'Frameworks', torrent_ref)
     add('PBXBuildFile', torrent_build, f'{torrent_build} /* TorrServerKit.xcframework in Frameworks */ = {{isa = PBXBuildFile; fileRef = {torrent_ref} /* TorrServerKit.xcframework */; }};')
+    # WebRTC (the voice call): a dynamic framework, linked and put inside the app
+    # (tvos/scripts/fetch_webrtc.sh places its Apple TV slices in tvos/Frameworks)
+    webrtc_ref = oid('file', 'Frameworks/WebRTC.xcframework')
+    add('PBXFileReference', webrtc_ref,
+        f'{webrtc_ref} /* WebRTC.xcframework */ = {{isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; '
+        f'name = WebRTC.xcframework; path = Frameworks/WebRTC.xcframework; sourceTree = SOURCE_ROOT; }};')
+    frameworks_children.append((webrtc_ref, 'WebRTC.xcframework'))
+    webrtc_build = oid('build', 'Frameworks', webrtc_ref)
+    add('PBXBuildFile', webrtc_build, f'{webrtc_build} /* WebRTC.xcframework in Frameworks */ = {{isa = PBXBuildFile; fileRef = {webrtc_ref} /* WebRTC.xcframework */; }};')
+    webrtc_embed = oid('build', 'Embed Frameworks', webrtc_ref)
+    add('PBXBuildFile', webrtc_embed,
+        f'{webrtc_embed} /* WebRTC.xcframework in Embed Frameworks */ = {{isa = PBXBuildFile; fileRef = {webrtc_ref} /* WebRTC.xcframework */; '
+        f'settings = {{ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }}; }};')
     frameworks_phase = phase('PBXFrameworksBuildPhase', 'Frameworks',
-                             [(mpvkit_build, 'MPVKit in Frameworks'), (torrent_build, 'TorrServerKit.xcframework in Frameworks')])
+                             [(mpvkit_build, 'MPVKit in Frameworks'), (torrent_build, 'TorrServerKit.xcframework in Frameworks'),
+                              (webrtc_build, 'WebRTC.xcframework in Frameworks')])
+    embed_phase = oid('phase', 'Embed Frameworks')
+    add('PBXCopyFilesBuildPhase', embed_phase,
+        f'{embed_phase} /* Embed Frameworks */ = {{\n\t\t\tisa = PBXCopyFilesBuildPhase;\n\t\t\tbuildActionMask = 2147483647;\n'
+        f'\t\t\tdstPath = "";\n\t\t\tdstSubfolderSpec = 10;\n\t\t\tfiles = (\n\t\t\t\t{webrtc_embed} /* WebRTC.xcframework in Embed Frameworks */,\n\t\t\t);\n'
+        f'\t\t\tname = "Embed Frameworks";\n\t\t\trunOnlyForDeploymentPostprocessing = 0;\n\t\t}};')
 
     def script(name, command):
         ident = oid('phase', name)
@@ -242,6 +284,12 @@ def main():
         # (the Run Script phase writes outside the build folder, under build/ of the repository)
         'ENABLE_USER_SCRIPT_SANDBOXING': 'NO',
         'FRAMEWORK_SEARCH_PATHS': ['$(inherited)', '$(PROJECT_DIR)/Flutter'],
+        # (the copied plugins: flutter_webrtc's headers, C++ as its podspec builds it, and its
+        # Objective-C for the Swift of both through one bridging header)
+        'HEADER_SEARCH_PATHS': ['$(inherited)', '$(PROJECT_DIR)/Runner/Plugins/flutter_webrtc/include/flutter_webrtc', '$(PROJECT_DIR)/Runner/Plugins/flutter_webrtc/include'],
+        'CLANG_CXX_LANGUAGE_STANDARD': 'c++14',
+        'CLANG_CXX_LIBRARY': 'libc++',
+        'SWIFT_OBJC_BRIDGING_HEADER': BRIDGING_HEADER,
         'INFOPLIST_FILE': 'Runner/Info.plist',
         'LD_RUNPATH_SEARCH_PATHS': ['$(inherited)', '@executable_path/Frameworks'],
         'LIBRARY_SEARCH_PATHS': ['$(inherited)', '$(PROJECT_DIR)/Flutter'],
@@ -284,7 +332,7 @@ def main():
 
     runner = oid('target', 'Runner')
     phases = [(run_script, 'Run Script'), (sources_phase, 'Sources'), (frameworks_phase, 'Frameworks'),
-              (resources_phase, 'Resources'), (thin_binary, 'Thin Binary')]
+              (resources_phase, 'Resources'), (embed_phase, 'Embed Frameworks'), (thin_binary, 'Thin Binary')]
     kids = '\n'.join(f'\t\t\t\t{c} /* {n} */,' for c, n in phases)
     add('PBXNativeTarget', runner,
         f'{runner} /* Runner */ = {{\n\t\t\tisa = PBXNativeTarget;\n'
@@ -337,11 +385,12 @@ def main():
         write(root / 'xcshareddata' / 'swiftpm' / 'Package.resolved', RESOLVED.format(url=url, revision=revision))
     write(proj / 'xcshareddata' / 'xcschemes' / 'Runner.xcscheme', SCHEME.format(runner=runner))
     # every file the project names is there
-    for rel in RUNNER_SOURCES + RESOURCES + ['Info.plist']:
+    for rel in RUNNER_SOURCES + RESOURCES + ['Info.plist'] + tree_sources():
         assert (TVOS / 'Runner' / rel).exists(), rel
+    assert (TVOS / BRIDGING_HEADER).exists(), BRIDGING_HEADER
     for rel in SHARED_SOURCES:
         assert (REPO / rel).exists(), rel
-    print(f'wrote {proj.relative_to(REPO)} ({len(sources)} Swift files, mpv-build {revision[:12]})')
+    print(f'wrote {proj.relative_to(REPO)} ({len(sources)} source files, mpv-build {revision[:12]})')
 
 
 def write(path, text):

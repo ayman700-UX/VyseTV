@@ -102,6 +102,9 @@ import UIKit
     add("ConnectivityPlusPlugin") { ConnectivityPlusPlugin.register(with: $0) }
     add("KeychainPlugin") { KeychainPlugin.register(with: $0) }
     add("TorrserverFlutterPlugin") { TorrserverFlutterPlugin.register(with: $0) }
+    // a party's voice call (copied whole by tool/tvos/vendor_plugins.py; WebRTC is from tvOS 17)
+    add("FlutterWebRTCPlugin") { FlutterWebRTCPlugin.register(with: $0) }
+    add("LiveKitPlugin") { LiveKitPlugin.register(with: $0) }
     // the Apple TV itself
     add("AppleTvPlugin") { AppleTvPlugin.register(with: $0) }
   }

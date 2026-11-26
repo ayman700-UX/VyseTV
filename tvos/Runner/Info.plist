@@ -52,6 +52,8 @@
 			</array>
 		</dict>
 	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>To talk in a watch party's voice call, with the microphone of an iPhone or iPad near the Apple TV.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

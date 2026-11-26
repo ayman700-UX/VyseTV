@@ -8,60 +8,147 @@
 
 /* Begin PBXBuildFile section */
 		00CD66AD259BD5002B917F8A /* PathMonitorConnectivityProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2022E7199E4DE3036A745862 /* PathMonitorConnectivityProvider.swift */; };
+		06E15E65CAE851DBCCC54FEF /* FlutterRTCDesktopCapturer.m in Sources */ = {isa = PBXBuildFile; fileRef = 04D25EC6550F011E5B66B09E /* FlutterRTCDesktopCapturer.m */; };
+		0885326CA9803D2CC70518BE /* VideoProcessingAdapter.m in Sources */ = {isa = PBXBuildFile; fileRef = 655D201412DFFF91593D786D /* VideoProcessingAdapter.m */; };
 		09E645BC14B4DD18548BBD21 /* TorrserverFlutterPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACEA41BC252E699F308E0A6A /* TorrserverFlutterPlugin.swift */; };
+		1706EB67AB3BC6528C38D7B9 /* AudioRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 475AD0952AF539E92A0F7846 /* AudioRenderer.swift */; };
+		1DA3FF625A7761C414C02758 /* FFTProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1893A584515310E898D36708 /* FFTProcessor.swift */; };
 		2141D8C03547CF695BBA7EC7 /* DeviceInfoPlusPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1DA0771F71F611C96BA0C38 /* DeviceInfoPlusPlugin.swift */; };
 		2284D3C023774EAFCBDE1511 /* messages.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = E09901CF067912FD69FE661B /* messages.g.swift */; };
 		28F54DC97840F7E5993E4EF1 /* MpvPlayerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2D3A748E447E708BCE15C2 /* MpvPlayerPlugin.swift */; };
+		2F52EF35B64D93B154379AA0 /* FlutterRTCFrameCapturer.m in Sources */ = {isa = PBXBuildFile; fileRef = 7E461CF53A22277BBA363AC7 /* FlutterRTCFrameCapturer.m */; };
+		344157A4E6924929A3B60EF6 /* WebRTC.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = AF1409FB429A047CA63F58D8 /* WebRTC.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		353ED574967DF0EE766C4130 /* LocalAudioTrack.swift in Sources */ = {isa = PBXBuildFile; fileRef = F349944AD8A9C2FFFF2DA042 /* LocalAudioTrack.swift */; };
 		374F1F142F1509A247B51167 /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = FD59BD086A0E738D0BDBFB87 /* MPVKit */; };
+		38BCB13371C404A604F1A933 /* FlutterRTCMediaRecorder.m in Sources */ = {isa = PBXBuildFile; fileRef = 2967D77F6014FB91607A8EBD /* FlutterRTCMediaRecorder.m */; };
 		3CAA1B8F11A6A8178B0EEFB8 /* PathProviderPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 988DEDEDE40B93F3EA6CCDFA /* PathProviderPlugin.swift */; };
+		44591CA06864E9F604900CC8 /* LocalVideoTrack.m in Sources */ = {isa = PBXBuildFile; fileRef = 63DA64464A2CCD6771B91EE4 /* LocalVideoTrack.m */; };
+		4874696B21468DA49DCA48D5 /* AudioProcessingAdapter.m in Sources */ = {isa = PBXBuildFile; fileRef = 8621645AEEBDD3C51F1BD3DD /* AudioProcessingAdapter.m */; };
+		487CDCD8C621AC2C639E702B /* AudioConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4129F6FDA634427FBD17F17 /* AudioConverter.swift */; };
 		4B806482BBC9DAF1921908E5 /* ConnectivityProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA9B77A1E9923937F97CB30D /* ConnectivityProvider.swift */; };
+		5ED101FB14B1638A8E73DCB4 /* FlutterWebRTCPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = 993B54CBE347C29ED88A2329 /* FlutterWebRTCPlugin.m */; };
+		6092F64B252684FF9D1D0748 /* FlutterRTCPeerConnection.m in Sources */ = {isa = PBXBuildFile; fileRef = 62BBDEB0AD0E0CB5F6396009 /* FlutterRTCPeerConnection.m */; };
+		64E570CE23CB4EE91A721A8F /* Track.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F4D96D5459C1FC81C97FB96 /* Track.swift */; };
+		69E32DA581F8DE048D621297 /* RemoteAudioTrack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12C8DCEFC0A922E9D13090AC /* RemoteAudioTrack.swift */; };
+		75D0E482EBCF2D94D10910FA /* AVAudioPCMBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BDB138E66D21E3A0B9CB5A /* AVAudioPCMBuffer.swift */; };
+		76A4E6F9BE526EC014671D85 /* FlutterRTCVideoPlatformViewFactory.m in Sources */ = {isa = PBXBuildFile; fileRef = 6A2578A691E11C64A8F94116 /* FlutterRTCVideoPlatformViewFactory.m */; };
 		78C7F5430DCA7A7477F38208 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BDC1EDA2DAC83C45EEE2421E /* Assets.xcassets */; };
 		7A1558F33C74321CE0B2A556 /* TorrServerKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1464605D9CFB74227F80E9B6 /* TorrServerKit.xcframework */; };
 		7B1546251FE2C95668AF76B2 /* KeychainPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D36A9B385C7EE2E4E2B7B8FC /* KeychainPlugin.swift */; };
+		7C9B2784332CC12C8A8B4B8B /* LocalAudioTrack.m in Sources */ = {isa = PBXBuildFile; fileRef = F58A0C02C3FB259003AAA9F1 /* LocalAudioTrack.m */; };
 		7DD19C75648D0456E53C00E8 /* MpvPipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99633CB4C746B610857D1F74 /* MpvPipController.swift */; };
 		8C4C31D7619BF21EF86237F3 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = C171E0A94E489518B61528B7 /* Main.storyboard */; };
+		8ED70CADA50346EFB84A27D2 /* AudioProcessing.swift in Sources */ = {isa = PBXBuildFile; fileRef = B48D4738738339628C2CF152 /* AudioProcessing.swift */; };
+		912DB12A880C1375F1A38A34 /* WebRTC.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF1409FB429A047CA63F58D8 /* WebRTC.xcframework */; };
 		92A7CDE18727E8F4FAFCD088 /* MpvAudioPlayerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D57AD67562DCD88188DBC5E0 /* MpvAudioPlayerPlugin.swift */; };
 		94EDFF24D9E6E47D480D0BB0 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 8D118EAE0B8B33AC37991945 /* LaunchScreen.storyboard */; };
+		997A74D8302BF17A99D95570 /* FlutterRTCVideoPlatformViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 51D436183B22BC1DD0D7E5AC /* FlutterRTCVideoPlatformViewController.m */; };
+		9D99ABD766B1DF23FB726F1D /* RingBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BA32CE56A4E6B8395BAD75B /* RingBuffer.swift */; };
 		9E93B309DD0D7781B77A1689 /* ConnectivityPlusPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 310D9EEB7F6313D223C814EE /* ConnectivityPlusPlugin.swift */; };
+		A3D305164E15237CA2D0F46A /* FlutterRTCMediaStream.m in Sources */ = {isa = PBXBuildFile; fileRef = 4563FDA6D17890A4B4204166 /* FlutterRTCMediaStream.m */; };
+		A44C56108FC4EC490D0DA701 /* FlutterRTCDataChannel.m in Sources */ = {isa = PBXBuildFile; fileRef = EC9FD00FF5B1F6844FBAE959 /* FlutterRTCDataChannel.m */; };
+		A5DFAD09D3A882A2D545BE3E /* BundleInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ABBEA13046ADE41D835D624 /* BundleInfo.swift */; };
 		A87F737659A1E8205588986A /* MpvPlayerCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 668B21287ABD71A0A99483C0 /* MpvPlayerCore.swift */; };
+		ADCE8816CA97799B06CB1CE8 /* FlutterRTCVideoRenderer.m in Sources */ = {isa = PBXBuildFile; fileRef = A6883A6DBA03371E66D71332 /* FlutterRTCVideoRenderer.m */; };
+		AE912960D900E3DC6937CF08 /* Visualizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A304F4F94CA8FA47C5D5EAE /* Visualizer.swift */; };
+		B115719FD0B64D90D53E52F0 /* AudioManager.m in Sources */ = {isa = PBXBuildFile; fileRef = F7BDAF645C3FC099B045D4A2 /* AudioManager.m */; };
 		B9EC66334E3DDF785319A5BE /* AppleTvPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 884C91616F3A3A4A60AB04A5 /* AppleTvPlugin.swift */; };
+		BEEFCF672180718391F61FCF /* FlutterRTCAudioSink.mm in Sources */ = {isa = PBXBuildFile; fileRef = 2153AF4D07604ADDD883E1B1 /* FlutterRTCAudioSink.mm */; };
 		C94EA84881F8210A1D969695 /* MpvPlayerCoreBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B7ACC08A357D594FF8DD039 /* MpvPlayerCoreBase.swift */; };
 		CB64B7B2214000AAA31483CB /* MpvAudioPlayerCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5AFAB45798DD99FCFB1B41E /* MpvAudioPlayerCore.swift */; };
 		D377AF4BFB29FA12B7303C0E /* MpvPlayerPluginShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C6A073E5E4179221F40B27F /* MpvPlayerPluginShared.swift */; };
+		D9C0BC9AF0AD2A8FC07570A6 /* AudioTrack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB506702F70263160425F1B /* AudioTrack.swift */; };
+		DA0128F7115B4C2457B5B942 /* audio_sink_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C7DF93B39D794FBCA53077B7 /* audio_sink_bridge.cpp */; };
+		DCBCC6A8AFC20944D03BD85E /* FlutterRTCVideoPlatformView.m in Sources */ = {isa = PBXBuildFile; fileRef = F2C3FC5A654E0018DCD91D82 /* FlutterRTCVideoPlatformView.m */; };
+		E24FAA118987B647B2D9BC58 /* LiveKitPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF4621B4D3AF6AC6A1A6B595 /* LiveKitPlugin.swift */; };
+		E6A4D0156CA2F1605E8FF226 /* FlutterRTCFrameCryptor.m in Sources */ = {isa = PBXBuildFile; fileRef = 5F6AB7850AD3E2AB95FE81DE /* FlutterRTCFrameCryptor.m */; };
 		E9F799B89C2B4926FE100F16 /* PackageInfoPlusPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63A9C7A299C8591E837F1F55 /* PackageInfoPlusPlugin.swift */; };
 		EBBFE21E8103E66F4CD7AD23 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF6543C58AFDF095146036D7 /* AppDelegate.swift */; };
+		ECD5693C3461FDCF917D1690 /* CameraUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = DC1647534D5E0A014A7BD4EE /* CameraUtils.m */; };
+		F5AD7A6F671B9E4DFEB22841 /* FlutterDataPacketCryptor.m in Sources */ = {isa = PBXBuildFile; fileRef = 2E32FF7F72E2AE3412B02F1B /* FlutterDataPacketCryptor.m */; };
 		F64E0CB285C71A72B5C45EBA /* SharedPreferencesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21CA9C2FCA12ECC6D1F0541D /* SharedPreferencesPlugin.swift */; };
+		FD661AD4C6CD8364748D65FF /* AudioUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = 934F1DF8E2AD444809890464 /* AudioUtils.m */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		283A4C11413E2C6734A56E4C /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				344157A4E6924929A3B60EF6 /* WebRTC.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		04D25EC6550F011E5B66B09E /* FlutterRTCDesktopCapturer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FlutterRTCDesktopCapturer.m; path = Runner/Plugins/flutter_webrtc/FlutterRTCDesktopCapturer.m; sourceTree = SOURCE_ROOT; };
 		0B7ACC08A357D594FF8DD039 /* MpvPlayerCoreBase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvPlayerCoreBase.swift; path = ../ios/Runner/MpvPlayer/MpvPlayerCoreBase.swift; sourceTree = SOURCE_ROOT; };
+		12C8DCEFC0A922E9D13090AC /* RemoteAudioTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RemoteAudioTrack.swift; path = Runner/Plugins/livekit_client/RemoteAudioTrack.swift; sourceTree = SOURCE_ROOT; };
 		1464605D9CFB74227F80E9B6 /* TorrServerKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = TorrServerKit.xcframework; path = Frameworks/TorrServerKit.xcframework; sourceTree = SOURCE_ROOT; };
+		1893A584515310E898D36708 /* FFTProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FFTProcessor.swift; path = Runner/Plugins/livekit_client/FFTProcessor.swift; sourceTree = SOURCE_ROOT; };
 		2022E7199E4DE3036A745862 /* PathMonitorConnectivityProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PathMonitorConnectivityProvider.swift; path = Runner/Plugins/connectivity_plus/PathMonitorConnectivityProvider.swift; sourceTree = SOURCE_ROOT; };
+		2153AF4D07604ADDD883E1B1 /* FlutterRTCAudioSink.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = FlutterRTCAudioSink.mm; path = Runner/Plugins/flutter_webrtc/FlutterRTCAudioSink.mm; sourceTree = SOURCE_ROOT; };
 		21CA9C2FCA12ECC6D1F0541D /* SharedPreferencesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharedPreferencesPlugin.swift; path = Runner/Plugins/shared_preferences_foundation/SharedPreferencesPlugin.swift; sourceTree = SOURCE_ROOT; };
+		2967D77F6014FB91607A8EBD /* FlutterRTCMediaRecorder.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FlutterRTCMediaRecorder.m; path = Runner/Plugins/flutter_webrtc/FlutterRTCMediaRecorder.m; sourceTree = SOURCE_ROOT; };
+		2E32FF7F72E2AE3412B02F1B /* FlutterDataPacketCryptor.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FlutterDataPacketCryptor.m; path = Runner/Plugins/flutter_webrtc/FlutterDataPacketCryptor.m; sourceTree = SOURCE_ROOT; };
 		310D9EEB7F6313D223C814EE /* ConnectivityPlusPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConnectivityPlusPlugin.swift; path = Runner/Plugins/connectivity_plus/ConnectivityPlusPlugin.swift; sourceTree = SOURCE_ROOT; };
+		35BDB138E66D21E3A0B9CB5A /* AVAudioPCMBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AVAudioPCMBuffer.swift; path = Runner/Plugins/livekit_client/AVAudioPCMBuffer.swift; sourceTree = SOURCE_ROOT; };
 		4269D64D8308759DFC7BC916 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = SOURCE_ROOT; };
+		4563FDA6D17890A4B4204166 /* FlutterRTCMediaStream.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FlutterRTCMediaStream.m; path = Runner/Plugins/flutter_webrtc/FlutterRTCMediaStream.m; sourceTree = SOURCE_ROOT; };
+		475AD0952AF539E92A0F7846 /* AudioRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AudioRenderer.swift; path = Runner/Plugins/livekit_client/AudioRenderer.swift; sourceTree = SOURCE_ROOT; };
+		51D436183B22BC1DD0D7E5AC /* FlutterRTCVideoPlatformViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FlutterRTCVideoPlatformViewController.m; path = Runner/Plugins/flutter_webrtc/FlutterRTCVideoPlatformViewController.m; sourceTree = SOURCE_ROOT; };
+		5F6AB7850AD3E2AB95FE81DE /* FlutterRTCFrameCryptor.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FlutterRTCFrameCryptor.m; path = Runner/Plugins/flutter_webrtc/FlutterRTCFrameCryptor.m; sourceTree = SOURCE_ROOT; };
+		62BBDEB0AD0E0CB5F6396009 /* FlutterRTCPeerConnection.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FlutterRTCPeerConnection.m; path = Runner/Plugins/flutter_webrtc/FlutterRTCPeerConnection.m; sourceTree = SOURCE_ROOT; };
 		63A9C7A299C8591E837F1F55 /* PackageInfoPlusPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PackageInfoPlusPlugin.swift; path = Runner/Plugins/package_info_plus/PackageInfoPlusPlugin.swift; sourceTree = SOURCE_ROOT; };
+		63DA64464A2CCD6771B91EE4 /* LocalVideoTrack.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = LocalVideoTrack.m; path = Runner/Plugins/flutter_webrtc/LocalVideoTrack.m; sourceTree = SOURCE_ROOT; };
+		655D201412DFFF91593D786D /* VideoProcessingAdapter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = VideoProcessingAdapter.m; path = Runner/Plugins/flutter_webrtc/VideoProcessingAdapter.m; sourceTree = SOURCE_ROOT; };
 		668B21287ABD71A0A99483C0 /* MpvPlayerCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvPlayerCore.swift; path = ../ios/Runner/MpvPlayer/MpvPlayerCore.swift; sourceTree = SOURCE_ROOT; };
+		6A2578A691E11C64A8F94116 /* FlutterRTCVideoPlatformViewFactory.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FlutterRTCVideoPlatformViewFactory.m; path = Runner/Plugins/flutter_webrtc/FlutterRTCVideoPlatformViewFactory.m; sourceTree = SOURCE_ROOT; };
+		6A304F4F94CA8FA47C5D5EAE /* Visualizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Visualizer.swift; path = Runner/Plugins/livekit_client/Visualizer.swift; sourceTree = SOURCE_ROOT; };
 		6C6A073E5E4179221F40B27F /* MpvPlayerPluginShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvPlayerPluginShared.swift; path = ../ios/Runner/MpvPlayer/MpvPlayerPluginShared.swift; sourceTree = SOURCE_ROOT; };
+		7AB506702F70263160425F1B /* AudioTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AudioTrack.swift; path = Runner/Plugins/livekit_client/AudioTrack.swift; sourceTree = SOURCE_ROOT; };
+		7E461CF53A22277BBA363AC7 /* FlutterRTCFrameCapturer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FlutterRTCFrameCapturer.m; path = Runner/Plugins/flutter_webrtc/FlutterRTCFrameCapturer.m; sourceTree = SOURCE_ROOT; };
 		8557AF3CDE8D4176F2F3D115 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = Runner/Info.plist; sourceTree = SOURCE_ROOT; };
+		8621645AEEBDD3C51F1BD3DD /* AudioProcessingAdapter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AudioProcessingAdapter.m; path = Runner/Plugins/flutter_webrtc/AudioProcessingAdapter.m; sourceTree = SOURCE_ROOT; };
 		87AA67157C2CB763F4AAB1CA /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		884C91616F3A3A4A60AB04A5 /* AppleTvPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppleTvPlugin.swift; path = Runner/AppleTvPlugin.swift; sourceTree = SOURCE_ROOT; };
 		8D118EAE0B8B33AC37991945 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = Runner/Base.lproj/LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
+		934F1DF8E2AD444809890464 /* AudioUtils.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AudioUtils.m; path = Runner/Plugins/flutter_webrtc/AudioUtils.m; sourceTree = SOURCE_ROOT; };
 		988DEDEDE40B93F3EA6CCDFA /* PathProviderPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PathProviderPlugin.swift; path = Runner/Plugins/path_provider/PathProviderPlugin.swift; sourceTree = SOURCE_ROOT; };
+		993B54CBE347C29ED88A2329 /* FlutterWebRTCPlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FlutterWebRTCPlugin.m; path = Runner/Plugins/flutter_webrtc/FlutterWebRTCPlugin.m; sourceTree = SOURCE_ROOT; };
 		99633CB4C746B610857D1F74 /* MpvPipController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvPipController.swift; path = ../ios/Runner/MpvPlayer/MpvPipController.swift; sourceTree = SOURCE_ROOT; };
+		9ABBEA13046ADE41D835D624 /* BundleInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BundleInfo.swift; path = Runner/Plugins/livekit_client/BundleInfo.swift; sourceTree = SOURCE_ROOT; };
+		9BA32CE56A4E6B8395BAD75B /* RingBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RingBuffer.swift; path = Runner/Plugins/livekit_client/RingBuffer.swift; sourceTree = SOURCE_ROOT; };
+		9F4D96D5459C1FC81C97FB96 /* Track.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Track.swift; path = Runner/Plugins/livekit_client/Track.swift; sourceTree = SOURCE_ROOT; };
 		A5AFAB45798DD99FCFB1B41E /* MpvAudioPlayerCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvAudioPlayerCore.swift; path = ../ios/Runner/MpvPlayer/MpvAudioPlayerCore.swift; sourceTree = SOURCE_ROOT; };
+		A6883A6DBA03371E66D71332 /* FlutterRTCVideoRenderer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FlutterRTCVideoRenderer.m; path = Runner/Plugins/flutter_webrtc/FlutterRTCVideoRenderer.m; sourceTree = SOURCE_ROOT; };
 		ACEA41BC252E699F308E0A6A /* TorrserverFlutterPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TorrserverFlutterPlugin.swift; path = ../packages/torrserver_flutter/ios/Classes/TorrserverFlutterPlugin.swift; sourceTree = SOURCE_ROOT; };
+		AF1409FB429A047CA63F58D8 /* WebRTC.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = WebRTC.xcframework; path = Frameworks/WebRTC.xcframework; sourceTree = SOURCE_ROOT; };
 		AF2D3A748E447E708BCE15C2 /* MpvPlayerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvPlayerPlugin.swift; path = ../ios/Runner/MpvPlayer/MpvPlayerPlugin.swift; sourceTree = SOURCE_ROOT; };
 		AF6543C58AFDF095146036D7 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Runner/AppDelegate.swift; sourceTree = SOURCE_ROOT; };
+		B48D4738738339628C2CF152 /* AudioProcessing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AudioProcessing.swift; path = Runner/Plugins/livekit_client/AudioProcessing.swift; sourceTree = SOURCE_ROOT; };
 		BDC1EDA2DAC83C45EEE2421E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = Runner/Assets.xcassets; sourceTree = SOURCE_ROOT; };
 		C171E0A94E489518B61528B7 /* Main.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Main.storyboard; path = Runner/Base.lproj/Main.storyboard; sourceTree = SOURCE_ROOT; };
 		C1DA0771F71F611C96BA0C38 /* DeviceInfoPlusPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DeviceInfoPlusPlugin.swift; path = Runner/Plugins/device_info_plus/DeviceInfoPlusPlugin.swift; sourceTree = SOURCE_ROOT; };
+		C7DF93B39D794FBCA53077B7 /* audio_sink_bridge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = audio_sink_bridge.cpp; path = Runner/Plugins/flutter_webrtc/audio_sink_bridge.cpp; sourceTree = SOURCE_ROOT; };
 		C81E23E0033061DB05D2B452 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		D36A9B385C7EE2E4E2B7B8FC /* KeychainPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KeychainPlugin.swift; path = Runner/Plugins/flutter_secure_storage/KeychainPlugin.swift; sourceTree = SOURCE_ROOT; };
 		D57AD67562DCD88188DBC5E0 /* MpvAudioPlayerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MpvAudioPlayerPlugin.swift; path = ../ios/Runner/MpvPlayer/MpvAudioPlayerPlugin.swift; sourceTree = SOURCE_ROOT; };
 		D5E355512A0454C385CC9A7E /* Generated.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = SOURCE_ROOT; };
+		DC1647534D5E0A014A7BD4EE /* CameraUtils.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = CameraUtils.m; path = Runner/Plugins/flutter_webrtc/CameraUtils.m; sourceTree = SOURCE_ROOT; };
 		E09901CF067912FD69FE661B /* messages.g.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = messages.g.swift; path = Runner/Plugins/shared_preferences_foundation/messages.g.swift; sourceTree = SOURCE_ROOT; };
 		EA9B77A1E9923937F97CB30D /* ConnectivityProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConnectivityProvider.swift; path = Runner/Plugins/connectivity_plus/ConnectivityProvider.swift; sourceTree = SOURCE_ROOT; };
+		EC9FD00FF5B1F6844FBAE959 /* FlutterRTCDataChannel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FlutterRTCDataChannel.m; path = Runner/Plugins/flutter_webrtc/FlutterRTCDataChannel.m; sourceTree = SOURCE_ROOT; };
+		F2C3FC5A654E0018DCD91D82 /* FlutterRTCVideoPlatformView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FlutterRTCVideoPlatformView.m; path = Runner/Plugins/flutter_webrtc/FlutterRTCVideoPlatformView.m; sourceTree = SOURCE_ROOT; };
+		F349944AD8A9C2FFFF2DA042 /* LocalAudioTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LocalAudioTrack.swift; path = Runner/Plugins/livekit_client/LocalAudioTrack.swift; sourceTree = SOURCE_ROOT; };
+		F4129F6FDA634427FBD17F17 /* AudioConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AudioConverter.swift; path = Runner/Plugins/livekit_client/AudioConverter.swift; sourceTree = SOURCE_ROOT; };
+		F58A0C02C3FB259003AAA9F1 /* LocalAudioTrack.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = LocalAudioTrack.m; path = Runner/Plugins/flutter_webrtc/LocalAudioTrack.m; sourceTree = SOURCE_ROOT; };
+		F7BDAF645C3FC099B045D4A2 /* AudioManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AudioManager.m; path = Runner/Plugins/flutter_webrtc/AudioManager.m; sourceTree = SOURCE_ROOT; };
+		FF4621B4D3AF6AC6A1A6B595 /* LiveKitPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LiveKitPlugin.swift; path = Runner/Plugins/livekit_client/LiveKitPlugin.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -71,12 +158,33 @@
 			files = (
 				374F1F142F1509A247B51167 /* MPVKit in Frameworks */,
 				7A1558F33C74321CE0B2A556 /* TorrServerKit.xcframework in Frameworks */,
+				912DB12A880C1375F1A38A34 /* WebRTC.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		06AD3669776F326745E11C5D /* livekit_client */ = {
+			isa = PBXGroup;
+			children = (
+				35BDB138E66D21E3A0B9CB5A /* AVAudioPCMBuffer.swift */,
+				F4129F6FDA634427FBD17F17 /* AudioConverter.swift */,
+				B48D4738738339628C2CF152 /* AudioProcessing.swift */,
+				475AD0952AF539E92A0F7846 /* AudioRenderer.swift */,
+				7AB506702F70263160425F1B /* AudioTrack.swift */,
+				9ABBEA13046ADE41D835D624 /* BundleInfo.swift */,
+				1893A584515310E898D36708 /* FFTProcessor.swift */,
+				FF4621B4D3AF6AC6A1A6B595 /* LiveKitPlugin.swift */,
+				F349944AD8A9C2FFFF2DA042 /* LocalAudioTrack.swift */,
+				12C8DCEFC0A922E9D13090AC /* RemoteAudioTrack.swift */,
+				9BA32CE56A4E6B8395BAD75B /* RingBuffer.swift */,
+				9F4D96D5459C1FC81C97FB96 /* Track.swift */,
+				6A304F4F94CA8FA47C5D5EAE /* Visualizer.swift */,
+			);
+			name = livekit_client;
+			sourceTree = "<group>";
+		};
 		2AC8BA37DAC32D5437812408 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -91,6 +199,8 @@
 				4804126749A8FAF54B4F120D /* connectivity_plus */,
 				7A03E881807FC7EA2073A0C2 /* device_info_plus */,
 				94DD2367B4655CAD52692160 /* flutter_secure_storage */,
+				B893840186B20B38D9C26180 /* flutter_webrtc */,
+				06AD3669776F326745E11C5D /* livekit_client */,
 				9C0E6F8C84A57C25B9443140 /* package_info_plus */,
 				E6505DE2359C0AA95688B6E3 /* path_provider */,
 				6208B0289308DEC5533CA12A /* shared_preferences_foundation */,
@@ -133,6 +243,7 @@
 			isa = PBXGroup;
 			children = (
 				1464605D9CFB74227F80E9B6 /* TorrServerKit.xcframework */,
+				AF1409FB429A047CA63F58D8 /* WebRTC.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -199,6 +310,35 @@
 			name = Runner;
 			sourceTree = "<group>";
 		};
+		B893840186B20B38D9C26180 /* flutter_webrtc */ = {
+			isa = PBXGroup;
+			children = (
+				F7BDAF645C3FC099B045D4A2 /* AudioManager.m */,
+				8621645AEEBDD3C51F1BD3DD /* AudioProcessingAdapter.m */,
+				934F1DF8E2AD444809890464 /* AudioUtils.m */,
+				DC1647534D5E0A014A7BD4EE /* CameraUtils.m */,
+				2E32FF7F72E2AE3412B02F1B /* FlutterDataPacketCryptor.m */,
+				2153AF4D07604ADDD883E1B1 /* FlutterRTCAudioSink.mm */,
+				EC9FD00FF5B1F6844FBAE959 /* FlutterRTCDataChannel.m */,
+				04D25EC6550F011E5B66B09E /* FlutterRTCDesktopCapturer.m */,
+				7E461CF53A22277BBA363AC7 /* FlutterRTCFrameCapturer.m */,
+				5F6AB7850AD3E2AB95FE81DE /* FlutterRTCFrameCryptor.m */,
+				2967D77F6014FB91607A8EBD /* FlutterRTCMediaRecorder.m */,
+				4563FDA6D17890A4B4204166 /* FlutterRTCMediaStream.m */,
+				62BBDEB0AD0E0CB5F6396009 /* FlutterRTCPeerConnection.m */,
+				F2C3FC5A654E0018DCD91D82 /* FlutterRTCVideoPlatformView.m */,
+				51D436183B22BC1DD0D7E5AC /* FlutterRTCVideoPlatformViewController.m */,
+				6A2578A691E11C64A8F94116 /* FlutterRTCVideoPlatformViewFactory.m */,
+				A6883A6DBA03371E66D71332 /* FlutterRTCVideoRenderer.m */,
+				993B54CBE347C29ED88A2329 /* FlutterWebRTCPlugin.m */,
+				F58A0C02C3FB259003AAA9F1 /* LocalAudioTrack.m */,
+				63DA64464A2CCD6771B91EE4 /* LocalVideoTrack.m */,
+				655D201412DFFF91593D786D /* VideoProcessingAdapter.m */,
+				C7DF93B39D794FBCA53077B7 /* audio_sink_bridge.cpp */,
+			);
+			name = flutter_webrtc;
+			sourceTree = "<group>";
+		};
 		E6505DE2359C0AA95688B6E3 /* path_provider */ = {
 			isa = PBXGroup;
 			children = (
@@ -218,6 +358,7 @@
 				6C521AF8D6B34123C882A873 /* Sources */,
 				F845A3CC75B2C88E09C8099E /* Frameworks */,
 				987A4C32CF05F65AC894E5F6 /* Resources */,
+				283A4C11413E2C6734A56E4C /* Embed Frameworks */,
 				35DDA4A8361323CBD63E65DA /* Thin Binary */,
 			);
 			buildRules = (
@@ -330,6 +471,41 @@
 				3CAA1B8F11A6A8178B0EEFB8 /* PathProviderPlugin.swift in Sources */,
 				F64E0CB285C71A72B5C45EBA /* SharedPreferencesPlugin.swift in Sources */,
 				2284D3C023774EAFCBDE1511 /* messages.g.swift in Sources */,
+				B115719FD0B64D90D53E52F0 /* AudioManager.m in Sources */,
+				4874696B21468DA49DCA48D5 /* AudioProcessingAdapter.m in Sources */,
+				FD661AD4C6CD8364748D65FF /* AudioUtils.m in Sources */,
+				ECD5693C3461FDCF917D1690 /* CameraUtils.m in Sources */,
+				F5AD7A6F671B9E4DFEB22841 /* FlutterDataPacketCryptor.m in Sources */,
+				BEEFCF672180718391F61FCF /* FlutterRTCAudioSink.mm in Sources */,
+				A44C56108FC4EC490D0DA701 /* FlutterRTCDataChannel.m in Sources */,
+				06E15E65CAE851DBCCC54FEF /* FlutterRTCDesktopCapturer.m in Sources */,
+				2F52EF35B64D93B154379AA0 /* FlutterRTCFrameCapturer.m in Sources */,
+				E6A4D0156CA2F1605E8FF226 /* FlutterRTCFrameCryptor.m in Sources */,
+				38BCB13371C404A604F1A933 /* FlutterRTCMediaRecorder.m in Sources */,
+				A3D305164E15237CA2D0F46A /* FlutterRTCMediaStream.m in Sources */,
+				6092F64B252684FF9D1D0748 /* FlutterRTCPeerConnection.m in Sources */,
+				DCBCC6A8AFC20944D03BD85E /* FlutterRTCVideoPlatformView.m in Sources */,
+				997A74D8302BF17A99D95570 /* FlutterRTCVideoPlatformViewController.m in Sources */,
+				76A4E6F9BE526EC014671D85 /* FlutterRTCVideoPlatformViewFactory.m in Sources */,
+				ADCE8816CA97799B06CB1CE8 /* FlutterRTCVideoRenderer.m in Sources */,
+				5ED101FB14B1638A8E73DCB4 /* FlutterWebRTCPlugin.m in Sources */,
+				7C9B2784332CC12C8A8B4B8B /* LocalAudioTrack.m in Sources */,
+				44591CA06864E9F604900CC8 /* LocalVideoTrack.m in Sources */,
+				0885326CA9803D2CC70518BE /* VideoProcessingAdapter.m in Sources */,
+				DA0128F7115B4C2457B5B942 /* audio_sink_bridge.cpp in Sources */,
+				75D0E482EBCF2D94D10910FA /* AVAudioPCMBuffer.swift in Sources */,
+				487CDCD8C621AC2C639E702B /* AudioConverter.swift in Sources */,
+				8ED70CADA50346EFB84A27D2 /* AudioProcessing.swift in Sources */,
+				1706EB67AB3BC6528C38D7B9 /* AudioRenderer.swift in Sources */,
+				D9C0BC9AF0AD2A8FC07570A6 /* AudioTrack.swift in Sources */,
+				A5DFAD09D3A882A2D545BE3E /* BundleInfo.swift in Sources */,
+				1DA3FF625A7761C414C02758 /* FFTProcessor.swift in Sources */,
+				E24FAA118987B647B2D9BC58 /* LiveKitPlugin.swift in Sources */,
+				353ED574967DF0EE766C4130 /* LocalAudioTrack.swift in Sources */,
+				69E32DA581F8DE048D621297 /* RemoteAudioTrack.swift in Sources */,
+				9D99ABD766B1DF23FB726F1D /* RingBuffer.swift in Sources */,
+				64E570CE23CB4EE91A721A8F /* Track.swift in Sources */,
+				AE912960D900E3DC6937CF08 /* Visualizer.swift in Sources */,
 				CB64B7B2214000AAA31483CB /* MpvAudioPlayerCore.swift in Sources */,
 				92A7CDE18727E8F4FAFCD088 /* MpvAudioPlayerPlugin.swift in Sources */,
 				7DD19C75648D0456E53C00E8 /* MpvPipController.swift in Sources */,
@@ -349,6 +525,8 @@
 			baseConfigurationReference = 4269D64D8308759DFC7BC916 /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
+				CLANG_CXX_LIBRARY = "libc++";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
@@ -358,6 +536,11 @@
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Runner/Plugins/flutter_webrtc/include/flutter_webrtc",
+					"$(PROJECT_DIR)/Runner/Plugins/flutter_webrtc/include",
 				);
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -371,9 +554,10 @@
 				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.vyse.vyseTv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 3;
-				TVOS_DEPLOYMENT_TARGET = 15.0;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Profile;
@@ -393,7 +577,7 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				TARGETED_DEVICE_FAMILY = 3;
-				TVOS_DEPLOYMENT_TARGET = 15.0;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -403,6 +587,8 @@
 			baseConfigurationReference = C81E23E0033061DB05D2B452 /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
+				CLANG_CXX_LIBRARY = "libc++";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
@@ -412,6 +598,11 @@
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Runner/Plugins/flutter_webrtc/include/flutter_webrtc",
+					"$(PROJECT_DIR)/Runner/Plugins/flutter_webrtc/include",
 				);
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -426,10 +617,11 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.vyse.vyseTv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 3;
-				TVOS_DEPLOYMENT_TARGET = 15.0;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
@@ -439,6 +631,8 @@
 			baseConfigurationReference = 4269D64D8308759DFC7BC916 /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
+				CLANG_CXX_LIBRARY = "libc++";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
@@ -448,6 +642,11 @@
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Runner/Plugins/flutter_webrtc/include/flutter_webrtc",
+					"$(PROJECT_DIR)/Runner/Plugins/flutter_webrtc/include",
 				);
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -461,9 +660,10 @@
 				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.vyse.vyseTv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 3;
-				TVOS_DEPLOYMENT_TARGET = 15.0;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
@@ -488,7 +688,7 @@
 				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				TARGETED_DEVICE_FAMILY = 3;
-				TVOS_DEPLOYMENT_TARGET = 15.0;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = Debug;
 		};
@@ -507,7 +707,7 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				TARGETED_DEVICE_FAMILY = 3;
-				TVOS_DEPLOYMENT_TARGET = 15.0;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Profile;

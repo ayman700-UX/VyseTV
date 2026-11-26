@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/layout.dart';
-import '../../core/platform/apple_tv.dart';
 import '../../core/platform/webos.dart';
 import '../../core/nav.dart' show rootNavigatorKey;
 import '../../core/theme.dart';
@@ -212,9 +211,10 @@ class _RoomPageState extends State<RoomPage> {
   static void _tellOthers() => WidgetsBinding.instance.addPostFrameCallback((_) => RoomPage._openChanged.value++);
 
   Future<void> _joinVoice() async {
-    // (the voice library has no LG webOS side, and no Apple TV one yet; a Samsung TV has
-    // Samsung's, added by tool/tizen/stage.py)
-    if (WebOS.isTv || AppleTv.isTv) return _toast(context, 'Voice calls are not available on this TV');
+    // (the voice library has no LG webOS side. A Samsung TV has Samsung's, added by
+    // tool/tizen/stage.py; an Apple TV has the iPhone's, compiled into the app for tvOS 17.
+    // A TV with no microphone listens: Voice.noMic)
+    if (WebOS.isTv) return _toast(context, 'Voice calls are not available on this TV');
     try {
       await Voice.join();
     } catch (e) {

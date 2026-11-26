@@ -568,6 +568,9 @@ jobs:
           rm -rf tvos/Frameworks && mkdir -p tvos/Frameworks
           unzip -q packages/torrserver_flutter/binaries/TorrServerKit-tvos.xcframework.zip -d tvos/Frameworks
           plutil -p tvos/Frameworks/TorrServerKit.xcframework/Info.plist | grep -E 'LibraryIdentifier|SupportedPlatform'
+      # A party's voice call: the WebRTC build flutter_webrtc pins, its Apple TV slices (tvOS 17)
+      - name: Fetch WebRTC for tvOS
+        run: bash tvos/scripts/fetch_webrtc.sh
       - name: Fetch the Flutter engine for tvOS
         run: |
           # (Flutter's own iPhone tools: the Dart compiler for the TV where the engine's cannot run)

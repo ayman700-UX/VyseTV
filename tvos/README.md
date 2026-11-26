@@ -8,7 +8,9 @@ proven" at the end says how far each part got.
 
 ## Which Apple TVs
 
-Apple TV HD and Apple TV 4K, on tvOS 15 or newer.
+Apple TV HD and Apple TV 4K, on tvOS 17 or newer (every Apple TV that had tvOS 15 can update to
+17). It was 15 until the party's voice call came in: the WebRTC build it runs on has its Apple TV
+slices from tvOS 17.
 
 ## Putting it on an Apple TV
 
@@ -24,6 +26,12 @@ as it is installed:
 
 With a free Apple ID the signature lasts **7 days**, and three apps at most at a time. With a
 paid developer account, a year. After that the app does not open until it is signed again.
+
+**Updates.** An Apple TV app cannot install a new version of itself. When there is one, the update
+box shows a QR code that takes a phone to the release. atvloadly can do it all by itself: it
+follows an AltStore source and installs new versions as they come. Each release with an Apple TV
+build publishes one (`altstore.json` beside the update list, written by `scripts/make_update.py`);
+add its address in atvloadly once and turn on its automatic updates.
 
 ## How it works
 
@@ -55,6 +63,7 @@ the app and registered by hand (`tvos/Runner/AppDelegate.swift`):
 | Sign-ins and keys | `KeychainPlugin.swift`: the Keychain, which the system never clears |
 | Torrents | `packages/torrserver_flutter`'s plugin, with TorrServer linked into the app: `TorrServerKit-tvos.xcframework.zip` in its `binaries/`, built by the `tvos-torrent` job (`[tvos-torrent]`, `tool/go-shim/build-tvos-xcframework.sh`: TorrServer MatriX.151 with NetBird's gomobile fork, which knows tvOS). Device only: there is no simulator build |
 | No screen saver during a video | `AppleTvPlugin.swift` |
+| A party's voice call | the iPhone's `flutter_webrtc` and `livekit_client`, copied whole at the locked versions by `tool/tvos/vendor_plugins.py` with what tvOS lacks taken out (a phone's loudspeaker switch; the camera and screen capture answer "not on Apple TV"), their Objective-C reaching the Swift through `Runner/Runner-Bridging-Header.h`; WebRTC itself is the build `flutter_webrtc` pins (`tvos/webrtc.version`), its Apple TV slices fetched by `tvos/scripts/fetch_webrtc.sh` and put in the app |
 
 The Dart halves the tool would register from Dart are registered in `AppleTv.install()`.
 
@@ -66,11 +75,13 @@ not what the scripts make.
 
 - **Downloads.** An app on an Apple TV has no storage the system will not clear when it runs
   short. The Downloads section and the player's Download are not shown.
-- **Voice calls in a party, party alert tones, notifications.** Their libraries have no tvOS
-  side.
+- **Talking in a party's voice call**, unless an iPhone or iPad lends its microphone (tvOS 17's
+  Continuity Camera); without one the Apple TV is in the call listening, with no mic button.
+- **Party alert tones, notifications.** Their libraries have no tvOS side.
 - **Links that open another app or a browser.** There is no browser; the TV's settings QR and the
   phone page are the way to anything that needs one.
-- **Updates from inside the app.** It is signed and put on from a computer.
+- **Updates from inside the app.** It is signed and put on from a computer (see "Updates" above:
+  atvloadly does it by itself).
 
 What the system may clear: the app's caches (artwork, the scraper plugins' scripts) and its
 files. Settings and sign-ins are kept where it does not clear them (the preferences store and the
@@ -89,6 +100,7 @@ the first Siri Remote (no ring) is driven by.
 |---|---|
 | The Dart | Analyzed and tested on a PC (`test/apple_tv_remote_test.dart`, `test/tv_secrets_test.dart`) |
 | The project, the engine, the Swift | Built on GitHub (26 November 2026): a 45 MB `.ipa`, tvOS 15 and up, arm64, with App.framework (20 MB), the tvOS Flutter engine and the mpv frameworks. The Dart snapshot matches the engine's version hash |
+| The voice call | Not built yet when this was written: the copies and the project are made, the first GitHub build will say what tvOS still lacks |
 | Anything on an Apple TV | Not run yet |
 
 What only an Apple TV can answer, in the order it would show up: does it open; do the remote's
