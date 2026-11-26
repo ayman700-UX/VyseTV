@@ -152,8 +152,10 @@ say "5. the engine LG built for the TV, and a look at the whole"
 export PATH="$SDK/bin:$NODE_DIR/bin:$PATH"
 export WEBOS_FLUTTER_NDK_ENV="$NDK_ENV"
 flutter-webos precache
-# (says what is missing; Android and Chrome are, and are not needed)
-flutter-webos doctor -v || true
+# (says what is missing; Android and Chrome may be, and are not needed. With a time limit
+# and nothing to read from: on a machine that has Android's tools its Android check can sit
+# waiting for an answer nobody is there to give, which once held a whole build up.)
+timeout 180 flutter-webos doctor -v </dev/null || true
 
 say "ready"
 echo "Build with: tool/webos/build.sh"
