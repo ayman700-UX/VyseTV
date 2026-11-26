@@ -524,6 +524,21 @@ BuildAppRelease() {
       break
     fi
   done
+  # VyseTV: none of the engine's runs here (they are Apple silicon only, and GitHub's Apple
+  # silicon Macs rarely come): Flutter's own iPhone gen_snapshot, the same Dart at the same
+  # version, compiles for the same arm64. As with the Dart runtime above, only when the Dart
+  # versions are the same.
+  if [ -z "$GEN_SNAPSHOT" ]; then
+    local stock="${FLUTTER_ROOT:-}/bin/cache/artifacts/engine/ios-release/gen_snapshot_arm64"
+    local packaged_version="" flutter_version=""
+    [ -f "$HOST_TOOLS/dart-sdk/version" ] && packaged_version="$(tr -d '[:space:]' < "$HOST_TOOLS/dart-sdk/version")"
+    [ -f "${FLUTTER_ROOT:-}/bin/cache/dart-sdk/version" ] && flutter_version="$(tr -d '[:space:]' < "$FLUTTER_ROOT/bin/cache/dart-sdk/version")"
+    if [ -x "$stock" ] && [ -n "$packaged_version" ] && [ "$packaged_version" = "$flutter_version" ] \
+        && lipo -archs "$stock" 2>/dev/null | tr ' ' '\n' | grep -qx "$host_arch"; then
+      echo " └─the engine's gen_snapshot is not for this Mac ($host_arch); Flutter's own iPhone one, Dart $flutter_version"
+      GEN_SNAPSHOT="$stock"
+    fi
+  fi
   if [ -z "$GEN_SNAPSHOT" ]; then
     echo " └─ERROR: gen_snapshot not found under $DEVICE_TOOLS or $HOST_TOOLS"
     return 1

@@ -520,25 +520,17 @@ jobs:
   #
   # Flutter's tool has no Apple TV target: the app is built by Xcode from tvos/Runner.xcodeproj,
   # on a Flutter engine made for tvOS (tvos/engine.version), and the Dart by that engine's own
-  # compiler (tvos/scripts/xcode_appletv.sh). That engine's tools are for Apple silicon only, so
-  # an Intel Mac cannot build it; and GitHub's Apple silicon Macs with macOS 26 (macos-26) are so
-  # few that a job can wait for one for good. So macOS 15 on Apple silicon, with the Xcode 26 it
-  # carries beside its own (the player's Swift needs Xcode 26's SDKs, as on iPhone).
+  # compiler (tvos/scripts/xcode_appletv.sh). On an Intel Mac, as the iPhone job: no Apple silicon
+  # Mac (macos-26, macos-15) has ever taken a job of this repository. The engine's own tools are
+  # Apple silicon only, so there the Dart is compiled with Flutter's own runtime, front end and
+  # iPhone gen_snapshot of the same Dart version (the script checks that it is the same).
   tvos:
     name: Apple TV (unsigned .ipa, for sideloading)
     needs: plan
     if: ${{ needs.plan.outputs.tvos == 'true' }}
-    runs-on: macos-15
+    runs-on: macos-26-intel
     steps:
       - uses: actions/checkout@v4
-      - name: Use Xcode 26
-        run: |
-          X="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -v -i beta | sort -V | tail -n 1)"
-          [ -n "$X" ] || X="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1)"
-          [ -n "$X" ] || { echo "::error::No Xcode 26 on this runner: $(ls -d /Applications/Xcode*.app | tr '\n' ' ')"; exit 1; }
-          sudo xcode-select -s "$X/Contents/Developer"
-          xcodebuild -version
-          echo "this Mac: $(uname -m)"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -568,7 +560,12 @@ jobs:
           git diff --exit-code -- tvos/ || { echo "::error::tvos/ is not what tool/tvos/make_project.py makes: run it and commit the result."; exit 1; }
       - name: Fetch the Flutter engine for tvOS
         run: |
+          # (Flutter's own iPhone tools: the Dart compiler for the TV where the engine's cannot run)
+          flutter precache --ios
           bash tvos/scripts/fetch_engine.sh
+          echo "Dart: engine $(cat "$HOME/.cache/flutter-tvos-engine/v$(cat tvos/engine.version)/out/host_release/dart-sdk/version" 2>/dev/null), Flutter $(cat "$FLUTTER_ROOT/bin/cache/dart-sdk/version")"
+          echo "Flutter's engine: $(cat "$FLUTTER_ROOT/bin/cache/engine.stamp" 2>/dev/null || cat "$FLUTTER_ROOT/bin/internal/engine.version")"
+          lipo -archs "$FLUTTER_ROOT/bin/cache/artifacts/engine/ios-release/gen_snapshot_arm64" || true
           # (which of the engine's tools this Mac can run: the Dart compiler for the TV must be one)
           ENGINE="$(sed -n 's/^FLUTTER_LOCAL_ENGINE=//p' tvos/Flutter/Generated.xcconfig)"
           echo "this Mac: $(uname -m)"
