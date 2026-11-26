@@ -169,12 +169,17 @@ set_target_properties(vyse_wayland_test PROPERTIES
   SKIP_BUILD_RPATH TRUE)
 
 # What goes into lib/ beside the runner, next to the plugin itself.
-set(vyse_webos_bundled_libraries
+set(VYSE_BUNDLED
   "$<TARGET_FILE:quickjs_c_bridge_plugin>"
   "$<TARGET_FILE:vyse_fallback>"
   "$<TARGET_FILE:vyse_wayland>"
   "$<TARGET_FILE:vyse_sdevent>"
   "$<TARGET_FILE:vyse_wlegl>"
   "$<TARGET_FILE:vyse_start>"
-  PARENT_SCOPE
 )
+# A party's voice call, listening (packages/vyse_webos/voice: Go, built with this NDK by
+# tool/webos/build.sh before LG's tool runs). Without it the app says voice is not here.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/libvyse_voice.so")
+  list(APPEND VYSE_BUNDLED "${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/libvyse_voice.so")
+endif()
+set(vyse_webos_bundled_libraries ${VYSE_BUNDLED} PARENT_SCOPE)

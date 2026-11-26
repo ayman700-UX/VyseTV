@@ -243,17 +243,21 @@ def main():
         f'\t\t\tdstPath = "";\n\t\t\tdstSubfolderSpec = 10;\n\t\t\tfiles = (\n\t\t\t\t{webrtc_embed} /* WebRTC.xcframework in Embed Frameworks */,\n\t\t\t);\n'
         f'\t\t\tname = "Embed Frameworks";\n\t\t\trunOnlyForDeploymentPostprocessing = 0;\n\t\t}};')
 
-    def script(name, command):
+    def script(name, command, inputs=()):
         ident = oid('phase', name)
+        paths = ''.join(f'\t\t\t\t{q(i)},\n' for i in inputs)
         add('PBXShellScriptBuildPhase', ident,
             f'{ident} /* {name} */ = {{\n\t\t\tisa = PBXShellScriptBuildPhase;\n\t\t\talwaysOutOfDate = 1;\n'
-            f'\t\t\tbuildActionMask = 2147483647;\n\t\t\tfiles = (\n\t\t\t);\n\t\t\tinputPaths = (\n\t\t\t);\n'
+            f'\t\t\tbuildActionMask = 2147483647;\n\t\t\tfiles = (\n\t\t\t);\n\t\t\tinputPaths = (\n{paths}\t\t\t);\n'
             f'\t\t\tname = {q(name)};\n\t\t\toutputPaths = (\n\t\t\t);\n\t\t\trunOnlyForDeploymentPostprocessing = 0;\n'
             f'\t\t\tshellPath = /bin/sh;\n\t\t\tshellScript = {q(command)};\n\t\t}};')
         return ident
 
     run_script = script('Run Script', '/bin/bash "$SOURCE_ROOT/scripts/xcode_appletv.sh" build\n')
-    thin_binary = script('Thin Binary', '/bin/bash "$SOURCE_ROOT/scripts/xcode_appletv.sh" sync_version\n')
+    # (after Xcode has written the app's Info.plist, which it versions: named as its input, as
+    # Flutter's own iPhone template does, or Xcode may run it first)
+    thin_binary = script('Thin Binary', '/bin/bash "$SOURCE_ROOT/scripts/xcode_appletv.sh" sync_version\n',
+                         inputs=('${TARGET_BUILD_DIR}/${INFOPLIST_PATH}',))
 
     # ── configurations ──
     common = {

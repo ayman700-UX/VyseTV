@@ -80,3 +80,5 @@ FRONTEND_PROMPT.md
 packages/torrserver_flutter/tool/go-shim/torrserver-src/
 packages/torrserver_flutter/dist/
 packages/torrserver_flutter/tool/go-shim/tools_tvos.go
+# built for LG TVs by packages/vyse_webos/voice/build.sh
+packages/vyse_webos/webos/prebuilt/

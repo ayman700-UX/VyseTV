@@ -265,7 +265,17 @@ events back); everything that decides anything is Dart, and tested.
   Passthrough are not offered: the TV's player has none of them, and its own sound settings
   decide what reaches a receiver.
 - *Not there:* upscaling and ambient lighting (mpv shaders), subtitle sync by ear (it needs a
-  second decoder), picture-in-picture, external players, voice calls in a party, alert tones.
+  second decoder), picture-in-picture, external players (no other player app on an LG TV takes
+  a link), Downloads (on no TV).
+
+**A party's voice call**, listening: there is no WebRTC library for an LG TV's 32-bit ARM, and
+LG gives apps no microphone. So the TV joins the call through VyseTV's own small LiveKit client,
+`packages/vyse_webos/voice` (Go: LiveKit's Go SDK receives everyone's audio, libopus decodes it,
+the voices are mixed with each person's volume and played through ALSA, or PulseAudio when ALSA
+does not open). `tool/webos/build.sh` builds it with LG's NDK before LG's tool runs; the plugin's
+CMake puts it in `lib/`. The party's sounds (join, leave, a message) play through the same
+output. Never run on a TV: whether a webOS app may open ALSA or PulseAudio is the first thing a
+TV will say.
 
 **Torrents** play through the same engine as on a PC: TorrServer's own 32-bit ARM build, a
 static program carried in the package (`packages/torrserver_flutter/webos`) and started by the

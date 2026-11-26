@@ -504,6 +504,11 @@ jobs:
           fi
           printf '%s' "$SERVER_CONFIG" | base64 -d > lib/data/server_config.dart
           grep -q updateListAddresses lib/data/server_config.dart
+      # (the party's voice on an LG TV is Go: packages/vyse_webos/voice)
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/vyse_webos/voice/go.mod
+          cache: false
       - name: LG's Flutter SDK, webOS CLI and NDK
         run: bash tool/webos/setup.sh --accept-lg-ndk-license
       - name: Build

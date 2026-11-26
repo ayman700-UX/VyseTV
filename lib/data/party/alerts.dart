@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:audioplayers/audioplayers.dart' as ap;
@@ -11,6 +12,8 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../core/platform/apple_tv.dart';
 import '../../core/platform/tizen_tv.dart';
+import '../../core/platform/webos.dart';
+import 'voice_lg.dart';
 import '../account/account.dart';
 import '../app_settings.dart';
 import 'dms.dart';
@@ -85,10 +88,11 @@ class PartyAlerts {
 
   static Future<void> play(PartySound s) async {
     if (!AppSettings.partySounds.value) return;
-    // An LG TV has one media player with a few slots, and the film and the music have them:
-    // a tone over a film would take one. No tones there, nor on a Samsung TV (the same holds,
-    // and audioplayers has no Tizen side). Nor on an Apple TV: audioplayers has no tvOS side.
-    if (LinuxTv.isTv || AppleTv.isTv) return;
+    // The TVs: audioplayers has no side there, and on LG and Samsung the TV's player is the
+    // film's (a tone would take it). So each plays the sound its own way, from a copy of it in a
+    // file: LG through VyseTV's own sound output (the party voice library), Samsung through
+    // Tizen's WAV player, Apple TV through AVAudioPlayer.
+    if (LinuxTv.isTv || AppleTv.isTv) return _playOnTv(s);
     try {
       // Short bundled tones: audioplayers, so they never take one of the mpv cores
       // the video and music players use.
@@ -97,6 +101,33 @@ class PartyAlerts {
       await p.play(ap.AssetSource('sounds/${s.name}.wav'), volume: .8);
     } catch (_) {}
   }
+
+  static Future<void> _playOnTv(PartySound s) async {
+    try {
+      final path = await _soundFile(s);
+      if (WebOS.isTv) {
+        LgVoice.playWav(path, .8);
+      } else if (TizenTv.isTv) {
+        TizenTv.playWav(path);
+      } else if (AppleTv.isTv) {
+        await AppleTv.playSound(path);
+      }
+    } catch (_) {}
+  }
+
+  /// The sound as a file (the TVs' players take a path): written once from the app's assets.
+  static Future<String> _soundFile(PartySound s) async {
+    final have = _soundFiles[s];
+    if (have != null) return have;
+    final dir = Directory('${Directory.systemTemp.path}${Platform.pathSeparator}vyse_sounds');
+    await dir.create(recursive: true);
+    final file = File('${dir.path}${Platform.pathSeparator}${s.name}.wav');
+    final data = await rootBundle.load('assets/sounds/${s.name}.wav');
+    await file.writeAsBytes(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes), flush: true);
+    return _soundFiles[s] = file.path;
+  }
+
+  static final _soundFiles = <PartySound, String>{};
 
   static bool get _quiet => Account.user.value?.statusMode == 'dnd';
 

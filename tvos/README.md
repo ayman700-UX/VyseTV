@@ -75,9 +75,11 @@ not what the scripts make.
 
 - **Downloads.** An app on an Apple TV has no storage the system will not clear when it runs
   short. The Downloads section and the player's Download are not shown.
-- **Talking in a party's voice call**, unless an iPhone or iPad lends its microphone (tvOS 17's
-  Continuity Camera); without one the Apple TV is in the call listening, with no mic button.
-- **Party alert tones, notifications.** Their libraries have no tvOS side.
+- **Talking in a party's voice call** needs an iPhone or iPad to lend its microphone: the call
+  bar's "Use an iPhone's mic" opens tvOS 17's Continuity picker. Without one the Apple TV is in
+  the call listening.
+- **Notifications.** A TV app has none; the in-app pop-up is all there is. (Party sounds play,
+  through AVAudioPlayer: `AppleTvPlugin.swift`.)
 - **Links that open another app or a browser.** There is no browser; the TV's settings QR and the
   phone page are the way to anything that needs one.
 - **Updates from inside the app.** It is signed and put on from a computer (see "Updates" above:
@@ -100,7 +102,8 @@ the first Siri Remote (no ring) is driven by.
 |---|---|
 | The Dart | Analyzed and tested on a PC (`test/apple_tv_remote_test.dart`, `test/tv_secrets_test.dart`) |
 | The project, the engine, the Swift | Built on GitHub (26 November 2026): a 45 MB `.ipa`, tvOS 15 and up, arm64, with App.framework (20 MB), the tvOS Flutter engine and the mpv frameworks. The Dart snapshot matches the engine's version hash |
-| The voice call | Not built yet when this was written: the copies and the project are made, the first GitHub build will say what tvOS still lacks |
+| The voice call | Every copied WebRTC and LiveKit source compiled for tvOS on GitHub (27 November 2026); never run |
+| Other player apps | VyseTV hands a link to VLC or Infuse when installed (their x-callback schemes); never run |
 | Anything on an Apple TV | Not run yet |
 
 What only an Apple TV can answer, in the order it would show up: does it open; do the remote's

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/layout.dart';
+import '../../core/platform/apple_tv.dart';
 import '../../core/platform/webos.dart';
 import '../../core/nav.dart' show rootNavigatorKey;
 import '../../core/theme.dart';
@@ -17,6 +18,7 @@ import '../../data/party/friends.dart';
 import '../../data/party/party_live.dart';
 import '../../data/party/rooms.dart';
 import '../../data/party/voice.dart';
+import '../../data/party/voice_lg.dart';
 import '../../data/party/watch_party.dart';
 import '../../dpad/dpad_navigator.dart';
 import '../../widgets/common.dart';
@@ -211,10 +213,11 @@ class _RoomPageState extends State<RoomPage> {
   static void _tellOthers() => WidgetsBinding.instance.addPostFrameCallback((_) => RoomPage._openChanged.value++);
 
   Future<void> _joinVoice() async {
-    // (the voice library has no LG webOS side. A Samsung TV has Samsung's, added by
-    // tool/tizen/stage.py; an Apple TV has the iPhone's, compiled into the app for tvOS 17.
-    // A TV with no microphone listens: Voice.noMic)
-    if (WebOS.isTv) return _toast(context, 'Voice calls are not available on this TV');
+    // (an LG TV joins through VyseTV's own listening client, lib/data/party/voice_lg.dart; a
+    // package built without it has no voice. A Samsung TV has Samsung's WebRTC, added by
+    // tool/tizen/stage.py; an Apple TV the iPhone's, compiled into the app for tvOS 17. A TV with
+    // no microphone listens: Voice.noMic)
+    if (WebOS.isTv && !LgVoice.available) return _toast(context, 'Voice calls are not available on this TV');
     try {
       await Voice.join();
     } catch (e) {
@@ -904,7 +907,14 @@ class _VoiceBar extends StatelessWidget {
               else if (state == VoiceState.connecting)
                 const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2, color: VyseColors.textDim))
               else ...[
-                if (Voice.noMic.value)
+                // (no microphone here; an Apple TV can borrow an iPhone's or iPad's)
+                if (Voice.noMic.value && AppleTv.isTv)
+                  PartyChipButton(icon: Icons.mic_external_on_rounded, label: labels ? "Use an iPhone's mic" : 'Mic', onTap: () async {
+                    if (await AppleTv.pickMicrophone() && !await Voice.retryMic() && context.mounted) {
+                      _toast(context, "The microphone didn't start. You can still listen.");
+                    }
+                  })
+                else if (Voice.noMic.value)
                   const SizedBox.shrink()
                 else if (ptt) ...[if (!pttBelow) const HoldToTalk()] else
                   _RoundToggle(

@@ -10,6 +10,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/platform/apple_tv.dart';
+
 class ExternalPlayer {
   const ExternalPlayer(this.name, this.exe, this._args);
   final String name;
@@ -22,6 +24,8 @@ class ExternalPlayer {
   static Future<List<ExternalPlayer>> available() async {
     if (kIsWeb) return const [];
     if (Platform.isAndroid) return [ExternalPlayer('Another app', null, (_, _, _, _) => const [])];
+    // (an Apple TV: the player apps on it that take a link, VLC and Infuse)
+    if (AppleTv.isTv) return [for (final name in await AppleTv.externalPlayers()) ExternalPlayer(name, null, (_, _, _, _) => const [])];
     if (!Platform.isWindows) return const [];
     final env = Platform.environment;
     final pf = env['ProgramFiles'] ?? r'C:\Program Files';
@@ -66,6 +70,11 @@ class ExternalPlayer {
   /// Opens [url] in this player. Returns null on success, otherwise what went wrong.
   Future<String?> open(String url, {Duration start = Duration.zero, String? title, Map<String, String> headers = const {}}) async {
     try {
+      if (AppleTv.isTv) {
+        // (the link alone: neither app takes headers or a start; a torrent's stream ends when
+        // tvOS puts VyseTV to sleep behind the other app)
+        return await AppleTv.openExternal(name, url) ? null : "Couldn't open $name";
+      }
       if (exe == null) {
         // Android answers only when the other app closes; an error (no app) comes at once.
         final call = _android.invokeMethod('openVideo', {'filePath': url, 'title': title, 'startPositionMs': start.inMilliseconds});

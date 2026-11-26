@@ -76,10 +76,16 @@ Besides Flutter's, each package carries two libraries built for the TV by
   program of an app's own). Started through dart:ffi, it answers this TV only (127.0.0.1).
   Torrents show in the app only when the package has it.
 
+## A party
+
+Voice calls go through Samsung's own WebRTC for Tizen (`flutter_webrtc_tizen`): a TV with no
+microphone is in the call listening; one with a USB microphone talks (the recorder privilege).
+The party's sounds play through Tizen's WAV player, as a notification's sound, so they never
+take the film's player.
+
 ## Not in the Samsung build
 
 - Downloads: on no TV (Android TV, LG and Apple TV neither).
-- Voice calls in a party, and party sounds.
 - Updates from inside the app: a TV can't put a package in place by itself. When there is a new
   version, the update box shows a QR code; a phone opens the release page, which says which file
   is for this TV, and it goes on the TV the way the first one did.

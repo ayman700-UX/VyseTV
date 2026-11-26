@@ -11,6 +11,7 @@ import '../account/account.dart';
 import '../net.dart';
 import 'rooms.dart';
 import 'voice_background.dart';
+import 'voice_lg.dart';
 
 enum VoiceState { off, connecting, on }
 
@@ -76,6 +77,11 @@ class Voice {
   static lk.Room? _room;
   static lk.EventsListener<lk.RoomEvent>? _events;
   static String? _roomId;
+
+  /// On an LG TV the call goes through VyseTV's own listening client (voice_lg.dart): what it
+  /// says is read a few times a second.
+  static Timer? _lgTimer;
+  static bool get _lg => _lgTimer != null;
 
   static bool get canTalk => _room?.localParticipant?.permissions.canPublish ?? true;
 
@@ -162,6 +168,7 @@ class Voice {
     state.value = VoiceState.connecting;
     try {
       final j = await Account.pb.send('/api/vyse/rooms/voice', method: 'POST') as Map<String, dynamic>;
+      if (LgVoice.available) return await _joinLg(r.id, j['url'] as String, j['token'] as String);
       final room = lk.Room(
         roomOptions: lk.RoomOptions(adaptiveStream: false, dynacast: false, defaultAudioCaptureOptions: _capture, defaultAudioPublishOptions: _publish),
       );
@@ -208,14 +215,62 @@ class Voice {
 
   static Future<void> leave() async {
     final room = _room;
+    if (_lg) LgVoice.leave();
     await _cleanup();
     await room?.disconnect();
+  }
+
+  /// An LG TV: joins through VyseTV's own client and waits until it is in the call (or says why
+  /// not). Listening only: an LG TV gives an app no microphone.
+  static Future<void> _joinLg(String roomId, String url, String token) async {
+    _roomId = roomId;
+    LgVoice.setDeafened(deafened.value);
+    for (final e in volumes.entries) {
+      LgVoice.setVolume(e.key, e.value);
+    }
+    LgVoice.join(url, token);
+    final until = DateTime.now().add(const Duration(seconds: 25));
+    while (true) {
+      final s = LgVoice.state();
+      if (s['state'] == 'on') break;
+      if (s['state'] == 'failed' || s['state'] == 'off' || DateTime.now().isAfter(until)) {
+        LgVoice.leave();
+        throw Exception(s['error'] is String ? s['error'] as String : "Couldn't join the call");
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    noMic.value = true;
+    micOn.value = false;
+    state.value = VoiceState.on;
+    _lgTimer = Timer.periodic(const Duration(milliseconds: 300), (_) => _lgRefresh());
+    _lgRefresh();
+  }
+
+  static void _lgRefresh() {
+    final s = LgVoice.state();
+    if (s['state'] != 'on') {
+      // (the call ended under it: the server, the network)
+      unawaited(_cleanup());
+      return;
+    }
+    final people = s['people'];
+    if (people is Map) {
+      final next = {for (final e in people.entries) if (e.key is String) e.key as String: e.value == true};
+      if (!mapEquals(next, inCall.value)) inCall.value = next;
+    }
+    final talking = s['speaking'];
+    if (talking is List) {
+      final next = {for (final t in talking) if (t is String) t};
+      if (!setEquals(next, speaking.value)) speaking.value = next;
+    }
   }
 
   static Future<void> _ended() => _cleanup();
 
   static Future<void> _cleanup() async {
     final room = _room, events = _events;
+    _lgTimer?.cancel();
+    _lgTimer = null;
     _room = null;
     _events = null;
     _roomId = null;
@@ -226,6 +281,22 @@ class Voice {
     inCall.value = const {};
     await events?.dispose();
     await room?.dispose();
+  }
+
+  /// A microphone came after the call started (an iPhone's, lent to an Apple TV): tries to
+  /// talk with it. Whether it worked.
+  static Future<bool> retryMic() async {
+    final lp = _room?.localParticipant;
+    if (lp == null || !noMic.value) return !noMic.value;
+    try {
+      await lp.setMicrophoneEnabled(canTalk && !deafened.value, audioCaptureOptions: _capture);
+      noMic.value = false;
+      micOn.value = true;
+      _refresh();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   static Future<void> toggleMic() async {
@@ -239,6 +310,7 @@ class Voice {
   static Future<void> toggleDeafen() async {
     deafened.value = !deafened.value;
     if (deafened.value) micOn.value = false;
+    if (_lg) return LgVoice.setDeafened(deafened.value);
     final room = _room;
     if (room == null) return;
     for (final p in room.remoteParticipants.values) {
@@ -254,6 +326,7 @@ class Voice {
   /// How loud someone is for you (0 to 2; 1 is normal).
   static Future<void> setVolume(String user, double volume) async {
     volumes[user] = volume;
+    if (_lg) return LgVoice.setVolume(user, volume);
     final p = _room?.remoteParticipants[user];
     if (p == null) return;
     for (final pub in p.audioTrackPublications) {
@@ -273,6 +346,7 @@ class Voice {
   }
 
   static void _refresh() {
+    if (_lg) return _lgRefresh();
     final room = _room;
     if (room == null) {
       inCall.value = const {};

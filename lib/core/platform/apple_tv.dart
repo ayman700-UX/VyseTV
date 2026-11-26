@@ -69,6 +69,47 @@ abstract final class AppleTv {
     unawaited(_navigation.send({'menuPassthroughEnabled': on}).catchError((Object _) => null));
   }
 
+  /// tvOS 17's Continuity picker: an iPhone or iPad near the Apple TV lends its microphone (for
+  /// talking in a party's voice call). Whether a microphone is there once the picker is gone.
+  static Future<bool> pickMicrophone() async {
+    if (!isTv) return false;
+    try {
+      return await _channel.invokeMethod<bool>('pickMicrophone').timeout(const Duration(minutes: 3)) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// The other player apps on this Apple TV a video can be handed to (VLC, Infuse).
+  static Future<List<String>> externalPlayers() async {
+    if (!isTv) return const [];
+    try {
+      return (await _channel.invokeListMethod<String>('externalPlayers')) ?? const [];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Hands [url] to [player]. Whether the Apple TV opened it.
+  static Future<bool> openExternal(String player, String url) async {
+    if (!isTv) return false;
+    try {
+      return await _channel.invokeMethod<bool>('openExternal', {'player': player, 'url': url}) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// A party's short sound, a WAV file on this device (audioplayers has no Apple TV build).
+  static Future<void> playSound(String path, {double volume = .8}) async {
+    if (!isTv) return;
+    try {
+      await _channel.invokeMethod<void>('playSound', {'path': path, 'volume': volume});
+    } catch (_) {
+      // (a build without the native side: no sound, nothing else changes)
+    }
+  }
+
   /// No screen saver while a video plays (wakelock_plus has no Apple TV build).
   static Future<void> keepAwake(bool on) async {
     if (!isTv) return;

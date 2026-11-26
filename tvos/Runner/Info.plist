@@ -52,6 +52,11 @@
 			</array>
 		</dict>
 	</dict>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>vlc-x-callback</string>
+		<string>infuse</string>
+	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>To talk in a watch party's voice call, with the microphone of an iPhone or iPad near the Apple TV.</string>
 	<key>UIBackgroundModes</key>

@@ -49,6 +49,46 @@ abstract final class TizenTv {
 
   static List<String>? _dirs;
 
+  /// A party's short sound, a WAV file on this device, through Tizen's own WAV player (the
+  /// TV's player is the film's: a sound there would take it). As a notification's sound, which
+  /// the TV mixes over what plays rather than pausing it; as a system sound where it will not
+  /// take that. Whether it is heard is the TV's to say: nothing here is proven on a TV.
+  static void playWav(String path) {
+    try {
+      final sm = DynamicLibrary.open('libcapi-media-sound-manager.so.0');
+      final wav = DynamicLibrary.open('libcapi-media-wav-player.so.0');
+      final createInfo = sm.lookupFunction<Int32 Function(Int32, Pointer<Void>, Pointer<Void>, Pointer<Pointer<Void>>), int Function(int, Pointer<Void>, Pointer<Void>, Pointer<Pointer<Void>>)>(
+        'sound_manager_create_stream_information',
+      );
+      final start = wav.lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Void>, Pointer<Void>, Pointer<Void>, Pointer<Int32>), int Function(Pointer<Utf8>, Pointer<Void>, Pointer<Void>, Pointer<Void>, Pointer<Int32>)>(
+        'wav_player_start_new',
+      );
+      final file = path.toNativeUtf8();
+      final id = malloc<Int32>();
+      final info = malloc<Pointer<Void>>();
+      try {
+        // (Tizen's stream types: 3 a notification, 1 a system sound; never 0, the film's)
+        for (final type in const [3, 1]) {
+          _streams[type] ??= () {
+            info.value = nullptr;
+            return createInfo(type, nullptr, nullptr, info) == 0 ? info.value : null;
+          }();
+          final stream = _streams[type];
+          if (stream != null && start(file, stream, nullptr, nullptr, id) == 0) return;
+        }
+      } finally {
+        malloc.free(file);
+        malloc.free(id);
+        malloc.free(info);
+      }
+    } catch (_) {
+      // (no such library on this TV: no sound)
+    }
+  }
+
+  // the stream information each kind of sound plays with, made once
+  static final _streams = <int, Pointer<Void>?>{};
+
   static List<String> _libraryDirs() => _dirs ??= [
     if (_resourceDir() case final res?) '${Directory(res).parent.path}/lib',
     '/opt/usr/globalapps/$packageId/lib',
