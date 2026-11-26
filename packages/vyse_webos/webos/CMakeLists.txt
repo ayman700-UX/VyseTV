@@ -123,10 +123,13 @@ add_library(vyse_fallback SHARED "older/vyse_fallback.c")
 target_link_options(vyse_fallback PRIVATE "-Wl,--unresolved-symbols=ignore-all")
 
 add_library(vyse_sdevent SHARED "older/vyse_sdevent.c")
-# (it needs vyse_fallback by name alone, with nothing of it used: that is what puts
-# vyse_fallback after every library of the TV when the loader looks a name up)
-target_link_options(vyse_sdevent PRIVATE "-Wl,--no-as-needed")
+# (it is the one library that needs vyse_fallback: that is what puts vyse_fallback after
+# every library of the TV when the loader looks a name up. It uses one name of it, or LG's
+# build, which keeps only the libraries something is used of, would leave it off the list.)
 target_link_libraries(vyse_sdevent PRIVATE vyse_fallback dl)
+# (its ten functions carry the version name the embedder asks libsystemd's for)
+target_link_options(vyse_sdevent PRIVATE "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/older/vyse_sdevent.map")
+set_target_properties(vyse_sdevent PROPERTIES LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/older/vyse_sdevent.map")
 
 add_library(vyse_wlegl SHARED "older/vyse_wlegl.c")
 target_link_libraries(vyse_wlegl PRIVATE dl)

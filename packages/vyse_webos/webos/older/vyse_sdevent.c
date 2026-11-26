@@ -34,6 +34,9 @@ typedef int (*sd_event_handler_t)(sd_event_source *s, void *userdata);
 
 enum { SD_EVENT_OFF = 0, SD_EVENT_ON = 1, SD_EVENT_ONESHOT = -1 };
 
+// libvyse_fallback.so
+extern int vyse_fallback_present(void);
+
 // ── the TV's own libsystemd, when it has one ──
 
 static struct {
@@ -56,6 +59,8 @@ static struct {
 static int vyse_have_real(void) {
   if (real.looked) return real.lib != NULL;
   real.looked = 1;
+  // (what makes vyse_fallback a library this one needs: see the note there)
+  (void)vyse_fallback_present();
   void *lib = dlopen("libsystemd.so.0", RTLD_NOW | RTLD_LOCAL);
   if (lib == NULL) {
     fprintf(stderr, "[vyse] no libsystemd on this TV: the app's own event loop is used\n");

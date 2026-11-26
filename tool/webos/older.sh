@@ -163,6 +163,11 @@ if command -v qemu-arm-static >/dev/null 2>&1; then
     echo "   the embedder still asks for a library an older TV lacks" >&2
     BAD=1
   fi
+  # (a stand-in must carry the version names the embedder asks the real library for)
+  if printf '%s\n' "$FOUND" | grep -E 'libvyse_[a-z]+\.so: (no version information|version .* not found)' >/dev/null; then
+    echo "   a stand-in lacks a version name the embedder asks for" >&2
+    BAD=1
+  fi
   [ "$BAD" = 0 ] || { echo "The package for older webOS would not start right." >&2; exit 1; }
   # (and for the record, what the program says when run for real here: it stops at the first
   # library only a TV has)

@@ -1,0 +1,18 @@
+# The ten functions of sd-event, under the version name libsystemd gives them. LG's embedder
+# asks for them by that name ("sd_event_new, version LIBSYSTEMD_221"), and the loader checks
+# that the library it is pointed at has a version of that name.
+LIBSYSTEMD_221 {
+  global:
+    sd_event_new;
+    sd_event_unref;
+    sd_event_add_io;
+    sd_event_add_time;
+    sd_event_add_defer;
+    sd_event_loop;
+    sd_event_exit;
+    sd_event_source_set_enabled;
+    sd_event_source_set_time;
+    sd_event_source_unref;
+  local:
+    *;
+};

@@ -75,6 +75,11 @@ extern const struct wl_interface wl_region_interface;
 #define VYSE_MARSHAL_FLAG_DESTROY 1u
 #define VYSE_MAX_ARGS 20
 
+// The one name of this library that another stand-in uses (vyse_sdevent.c, at its start):
+// a library nothing uses a name of is left off the list of what must be loaded by a build
+// set to keep only what is used, which LG's is, and then nothing here would ever be found.
+EXPORT int vyse_fallback_present(void) { return 1; }
+
 // Sends request [opcode] on [proxy]. With [interface] the request makes a new object of that
 // kind, which is returned; with the destroy flag the proxy is let go afterwards.
 EXPORT struct wl_proxy *wl_proxy_marshal_flags(struct wl_proxy *proxy, uint32_t opcode,
