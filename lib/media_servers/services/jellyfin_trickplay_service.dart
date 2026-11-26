@@ -47,14 +47,20 @@ class JellyfinTrickplayService implements ScrubPreviewSource {
   /// URL, but the wrapper object itself isn't free.
   final Map<int, ImageProvider> _providerCache = {};
 
+  // VyseTV: named the long way (the webOS build's Dart has no private named parameters)
   JellyfinTrickplayService._({
-    required this._client,
-    required this._itemId,
-    required this._mediaSourceId,
-    required this._info,
-    required this._sheetImageBuilder,
-    required this._sheetCacheWarmer,
-  });
+    required JellyfinClient client,
+    required String itemId,
+    required String? mediaSourceId,
+    required TrickplayInfo info,
+    required TrickplaySheetImageBuilder sheetImageBuilder,
+    required TrickplaySheetCacheWarmer? sheetCacheWarmer,
+  }) : _client = client,
+       _itemId = itemId,
+       _mediaSourceId = mediaSourceId,
+       _info = info,
+       _sheetImageBuilder = sheetImageBuilder,
+       _sheetCacheWarmer = sheetCacheWarmer;
 
   /// Picks the best width from [manifest] (smallest >= [targetTooltipWidth],
   /// largest available otherwise). Returns `null` when [manifest] is empty.

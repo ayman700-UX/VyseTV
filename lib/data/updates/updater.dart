@@ -29,6 +29,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../server_config.dart' show updateListAddresses;
+import '../../core/platform/webos.dart';
 import '../app_settings.dart';
 import '../net.dart';
 import 'update_signature.dart';
@@ -173,6 +174,9 @@ class Updater extends ChangeNotifier {
     } catch (_) {}
     _platform = await _platformKey();
     notifyListeners();
+    // An LG TV cannot install a package from inside an app, so there is nothing to offer there
+    // and nothing is asked.
+    if (WebOS.isTv) return;
     // quietly, a little after start-up and then a few times a day while VyseTV stays open
     if (AppSettings.updateAuto.value) {
       Timer(const Duration(seconds: 6), () => unawaited(check()));
@@ -194,6 +198,8 @@ class Updater extends ChangeNotifier {
       return 'android-arm64-v8a';
     }
     if (Platform.isWindows) return 'windows-x64';
+    // (an LG TV says it is Linux; a Linux desktop's build is not for it)
+    if (WebOS.isTv) return 'webos';
     if (Platform.isLinux) return Abi.current() == Abi.linuxArm64 ? 'linux-arm64' : 'linux-x64';
     if (Platform.isMacOS) return 'macos';
     if (Platform.isIOS) return 'ios';

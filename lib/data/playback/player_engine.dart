@@ -11,7 +11,9 @@ import '../app_settings.dart';
 /// unless you pick mpv. Both draw on a SurfaceView under the interface, and a video Media3 can't
 /// play is handed to mpv by itself, at the same spot (the native plugin does that).
 ///
-/// Everywhere else there is only mpv, and nothing here changes anything.
+/// Everywhere else there is only mpv, and nothing here changes anything. (An LG TV has one
+/// engine too, the TV's own player: the player factory picks it by itself, and the menus ask
+/// the player what it is. There is no choice to offer there, so [offered] stays false.)
 ///
 /// A few things only mpv can do (upscaling, ambient lighting, the 5.1 channel limit, some of the
 /// subtitle look). Menus and Settings ask [isMedia3] and leave those out while it is the engine;

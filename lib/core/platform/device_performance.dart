@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'async_singleton.dart';
 import 'device_channel.dart';
 import 'platform_detector.dart';
+import 'webos.dart';
 
 /// User override for the visual-effects tier (stored by SettingsService).
 enum VisualEffectsSetting { auto, full, reduced }
@@ -44,6 +45,7 @@ class DevicePerformance {
       _singleton.getInstance(() => DevicePerformance._().._override = override, (instance) => instance._detect());
 
   Future<void> _detect() async {
+    if (WebOS.isTv) return _detectWebOS();
     if (!Platform.isAndroid) return; // tvOS/iOS/desktop: always full tier
     try {
       final result = await deviceChannel.invokeMapMethod<dynamic, dynamic>('getPerformanceSignals');
@@ -61,6 +63,21 @@ class DevicePerformance {
     } on PlatformException {
       // Signal query failed — stay on the full tier.
     }
+  }
+
+  /// VyseTV: an LG TV. Every one of them runs a 32-bit system, so that says nothing there;
+  /// what tells a small set from a large one is its memory, which the kernel gives.
+  void _detectWebOS() {
+    _is64Bit = false;
+    try {
+      final line = File('/proc/meminfo').readAsLinesSync().firstWhere((l) => l.startsWith('MemTotal:'), orElse: () => '');
+      final kb = int.tryParse(RegExp(r'(\d+)').firstMatch(line)?[1] ?? '');
+      if (kb != null) _totalMemBytes = kb * 1024;
+    } catch (_) {
+      // not readable: stay on the full tier
+    }
+    _autoReduced = _totalMemBytes != null && _totalMemBytes! <= _lowMemThresholdBytes;
+    if (_autoReduced) _capSkiaResourceCache();
   }
 
   /// Caps Skia's GPU resource cache on low-end hardware, where it is otherwise

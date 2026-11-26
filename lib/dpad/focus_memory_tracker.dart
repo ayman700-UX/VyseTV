@@ -11,7 +11,10 @@ class FocusMemoryTracker {
   final String _debugLabelPrefix;
   String? _lastFocusedKey;
 
-  FocusMemoryTracker({this._onFocusChanged, this._debugLabelPrefix = 'focus'});
+  // VyseTV: the names given the long way (the webOS build's Dart has no private named parameters)
+  FocusMemoryTracker({VoidCallback? onFocusChanged, String debugLabelPrefix = 'focus'})
+    : _onFocusChanged = onFocusChanged,
+      _debugLabelPrefix = debugLabelPrefix;
 
   FocusNode get(String key, {String? debugLabel}) {
     return _nodes.putIfAbsent(key, () {

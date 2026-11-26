@@ -26,6 +26,7 @@ import 'package:flutter_js/flutter_js.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/platform/webos.dart';
 import '../../net.dart';
 import '../film_sources/common.dart';
 import 'web_crypto.dart';
@@ -1120,7 +1121,7 @@ final bool _canLimitMemory = () {
     final lib = Platform.isWindows
         ? DynamicLibrary.open('quickjs_c_bridge.dll')
         : Platform.isLinux
-        ? DynamicLibrary.open(Platform.environment['LIBQUICKJSC_PATH'] ?? Platform.environment['LIBQUICKJSC_TEST_PATH'] ?? 'libquickjs_c_bridge_plugin.so')
+        ? DynamicLibrary.open(Platform.environment['LIBQUICKJSC_PATH'] ?? Platform.environment['LIBQUICKJSC_TEST_PATH'] ?? _quickJsLibrary)
         : Platform.isAndroid
         ? DynamicLibrary.open('libfastdev_quickjs_runtime.so')
         : null;
@@ -1136,18 +1137,28 @@ bool get pluginMemoryLimited => _canLimitMemory;
 
 bool _deepBound = false;
 
+/// The QuickJS library as Linux is asked for it. On a desktop its name is enough. On an LG TV
+/// (which says it is Linux) it is the one built for the TV (packages/vyse_webos/webos), in lib/
+/// beside the app's program, and it is named by its whole path: nothing promises that a TV
+/// looks in that folder for a library asked for by name alone.
+String get _quickJsLibrary =>
+    WebOS.isTv ? '${File(Platform.resolvedExecutable).parent.path}/lib/libquickjs_c_bridge_plugin.so' : 'libquickjs_c_bridge_plugin.so';
+
 /// Linux: loads the QuickJS library so that it uses its own functions before anyone else's.
 ///
 /// mpv's bundled libmujs exports `js_malloc` too, with another meaning. Once mpv has loaded it,
 /// QuickJS's calls to its own `js_malloc` land in mujs and the app crashes the first time a plugin
 /// runs. With RTLD_DEEPBIND the library looks in itself first. It is loaded under the same name
 /// flutter_js asks for later, so it gets this already-loaded copy.
+///
+/// An LG TV has no mpv to clash with, but the same call is what finds the library there: opened
+/// here by its whole path, it is the copy flutter_js gets when it asks by name.
 void _loadQuickJsDeepBound() {
   if (_deepBound || !Platform.isLinux) return;
   _deepBound = true;
   try {
     final dlopen = DynamicLibrary.process().lookupFunction<Pointer<Void> Function(Pointer<Utf8>, Int32), Pointer<Void> Function(Pointer<Utf8>, int)>('dlopen');
-    final name = 'libquickjs_c_bridge_plugin.so'.toNativeUtf8();
+    final name = _quickJsLibrary.toNativeUtf8();
     dlopen(name, 0x2 | 0x8); // RTLD_NOW | RTLD_DEEPBIND
     malloc.free(name);
   } catch (_) {}

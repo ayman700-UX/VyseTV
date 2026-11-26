@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -694,12 +693,15 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
           child: Builder(builder: (context) {
             if (!_placed) SchedulerBinding.instance.addPostFrameCallback((_) => _place());
             final dpr = MediaQuery.devicePixelRatioOf(context);
+            final screenful = MediaQuery.sizeOf(context).height; // (the reader fills the window)
             return ListView.builder(
               key: ValueKey('scroll/$_index'),
               controller: _scroll,
               padding: EdgeInsets.only(top: _padTop, bottom: 40),
-              // the next screenful is fetched before it is reached
-              scrollCacheExtent: const ScrollCacheExtent.viewport(1),
+              // the next screenful is fetched before it is reached (a screenful in pixels: the
+              // webOS build's Flutter has no ScrollCacheExtent.viewport, see core/compat.dart)
+              // ignore: deprecated_member_use
+              cacheExtent: screenful,
               itemCount: pages.length + 1,
               itemExtentBuilder: (i, _) => i <= pages.length ? _h(i) : null,
               itemBuilder: (context, i) => i == pages.length

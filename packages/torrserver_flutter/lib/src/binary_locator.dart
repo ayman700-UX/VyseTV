@@ -198,6 +198,8 @@ class BinaryLocator {
         'TorrServer.exe',
       ];
     } else if (Platform.isLinux) {
+      // VyseTV: a 32-bit ARM Linux (an LG webOS TV) takes the arm7 build and no other
+      if (arch == 'arm7') return ['torrserver-linux-arm7', 'TorrServer-linux-arm7', 'torrserver', 'TorrServer'];
       return [
         'torrserver-linux-$arch',
         'TorrServer-linux-$arch',
@@ -238,6 +240,9 @@ class BinaryLocator {
     if (version.contains('arm64') || version.contains('aarch64')) {
       return 'arm64';
     } else if (version.contains('armv7') || version.contains('arm7')) {
+      return 'arm7';
+    } else if (Platform.isLinux && version.contains('linux_arm"')) {
+      // VyseTV: Dart names 32-bit ARM Linux "linux_arm" (64-bit is "linux_arm64", taken above)
       return 'arm7';
     } else if (version.contains('ia32') ||
         (version.contains('x86') && !version.contains('x64'))) {

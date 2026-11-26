@@ -67,6 +67,7 @@ import 'player_chrome.dart';
 import 'player_episodes.dart';
 import 'player_info.dart';
 import 'player_menus.dart';
+import 'caption_overlay.dart';
 import 'picture_shape.dart';
 import 'sources_page.dart';
 import '../../media_servers/media_servers.dart' show serverError;
@@ -457,6 +458,15 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   /// cores understand (Media3, and the mpv it hands a video to when it can't play it), never
   /// through mpv's own commands; and what only mpv can do stays out of the menus.
   late final bool _media3 = _player.playerType == 'exoplayer';
+
+  /// This player is an LG TV's own (webOS): the TV fetches, decodes and shows the video itself.
+  late final bool _webos = _player.playerType == 'webos';
+
+  /// Not mpv itself: Media3, or an LG TV's player. A subtitle file is handed over through the
+  /// player's own interface and its tracks are read from what it lists, never through mpv's
+  /// properties and commands; HLS is seeked by the engine; and the menus leave out what only
+  /// mpv does (its shaders, its second subtitle).
+  late final bool _notMpv = _media3 || _webos;
   // One video widget for the page's whole life: picture-in-picture moves it rather than
   // building a new one, so the native surface never loses its place.
   final _videoKey = GlobalKey();
@@ -1034,8 +1044,8 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   bool _fragmented = false;
 
   /// Media3 seeks every kind of HLS stream itself, so nothing is trimmed or reopened for it
-  /// (until it hands a video to mpv: [_handedToMpv]).
-  bool get _nativeHlsSeek => _media3 && !_player.mpvCore;
+  /// (until it hands a video to mpv: [_handedToMpv]). An LG TV's player does too.
+  bool get _nativeHlsSeek => _notMpv && !_player.mpvCore;
   String? _timeline; // fMP4 played as a segment timeline (StreamProxy.timeline): seeks natively
   double _offset = 0;
   bool _reopening = false;
@@ -1171,7 +1181,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       SubLog.line('PREP open: sub-delay=${(_subOffset - _offset).toStringAsFixed(3)} file=${_subPath == null ? '-' : _subPath!.split(Platform.pathSeparator).last} built-in=${_embeddedSid ?? '-'}');
     }
     await mpv.setProperty('sub-delay', (_subOffset - _offset).toStringAsFixed(3));
-    if (_media3) return; // the file goes in with the video itself: see _open
+    if (_notMpv) return; // the file goes in with the video itself: see _open
     final path = _subPath;
     if (path == null) {
       await mpv.command(['change-list', 'sub-files', 'clr', '']);
@@ -1184,11 +1194,11 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     await mpv.setProperty('sid', _subPath != null ? 'auto' : (_embeddedSid ?? 'no'));
   }
 
-  /// Opens [m]. Media3 takes the subtitle file in use along with the video (mpv was told in
-  /// [_prepOpen]), and puts it on.
+  /// Opens [m]. Media3 and an LG TV's player take the subtitle file in use along with the video
+  /// (mpv was told in [_prepOpen]), and put it on.
   Future<void> _open(pz.Media m, {bool play = true}) async {
     _lastOpened = m;
-    if (!_media3) return _player.open(m, play: play);
+    if (!_notMpv) return _player.open(m, play: play);
     final path = _subPath;
     await _player.open(m, play: play, externalSubtitles: path == null ? null : [_subFile(path)]);
     // a file picked while this open was on its way reached the player before the video did,
@@ -1208,13 +1218,14 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   );
 
   /// A subtitle track inside the video file, as the list names it: `mpv-sid:3` (mpv's number
-  /// for it) or `exo-sid:3_0` (Media3's).
-  static bool _isBuiltIn(String url) => url.startsWith('mpv-sid:') || url.startsWith('exo-sid:');
+  /// for it), `exo-sid:3_0` (Media3's) or `lgs-sid:tv:0` (an LG TV's). All three are as long:
+  /// what follows the first eight characters is the engine's own id.
+  static bool _isBuiltIn(String url) => url.startsWith('mpv-sid:') || url.startsWith('exo-sid:') || url.startsWith('lgs-sid:');
 
   /// It came with the video: a track inside its file, or a subtitle file in its torrent. Made for
   /// this very video, so it is in time as it is and the automatic sync never touches it.
   static bool _cameWithVideo(sub.SubtitleTrack? t) => t != null && (t.provider == 'Built in' || _isBuiltIn(t.url));
-  String get _sidPrefix => _media3 ? 'exo-sid:' : 'mpv-sid:';
+  String get _sidPrefix => _webos ? 'lgs-sid:' : (_media3 ? 'exo-sid:' : 'mpv-sid:');
 
   Future<String> _writeSub(sub.SubtitleTrack track, String content) async {
     final dir = Directory('${Directory.systemTemp.path}${Platform.pathSeparator}vyse_subs');
@@ -1293,9 +1304,10 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
 
   /// Subtitle files are timed from the start of the film; mpv's clock starts at [_offset].
   /// mpv draws subtitles itself: full ASS/SSA styling via libass, and on Android's hardware
-  /// path its own subtitle plane. Set to false to go back to VyseTV's Flutter overlay, which draws
-  /// plain text from mpv's sub-text.
-  static const _mpvSubtitles = true;
+  /// path its own subtitle plane (Media3 draws its own too). An LG TV's player draws none for a
+  /// subtitle file: there the lines come out of the engine as text and the app draws them
+  /// (caption_overlay.dart).
+  late final bool _mpvSubtitles = !_webos;
 
   static List<Listenable> get _subtitleSettings => SubtitleStyle.settings;
 
@@ -1304,12 +1316,8 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   /// VyseTV's subtitle settings as mpv's style for plain-text subtitles (SRT, VTT). Styled ASS keeps
   /// its own look (mpv's default sub-ass-override=scale only scales it).
   Future<void> _applySubtitleStyle() async {
-    if (!_mpvSubtitles) {
-      try {
-        await _player.setProperty('sub-visibility', 'no');
-      } catch (_) {}
-      return;
-    }
+    // (drawn by the app from the settings as they stand: caption_overlay.dart listens itself)
+    if (!_mpvSubtitles) return;
     // font, colours, outline, shadow, box, placement, styled-subtitle policy (Settings > Subtitles)
     await SubtitleStyle.apply(_player);
     // apply() put sub-pos back to its resting place: let the next frame lift it again if needed
@@ -1355,6 +1363,9 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   /// Lip-sync, channel limit, levelling, passthrough and HDR output, as the player takes
   /// them. Its own queue settles the order (levelling and stereo turn passthrough off).
   Future<void> _applySound() async {
+    // An LG TV's player takes none of these: it decodes or sends the sound on as the TV's own
+    // sound settings say, and has no delay, channel limit or levelling to set.
+    if (_webos) return;
     Future<void> safe(Future<void> Function() f) async {
       try {
         await f();
@@ -1389,7 +1400,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   }
 
   Future<void> _applyPicture() async {
-    if (_media3) return; // upscaling and ambient lighting are mpv shaders
+    if (_notMpv) return; // upscaling and ambient lighting are mpv shaders
     await _effects.apply(
       upscaler: pz.Upscaler.chosen(AppSettings.upscaler.value),
       // (the glow fills black bars: with the picture cropped, stretched or forced to a shape
@@ -1524,7 +1535,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     final id = _loadId;
     var fps = 0.0;
     // (Media3 works the rate out from the frames it has shown: ask again for a few seconds)
-    for (var tries = 0; tries < (_media3 ? 6 : 1) && fps <= 0; tries++) {
+    for (var tries = 0; tries < (_notMpv ? 6 : 1) && fps <= 0; tries++) {
       if (tries > 0) await Future<void>.delayed(const Duration(seconds: 1));
       if (!mounted || id != _loadId) return;
       String? raw;
@@ -1777,7 +1788,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       season: fs,
       episode: fe,
       order: _hostOrder ? theirs : activeFilmSources(),
-      dash: _media3 || !Platform.isLinux,
+      dash: _notMpv || !Platform.isLinux,
       onChange: () {
         if (mounted && id == _loadId) setState(() {});
       },
@@ -2037,8 +2048,9 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     }
 
     final found = <sub.SubtitleTrack>[];
-    if (_media3) {
-      // Media3 (and the mpv it hands over to) lists its tracks itself, under its own ids
+    if (_notMpv) {
+      // Media3 (and the mpv it hands over to) lists its tracks itself, under its own ids; so
+      // does an LG TV's player
       for (final t in _player.state.tracks.subtitle) {
         if (t.isExternal || t.id == 'no' || t.id == 'auto') continue;
         final codec = (t.codec ?? '').toLowerCase();
@@ -2047,13 +2059,13 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
           'builtin-${t.id}',
           'Built in',
           lang.isEmpty ? 'und' : lang,
-          'exo-sid:${t.id}',
+          '$_sidPrefix${t.id}',
           release: [if ((t.title ?? '').isNotEmpty) t.title!, if (t.isForced) 'Forced'].join(' · '),
           format: codec.contains('ass') || codec.contains('ssa') ? 'ass' : 'srt',
         ));
       }
     }
-    final n = _media3 ? 0 : int.tryParse(await get('track-list/count')) ?? 0;
+    final n = _notMpv ? 0 : int.tryParse(await get('track-list/count')) ?? 0;
     for (var i = 0; i < n; i++) {
       if (await get('track-list/$i/type') != 'sub' || await get('track-list/$i/external') == 'yes') continue;
       final codec = (await get('track-list/$i/codec')).toLowerCase();
@@ -2829,7 +2841,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       _subPath = null;
       _autoSyncLeaves(); // (in time already; and it may be the one listened to)
       try {
-        if (_media3) {
+        if (_notMpv) {
           final t = _player.state.tracks.subtitle.where((x) => x.id == sid).firstOrNull;
           if (t != null) await _player.selectSubtitleTrack(t);
         } else {
@@ -2848,7 +2860,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     if (track == null) {
       _subPath = null;
       _autoSyncStop();
-      if (!_media3) await _player.command(['change-list', 'sub-files', 'clr', '']);
+      if (!_notMpv) await _player.command(['change-list', 'sub-files', 'clr', '']);
       await _player.selectSubtitleTrack(pz.SubtitleTrack.off);
       if (mounted) setState(() { _activeSubTrack = null; _subtitle = 'Off'; _cues = const []; });
       _syncTimer?.cancel();
@@ -2874,10 +2886,10 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       _subPath = path;
       _subRetried = null;
       final mpv = _player;
-      if (_media3) {
+      if (_notMpv) {
         // (a video not open yet takes the file with its open: see _open)
         await mpv.addSubtitleFile(Uri.file(path).toString(), title: track.language, language: track.lang);
-        SubLog.line('  handed to Media3: ${path.split(Platform.pathSeparator).last}');
+        SubLog.line('  handed to ${_webos ? "the TV's player" : 'Media3'}: ${path.split(Platform.pathSeparator).last}');
       } else {
         await mpv.setProperty('sub-files', path);
         await mpv.command(['sub-add', path, 'select', track.language, track.lang]);
@@ -2908,7 +2920,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   /// What mpv has for subtitles, written to the log; and if the file you picked isn't the one
   /// selected (a reload can leave another track on, or none), it's put back.
   Future<void> _checkSubs(String why, {bool retried = false}) async {
-    if (_media3) return _checkSubsMedia3(why);
+    if (_notMpv) return _checkSubsMedia3(why);
     final mpv = _player;
     final path = _subPath;
     String norm(String x) => x.replaceAll('\\', '/').toLowerCase();
@@ -2971,7 +2983,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       final tracks = _player.state.tracks.subtitle;
       final on = _player.state.track.subtitle;
       final onId = on == null || on.id == 'no' ? null : on.id;
-      SubLog.line('CHECK ($why, Media3${_player.mpvCore ? ' on mpv' : ''}): on=${onId ?? '-'} yours=${_embeddedSid ?? _subPath?.split(Platform.pathSeparator).last ?? '-'} '
+      SubLog.line('CHECK ($why, ${_webos ? 'the TV' : 'Media3'}${_player.mpvCore ? ' on mpv' : ''}): on=${onId ?? '-'} yours=${_embeddedSid ?? _subPath?.split(Platform.pathSeparator).last ?? '-'} '
           '· ${tracks.isEmpty ? 'no subtitle tracks' : tracks.map((t) => '#${t.id}${t.isExternal ? ' file' : ''} ${t.language ?? ''}').join(' | ')}');
       final sid = _embeddedSid;
       if (sid != null) {
@@ -3069,7 +3081,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     if (_subOffset != 0 && _subOffset != _autoOffset) return;
     final file = _syncFile = [for (final c in _cues) (c.start, c.end)];
     _syncSaid = false;
-    if (!_media3) {
+    if (!_notMpv) {
       _autoSync = AutoSync(file);
       _autoSyncUrl = _playUrl;
       _autoSyncLooked = 0;
@@ -3117,7 +3129,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     }
     // a website's stream keeps no index (and rarely subtitles of its own): by ear
     if (src != null && src.hls) unawaited(_autoSyncByEar());
-    if (_autoSync == null || _media3) return;
+    if (_autoSync == null || _notMpv) return;
     final ref = _autoSyncRef();
     if (ref == null) return; // nothing of the video's own to go by (yet)
     if (_autoSyncUrl != _playUrl) {
@@ -3177,7 +3189,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     _autoSync = null;
     final sid = _autoSyncSid;
     _autoSyncSid = null;
-    if (sid != null && !_media3) unawaited(_player.setProperty('secondary-sid', 'no').catchError((Object _) {}));
+    if (sid != null && !_notMpv) unawaited(_player.setProperty('secondary-sid', 'no').catchError((Object _) {}));
   }
 
   /// "Sync automatically" turned off or on while you watch (in the subtitle menu, or Settings):
@@ -3240,7 +3252,9 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       if (run != _syncRun || !mounted) return;
     }
     if (!_started || _syncMap != null || _torrent != null) return;
-    if (!_media3 && _autoSyncRef() != null) return; // its own subtitles, followed as it plays
+    // (an LG TV has no second player to hear the film with: its one decoder is showing it)
+    if (_webos) return;
+    if (!_notMpv && _autoSyncRef() != null) return; // its own subtitles, followed as it plays
     if (_earGaveWayFor == media.uri) return; // (the film had to stop for it once: not again)
     final lines = spokenLines([for (final c in _cues) (c.start, c.end, c.text)]);
     // What is listened to: the smallest version of the stream there is. The sound is the same in
@@ -3363,7 +3377,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   /// Every few seconds while a subtitle file is on: the line mpv shows next to the line the file
   /// says should be up now, and how far off it is when they differ.
   Future<void> _syncProbe() async {
-    if (_media3 || !mounted || _subPath == null || _cues.isEmpty || !_started || !_playing || _reopening) return;
+    if (_notMpv || !mounted || _subPath == null || _cues.isEmpty || !_started || !_playing || _reopening) return;
     try {
       final tp = double.tryParse(await _player.getProperty('time-pos') ?? '');
       if (tp == null) return;
@@ -3439,7 +3453,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       );
     }
 
-    if (_player.audioPassthroughActive && !_passthroughGivenUp && !_media3) {
+    if (_player.audioPassthroughActive && !_passthroughGivenUp && !_notMpv) {
       _passthroughGivenUp = true;
       try {
         await _player.setAudioPassthrough(false);
@@ -3611,7 +3625,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
           : (l != null ? [l.name, l.quality, ?l.format].where((x) => x.isNotEmpty).join(' · ') : [if (addon != null || widget.server != null) src.server, src.quality].where((x) => x.isNotEmpty).toSet().join(' · ')),
       url: src.url,
       // (a Media3 player that has handed one video to mpv plays the next ones on mpv too)
-      engine: !_media3 ? 'mpv' : (_player.mpvCore ? 'mpv-kept' : 'media3'),
+      engine: _webos ? 'webos' : (!_media3 ? 'mpv' : (_player.mpvCore ? 'mpv-kept' : 'media3')),
     );
     unawaited(PlaybackReport.keep(_report.value!));
     unawaited(PlaybackReport.device().then((caps) => _editReport((r) => r.withDevice(caps))));
@@ -3681,7 +3695,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     final audio = _audioNow;
     final t = _activeSubTrack;
     _editReport((r) {
-      r = media3 ? r.withMedia3(facts) : r.withMpv(facts);
+      r = _webos ? r.withTv(facts) : (media3 ? r.withMedia3(facts) : r.withMpv(facts));
       r = r.withSoundSettings(
         passthrough: AppSettings.audioPassthrough.value,
         decodeForced: AppSettings.volumeLevelling.value || AppSettings.audioChannels.value == 'stereo',
@@ -4536,7 +4550,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     _Tab.subtitles => _subOffset == 0 ? _subtitle : '$_subtitle · ${_subOffset > 0 ? '+' : ''}${_subOffset}s',
     _Tab.speed => _speedLabel(_speed),
     _Tab.more => [
-        if (!_media3 && !pz.Upscaler.chosen(AppSettings.upscaler.value).isOff) pz.Upscaler.chosen(AppSettings.upscaler.value).label,
+        if (!_notMpv && !pz.Upscaler.chosen(AppSettings.upscaler.value).isOff) pz.Upscaler.chosen(AppSettings.upscaler.value).label,
         if (_shape != PictureShape.fit) _shape.label,
         if (_zoom != 100) '$_zoom%',
         if (_sleepMinutes != null) 'Sleep',
@@ -4721,16 +4735,17 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
-                // Subtitles ride above the controls while they show. mpv draws them by default
-                // (full ASS via libass, see _mpvSubtitles); this overlay is the plain-text fallback.
-                if (!_mpvSubtitles) AnimatedPositioned(
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeOutCubic,
-                  left: side,
-                  right: side,
-                  bottom: _chromeUp ? barH + 14 : 44 + bottomInset,
-                  child: IgnorePointer(child: _SubtitleOverlay(lines: _player.subText.map((t) => [t]), initial: [_player.currentSubText], phone: phone)),
-                ),
+                // mpv and Media3 draw their own subtitles (see _mpvSubtitles). An LG TV's player
+                // hands a subtitle file's lines over as text: drawn here, where Settings puts
+                // them, and they stay there when the controls show.
+                if (!_mpvSubtitles)
+                  Positioned.fill(
+                    child: CaptionOverlay(
+                      lines: _player.subText,
+                      initial: _player.currentSubText,
+                      pictureAspect: _shapeNow == PictureShape.fit && _zoom <= 100 && _videoW > 0 && _videoH > 0 ? _videoW / _videoH : null,
+                    ),
+                  ),
                 // Top: back, and the room's and the lock's buttons.
                 _fade(
                   Align(
@@ -5239,7 +5254,8 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
           for (final s in _servers.where((s) => s.audio == null && _serverState[s.name] != _Srv.dead).take(1))
             MenuAudio(title: 'Japanese', detail: 'Original audio · switches to ${s.name}', onTap: () => _pickNamed(s.name)),
       ],
-      sound: [
+      // (none of it on an LG TV: the sound is the TV's own to decode or pass on, see _applySound)
+      sound: _webos ? const [] : [
         MenuStepper(
           title: 'Audio sync',
           detail: 'Fixes lip-sync · + plays the sound later',
@@ -5321,8 +5337,9 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
             onPlus: () => _setZoom(_zoom + 5),
             onReset: () => _setZoom(100),
           ),
-          // (ambient lighting and upscaling are mpv shaders: not offered on a Media3 player)
-          if (!_media3)
+          // (ambient lighting and upscaling are mpv shaders: not offered on a Media3 player or
+          // an LG TV's)
+          if (!_notMpv)
             MenuToggle(
               title: 'Ambient lighting',
               detail: 'Fills the black bars with a soft glow of the picture',
@@ -5334,7 +5351,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
               },
             ),
         ]),
-        if (!_media3)
+        if (!_notMpv)
           ('UPSCALING', [
             // (on a TV only the ones its graphics chip runs smoothly: see Upscaler.offered)
             for (final u in pz.Upscaler.offered)
@@ -5350,7 +5367,8 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
             ),
           ]),
         ('DISPLAY', [
-          if (Platform.isWindows || Platform.isLinux)
+          // (an LG TV says it is Linux; its player and panel do HDR by themselves)
+          if ((Platform.isWindows || Platform.isLinux) && !_webos)
             MenuToggle(
               title: 'HDR',
               detail: 'Real HDR on an HDR screen · off maps it to SDR',
@@ -5783,59 +5801,6 @@ class _SwipeHud extends StatelessWidget {
   }
 
   static const _number = TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, fontFeatures: [FontFeature.tabularFigures()]);
-}
-
-/// The subtitle line on screen, in the size, colour and backing from the Subtitles tab.
-class _SubtitleOverlay extends StatelessWidget {
-  const _SubtitleOverlay({required this.lines, required this.initial, required this.phone});
-  final Stream<List<String>> lines;
-  final List<String> initial;
-  final bool phone;
-
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([AppSettings.subtitleSize, AppSettings.subtitleColor, AppSettings.subtitleBackground]),
-    builder: (context, _) => StreamBuilder<List<String>>(
-      stream: lines,
-      initialData: initial,
-      builder: (context, snap) {
-        final text = [
-          for (final l in snap.data ?? const <String>[])
-            for (final part in l.split('\n'))
-              if (part.trim().isNotEmpty) part.trim(),
-        ];
-        if (text.isEmpty) return const SizedBox.shrink();
-        // sized for a 1080p-tall window, scaled to this one
-        final scale = (MediaQuery.sizeOf(context).height / 1080).clamp(.6, 1.6) * (phone ? .85 : 1);
-        final size = AppSettings.subtitleSize.value * 1.3 * scale;
-        final backing = AppSettings.subtitleBackground.value / 100;
-        final style = TextStyle(
-          fontSize: size,
-          height: 1.25,
-          fontWeight: FontWeight.w600,
-          color: Color(AppSettings.subtitleColor.value),
-          shadows: backing == 0
-              ? const [
-                  Shadow(blurRadius: 3, color: Colors.black),
-                  Shadow(offset: Offset(1.5, 1.5), blurRadius: 2, color: Colors.black),
-                  Shadow(offset: Offset(-1, -1), blurRadius: 2, color: Colors.black),
-                ]
-              : const [Shadow(blurRadius: 2, color: Color(0x99000000))],
-        );
-        return Column(mainAxisSize: MainAxisSize.min, children: [
-          for (final line in text)
-            Container(
-              margin: const EdgeInsets.only(top: 3),
-              padding: EdgeInsets.symmetric(horizontal: size * .4, vertical: size * .08),
-              decoration: backing == 0
-                  ? null
-                  : BoxDecoration(color: Colors.black.withValues(alpha: backing), borderRadius: BorderRadius.circular(size * .22)),
-              child: Text(line, textAlign: TextAlign.center, style: style),
-            ),
-        ]);
-      },
-    ),
-  );
 }
 
 /// "Watch party" over the video: who's in charge.

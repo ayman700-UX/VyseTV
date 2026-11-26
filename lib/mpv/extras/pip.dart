@@ -13,6 +13,8 @@ import 'package:flutter/services.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../core/platform/webos.dart';
+
 abstract final class Pip {
   static const _channel = MethodChannel('vyse/pip');
 
@@ -22,7 +24,8 @@ abstract final class Pip {
   static bool _listening = false;
   static bool? _supported;
 
-  static bool get _desktopMini => !kIsWeb && (Platform.isWindows || Platform.isLinux);
+  // (not an LG TV, which says it is Linux: a TV has no small-window player)
+  static bool get _desktopMini => !kIsWeb && !WebOS.isTv && (Platform.isWindows || Platform.isLinux);
   static bool get _system => !kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS);
 
   static void _listen() {

@@ -1,14 +1,18 @@
-import 'player_native.dart';
+import 'player_base.dart';
 
 /// Players whose video lives in a native surface behind the Flutter window,
 /// and so must be told where to put it.
 ///
-/// Constrained to [PlayerNative] because the request is the same on every such
-/// platform — a Windows child HWND and a Wayland subsurface take identical
-/// geometry — so the mixin carries the call instead of each platform repeating
-/// it. `Video` keys its layout reporting off this type: mixing it in is what
-/// says the player has a surface worth positioning.
-mixin VideoRectSupport on PlayerNative {
+/// The request is the same on every such platform — a Windows child HWND and a
+/// Wayland subsurface take identical geometry — so the mixin carries the call
+/// instead of each platform repeating it. `Video` keys its layout reporting off
+/// this type: mixing it in is what says the player has a surface worth
+/// positioning.
+///
+/// VyseTV: on [PlayerBase], not only the mpv players. The LG webOS player has such a
+/// surface too (the TV's video plane) and places it its own way, by overriding
+/// [setVideoRect].
+mixin VideoRectSupport on PlayerBase {
   Future<void> setVideoRect({
     required int left,
     required int top,

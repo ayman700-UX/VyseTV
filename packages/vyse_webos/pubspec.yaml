@@ -1,0 +1,21 @@
+name: vyse_webos
+description: "VyseTV's native side on LG webOS: the TV's media player and the window's keys."
+version: 1.0.0
+publish_to: 'none'
+
+# Only the webOS build takes this package (tool/webos adds it to that build's pubspec). The
+# Dart that talks to it lives in the app: lib/mpv/player/platform/player_webos.dart.
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      webos:
+        pluginClass: VyseWebosPlugin

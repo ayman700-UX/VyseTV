@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/platform/webos.dart';
 import '../../core/theme.dart';
 import '../../data/trackers/loopback_auth.dart';
 import '../../data/trackers/tracker.dart';
@@ -14,7 +15,8 @@ import '../common.dart';
 import '../service_logos.dart';
 import 'import_dialog.dart';
 
-bool get _desktop => !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+// (An LG TV says it is Linux, and has no browser that comes back to the app: it signs in as a phone does.)
+bool get _desktop => !kIsWeb && !WebOS.isTv && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
 /// Connects AniList. On a computer it signs in through the browser and comes back
 /// by itself; AniList can also take a pasted token (the only way on phones for now).

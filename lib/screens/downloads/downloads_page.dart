@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/layout.dart';
+import '../../core/platform/webos.dart';
 import '../../core/theme.dart';
 import '../../data/downloads/downloads.dart';
 import '../../data/playback/outside_play.dart';
@@ -136,7 +137,7 @@ class _DownloadsPageState extends State<DownloadsPage> {
     final side = phone ? 16.0 : Layout.inset(context);
     final right = pageRight(context);
     final top = Layout.windowChrome(context) + (phone ? 12 : 24);
-    final desktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    final desktop = (Platform.isWindows || Platform.isMacOS || Platform.isLinux) && !WebOS.isTv; // (an LG TV says it is Linux)
 
     return ColoredBox(
       color: VyseColors.bg,

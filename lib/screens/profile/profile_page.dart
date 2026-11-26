@@ -17,6 +17,7 @@ import '../../data/sources/torrents.dart';
 import '../../data/playback/intro_db.dart' show SegmentKind;
 import '../../data/account/account.dart';
 import '../../core/platform/platform_detector.dart' show PlatformDetector;
+import '../../core/platform/webos.dart';
 import '../../data/phone_edit/phone_session.dart';
 import '../../data/playback/playback_report.dart';
 import '../../data/playback/player_engine.dart';
@@ -33,6 +34,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../../core/accent.dart';
+import '../../core/compat.dart' show reorderTo;
 import '../../core/layout.dart';
 import '../../core/nav_sections.dart';
 import '../../core/theme.dart';
@@ -1238,7 +1240,8 @@ class _Navigation extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             buildDefaultDragHandles: false,
             itemCount: list.length,
-            onReorderItem: move,
+            // ignore: deprecated_member_use
+            onReorder: reorderTo(move),
             proxyDecorator: (child, _, _) => Material(
               color: Colors.transparent,
               child: DecoratedBox(
@@ -1718,7 +1721,8 @@ class _AutoplayOrder extends StatelessWidget {
               physics: const NeverScrollableScrollPhysics(),
               buildDefaultDragHandles: false,
               itemCount: steps.length,
-              onReorderItem: move,
+              // ignore: deprecated_member_use
+              onReorder: reorderTo(move),
               proxyDecorator: (child, _, _) => Material(
                 color: Colors.transparent,
                 child: DecoratedBox(
@@ -1955,7 +1959,7 @@ class _SubtitlesTab extends StatelessWidget {
       ),
       _Section(
         title: 'Caption style',
-        subtitle: m3
+        subtitle: m3 || WebOS.isTv
             ? 'Drawn by the player, so the preview is close but not exact.'
             : "Drawn by the player's subtitle engine (libass), so the preview is close but not exact.",
         children: [
@@ -2062,7 +2066,8 @@ class _SubtitlesTab extends StatelessWidget {
         ],
       ),
       // (Media3 leaves styled subtitles as their makers styled them: nothing to choose)
-      if (!m3) ValueListenableBuilder(
+      // (an LG TV's player reads styled subtitles as plain text: nothing to choose there)
+      if (!m3 && !WebOS.isTv) ValueListenableBuilder(
         valueListenable: AppSettings.subtitleAss,
         builder: (context, mode, _) => _Section(
           title: 'Styled subtitles',
@@ -3391,7 +3396,8 @@ class _SourcesTab extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             buildDefaultDragHandles: false,
             itemCount: list.length,
-            onReorderItem: save,
+            // ignore: deprecated_member_use
+            onReorder: reorderTo(save),
             proxyDecorator: (child, _, _) => Material(
               color: Colors.transparent,
               child: DecoratedBox(

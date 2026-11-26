@@ -1,9 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/platform/device_channel.dart';
+import '../../core/platform/webos.dart';
 
 /// One line of a report: what it is, and what it says.
 typedef ReportFact = ({String label, String value});
@@ -68,6 +70,10 @@ class PlaybackReport {
   /// What mpv says about the video (its properties, by their own names).
   PlaybackReport withMpv(Map<String, Object?> facts) => facts.isEmpty ? this : _with({'mpv': _clean(facts)});
 
+  /// What an LG TV's player says about the video it is showing (its stats: the picture's size,
+  /// rate and HDR type, the codecs of the tracks in use).
+  PlaybackReport withTv(Map<String, Object?> facts) => facts.isEmpty ? this : _with({'tv': _clean(facts)});
+
   /// The audio track in use, as the player's own track list has it (what mpv or Media3 say
   /// about the decoded sound comes first when they say it).
   PlaybackReport withAudio({String? language, String? codec, int? channels, int? sampleRate}) => _with({
@@ -126,6 +132,41 @@ class PlaybackReport {
   String get source => _s('source');
   String get host => _s('host');
   bool get onMedia3 => _s('engine') == 'media3';
+
+  /// Played by an LG TV's own player (webOS).
+  bool get onTv => _s('engine') == 'webos';
+
+  /// The engine that played it, by name.
+  String get _engineName => onTv ? "the TV's player" : (onMedia3 ? 'Media3' : 'mpv');
+
+  /// What the engine said about the video under mpv's names for it: mpv's own words, or on an
+  /// LG TV what its player said, renamed so every line below reads both the same way. (The
+  /// TV's HDR type has no mpv name: it is kept as `tvHdr`, see [_hdr].)
+  Map<String, Object?> get _mpvFacts {
+    if (!onTv) return _m('mpv');
+    final tv = _m('tv');
+    if (tv.isEmpty) return const {};
+    return {
+      'video-params/w': tv['videoWidth'],
+      'video-params/h': tv['videoHeight'],
+      'container-fps': tv['videoFps'],
+      'video-bitrate': tv['videoBitrate'],
+      'video-codec': tv['videoCodec'],
+      'audio-codec-name': tv['audioCodec'],
+      'current-tracks/audio/demux-channel-count': tv['audioChannels'],
+      'current-tracks/audio/demux-samplerate': tv['audioSampleRate'],
+      'tvHdr': tv['hdrType'],
+      // (the stream's own transfer function, as H.265 numbers it: 16 is PQ, 18 is HLG)
+      'video-params/gamma': switch (tv['transfer']) {
+        16 => 'pq',
+        18 => 'hlg',
+        final num _ => 'sdr',
+        _ => null,
+      },
+      'tvImmersive': tv['audioImmersive'],
+      'hwdec-current': "The TV's own",
+    }..removeWhere((_, v) => v == null);
+  }
   bool get handedOver => _m('handOver').isNotEmpty;
   int? get firstFrameMs => (_m('exo')['firstFrameMs'] as num?)?.toInt() ?? (_f['firstFrameMs'] as num?)?.toInt();
   bool get started => firstFrameMs != null;
@@ -137,7 +178,7 @@ class PlaybackReport {
   String get _outcomeShort {
     if (failed) return started ? 'stopped with an error' : 'did not play';
     if (handedOver) return _f['mpvFrameMs'] != null ? 'played on mpv, after Media3' : 'handed to mpv';
-    if (started) return 'played on ${onMedia3 ? 'Media3' : 'mpv'}';
+    if (started) return 'played on $_engineName';
     return _f['closedAfterMs'] == null ? 'starting' : 'closed before it started';
   }
 
@@ -145,6 +186,7 @@ class PlaybackReport {
   String get engineLine {
     // (a Media3 player that has given one video to mpv plays the ones after it on mpv too)
     if (_s('engine') == 'mpv-kept') return 'mpv, since Media3 gave an earlier video up';
+    if (onTv) return "The TV's own player";
     if (!onMedia3) return 'mpv';
     if (!handedOver) return 'Media3';
     return 'mpv, after Media3 ${_handOverWords(_m('handOver')['kind'] as String? ?? '')}';
@@ -165,7 +207,7 @@ class PlaybackReport {
   /// Stream info: the source, the engine, the picture, the sound and the subtitle.
   List<ReportSection> get stream {
     // (after a hand-over the video is mpv's to describe, once it has it open)
-    final exo = handedOver && _mpvKnows ? const <String, Object?>{} : _m('exo'), mpv = _m('mpv');
+    final exo = handedOver && _mpvKnows ? const <String, Object?>{} : _m('exo'), mpv = _mpvFacts;
     final link = _s('link');
     final subtitle = _m('subtitle');
     // (after a hand-over, until mpv has the video open, the decoder Media3 used is not what plays it)
@@ -209,7 +251,7 @@ class PlaybackReport {
   List<ReportSection> get card {
     final caps = _m('caps');
     // (what Media3 knew stays on the card after a hand-over: it is what went wrong there)
-    final exo = _m('exo'), mpv = _m('mpv');
+    final exo = _m('exo'), mpv = _mpvFacts;
     final display = _list(caps['displayHdr']);
     final decoders = _list(caps['dvDecoders']);
     final profile = (exo['dvSourceProfile'] as num?)?.toInt() ?? (mpv['dvSourceProfile'] as num?)?.toInt() ?? _dvProfile(_str(exo['videoCodec']));
@@ -223,7 +265,7 @@ class PlaybackReport {
         ('Source', [source, _s('link')].where((x) => x.isNotEmpty).join(' · ')),
         ('Server', host),
         ('When', _when),
-        ('Device', [_str(caps['device']) ?? '', if (_str(caps['android']) != null) 'Android ${caps['android']}'].where((x) => x.isNotEmpty).join(' · ')),
+        ('Device', [_str(caps['device']) ?? '', if (_str(caps['android']) != null) 'Android ${caps['android']}', if (_str(caps['webos']) != null) 'webOS ${caps['webos']}'].where((x) => x.isNotEmpty).join(' · ')),
         ('Display', caps.isEmpty ? '' : (display.isEmpty ? 'No HDR' : display.join(', '))),
         ('Dolby Vision decoders', caps.isEmpty ? '' : (decoders.isEmpty ? 'None' : decoders.join('\n'))),
       ])),
@@ -282,8 +324,10 @@ class PlaybackReport {
 
   (String, String?) _picture() {
     // (after a hand-over the video is mpv's to describe, once it has it open)
-    final exo = handedOver && _mpvKnows ? const <String, Object?>{} : _m('exo'), mpv = _m('mpv'), caps = _m('caps');
+    final exo = handedOver && _mpvKnows ? const <String, Object?>{} : _m('exo'), mpv = _mpvFacts, caps = _m('caps');
     final format = _hdr(exo, mpv);
+    // (an LG TV's player says what it is showing the picture as; nothing here maps or converts it)
+    if (onTv) return (format, null);
     if (format.isEmpty || caps.isEmpty) return ('', null);
     final display = _list(caps['displayHdr']);
     final dvScreen = display.contains('Dolby Vision');
@@ -341,7 +385,15 @@ class PlaybackReport {
   };
 
   (String, String?) _sound() {
-    final exo = handedOver && _mpvKnows ? const <String, Object?>{} : _m('exo'), mpv = _m('mpv');
+    final exo = handedOver && _mpvKnows ? const <String, Object?>{} : _m('exo'), mpv = _mpvFacts;
+    if (onTv) {
+      // The TV decodes the sound or sends it on as its own sound settings say, and does not say
+      // which. What it does say is whether the track is an immersive one (Atmos).
+      if (mpv.isEmpty) return ('', null);
+      final immersive = _str(mpv['tvImmersive']);
+      final atmos = immersive != null && !const {'none', 'off', 'false', '0'}.contains(immersive.toLowerCase());
+      return ("As the TV's sound settings send it${atmos ? ' · immersive ($immersive)' : ''}", null);
+    }
     final settings = _m('sound');
     // (why a Dolby track is decoded here: the setting first, then the TV's own answer)
     final whyDecoded = settings['passthrough'] == false
@@ -379,7 +431,7 @@ class PlaybackReport {
     // (an error after the picture has shown ended it; one before means it never played)
     if (failed) return ['${started ? 'Stopped' : 'Did not play'}: ${_s('failure')}', handed].where((x) => x.isNotEmpty).join('. ');
     if (over.isNotEmpty) return _f['mpvFrameMs'] != null ? '$handed, which played it' : '$handed, which has not shown a picture';
-    if (started) return 'Played on ${onMedia3 ? 'Media3' : 'mpv'}';
+    if (started) return 'Played on $_engineName';
     final closed = (_f['closedAfterMs'] as num?)?.toInt();
     return closed == null ? 'Has not shown a picture yet' : 'Closed after ${_seconds(closed)} with no picture';
   }
@@ -456,7 +508,8 @@ class PlaybackReport {
 
   static String _mpvVideoCodec(String name) {
     final n = name.toLowerCase();
-    for (final (has, label) in const [('hevc', 'HEVC'), ('h.265', 'HEVC'), ('h264', 'H.264'), ('h.264', 'H.264'), ('av1', 'AV1'), ('vp9', 'VP9'), ('vp8', 'VP8'), ('mpeg2', 'MPEG-2'), ('mpeg-2', 'MPEG-2'), ('vc1', 'VC-1'), ('vc-1', 'VC-1'), ('mpeg4', 'MPEG-4')]) {
+    // (mpv's names, and an LG TV's: "H265", "H264")
+    for (final (has, label) in const [('hevc', 'HEVC'), ('h.265', 'HEVC'), ('h265', 'HEVC'), ('h264', 'H.264'), ('h.264', 'H.264'), ('av1', 'AV1'), ('vp9', 'VP9'), ('vp8', 'VP8'), ('mpeg2', 'MPEG-2'), ('mpeg-2', 'MPEG-2'), ('vc1', 'VC-1'), ('vc-1', 'VC-1'), ('mpeg4', 'MPEG-4')]) {
       if (n.contains(has)) return label;
     }
     return name.split(RegExp(r' [(/]')).first;
@@ -464,6 +517,20 @@ class PlaybackReport {
 
   /// HDR as the stream carries it: Dolby Vision with its profile, HDR10, HLG, or SDR.
   String _hdr(Map<String, Object?> exo, Map<String, Object?> mpv) {
+    // An LG TV's player names it itself. Seen in others' logs: "HDR10", "hdr10", "hlg", "none";
+    // its name for Dolby Vision is not written down anywhere, so a name not known is shown as it is.
+    final tv = _str(mpv['tvHdr']);
+    if (tv != null) {
+      final t = tv.toLowerCase().replaceAll(RegExp('[^a-z0-9+]'), '');
+      if (t.contains('dolby') || t == 'dv') return 'Dolby Vision';
+      if (t.contains('hdr10+') || t.contains('hdr10plus')) return 'HDR10+';
+      if (t.contains('hdr10') || t == 'hdr') return 'HDR10';
+      if (t.contains('hlg')) return 'HLG';
+      if (t.isEmpty || t == 'none' || t == 'sdr') return 'SDR';
+      return tv;
+    }
+    // (a TV that has said neither that nor the stream's transfer function has not said: no guess)
+    if (onTv && mpv['video-params/gamma'] == null) return '';
     final profile = (exo['dvSourceProfile'] as num?)?.toInt() ?? (mpv['dvSourceProfile'] as num?)?.toInt() ?? _dvProfile(_str(exo['videoCodec']));
     if (exo['videoMimeType'] == 'video/dolby-vision' || profile != null) {
       // (profile 8 through the HEVC decoder: its HDR10 layer is what shows)
@@ -639,6 +706,7 @@ class PlaybackReport {
   /// What this device can do with HDR and Dolby Vision, asked of Android once and remembered.
   /// Empty anywhere else.
   static Future<Map<String, Object?>> device() => _device ??= () async {
+    if (WebOS.isTv) return _tvDevice();
     try {
       final caps = await deviceChannel.invokeMethod<Map<Object?, Object?>>('getPlaybackCapabilities');
       return caps?.cast<String, Object?>() ?? const <String, Object?>{};
@@ -647,6 +715,25 @@ class PlaybackReport {
     }
   }();
   static Future<Map<String, Object?>>? _device;
+
+  /// The same of an LG TV, asked of LG's embedder: its model, its webOS, and what its panel
+  /// and sound take.
+  static Future<Map<String, Object?>> _tvDevice() async {
+    try {
+      final info = await const MethodChannel('webos_plugin').invokeMapMethod<String, Object?>('device_info/getDeviceInfo') ?? const {};
+      if (info.isEmpty) return const {};
+      final model = info['modelName'];
+      final version = info['version'] ?? info['sdkVersion'];
+      return {
+        'device': ['LG', if (model is String && model.isNotEmpty) model, if (info['oled'] == true) 'OLED'].join(' '),
+        if (version is String && version.isNotEmpty) 'webos': version,
+        'displayHdr': [if (info['hdr10'] == true) 'HDR10', if (info['dolbyVision'] == true) 'Dolby Vision'],
+        if (info['dolbyAtmos'] is bool) 'atmos': info['dolbyAtmos'],
+      };
+    } catch (_) {
+      return const {};
+    }
+  }
 
   @visibleForTesting
   static void debugReset() {

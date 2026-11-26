@@ -224,6 +224,25 @@ abstract final class Bed {
   /// player asks of it ("open {…}", "setSubtitleStyle {…}").
   static final exoCalls = <String>[];
 
+  /// The same for an LG TV's own player (webOS), and for the window LG's embedder gives its
+  /// picture ("load {…}", "window resize {…}").
+  static final tvCalls = <String>[];
+
+  /// What an LG TV's player tells the app by itself: one of its events, as the JSON it sends
+  /// (`{"playing":true}`), to the video player.
+  static Future<void> tvEvent(WidgetTester t, String json) async {
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
+      'vyse/webos_media/0/events',
+      const StandardMethodCodec().encodeSuccessEnvelope(<String, Object?>{
+        'type': 'event',
+        'name': 'media',
+        'data': {'json': json},
+      }),
+      (_) {},
+    );
+    await t.pump();
+  }
+
   /// What the Media3 plugin answers when the app asks it something, by the call's name
   /// ('getStats': what it says of the video). Anything not listed gets "done, nothing to say".
   static final exoAnswers = <String, Object?>{};
@@ -340,6 +359,22 @@ abstract final class Bed {
             final name = (call.arguments as Map?)?['name'];
             if (videoProperties.containsKey(name)) return Future.value(methods.encodeSuccessEnvelope(videoProperties[name]));
           }
+        } catch (_) {}
+      }
+      // The stand-in for an LG TV (webOS): its player's channel says "started" like the others,
+      // and LG's embedder hands out a window for the picture.
+      if (channel.startsWith('vyse/webos_media') && message != null) {
+        try {
+          final call = methods.decodeMethodCall(message);
+          if (!channel.endsWith('/events')) tvCalls.add('${call.method} ${call.arguments ?? ''}'.trim());
+          if (call.method == 'initialize') return Future.value(methods.encodeSuccessEnvelope(true));
+        } catch (_) {}
+      }
+      if (channel == 'webos/exported_windows' && message != null) {
+        try {
+          final call = methods.decodeMethodCall(message);
+          tvCalls.add('window ${call.method} ${call.arguments ?? ''}'.trim());
+          if (call.method == 'create') return Future.value(methods.encodeSuccessEnvelope('window-1'));
         } catch (_) {}
       }
       if (channel == 'vyse/device' && message != null && deviceAnswers.isNotEmpty) {

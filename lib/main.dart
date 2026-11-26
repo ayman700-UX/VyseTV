@@ -41,6 +41,8 @@ import 'dpad/dpad_root.dart';
 import 'dpad/input_mode_tracker.dart';
 import 'core/platform/device_performance.dart';
 import 'core/platform/platform_detector.dart' show PlatformDetector, TvDetectionService;
+import 'core/platform/webos.dart';
+import 'core/platform/webos_window.dart';
 import 'screens/home/up_next.dart' show UpNext;
 import 'screens/shell/intro_screen.dart';
 import 'services/iptv/iptv_settings.dart';
@@ -52,8 +54,8 @@ void _hideSystemBars() => SystemChrome.setEnabledSystemUIMode(SystemUiMode.immer
 Future<void> main() async {
   VyseBinding.ensureInitialized(); // (Flutter's own, with reduce-motion in the app's hands: core/lean.dart)
   // Android TV and Google TV: known before anything is drawn, so the app opens in D-pad mode
-  // there, with the ring on its first control
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+  // there, with the ring on its first control (an LG TV likewise)
+  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || WebOS.isTv)) {
     try {
       await TvDetectionService.getInstance();
     } catch (_) {}
@@ -189,6 +191,8 @@ Future<void> main() async {
   }
 
   runApp(const VyseApp());
+  // (an LG TV: the remote's Back key is asked for again once the first page is up)
+  if (WebOS.isTv) WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(WebosWindow.keepBackKey()));
   startPerfLog();
 }
 

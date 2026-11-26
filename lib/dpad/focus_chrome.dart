@@ -87,18 +87,28 @@ class FocusChrome extends SingleChildRenderObjectWidget {
 }
 
 class RenderFocusChrome extends RenderProxyBox {
+  // (the names are given the long way, not as `this._progress`: the webOS build compiles on
+  // an older Dart, which has no private named parameters)
   RenderFocusChrome({
-    required this._progress,
-    required this._color,
-    required this._radius,
-    required this._fallbackRadius,
+    required Animation<double>? progress,
+    required Color color,
+    required BorderRadius? radius,
+    required BorderRadius fallbackRadius,
     required this.shape,
-    required this._scale,
-    required this._width,
-    required this._inset,
-    required this._fill,
-    required this._link,
-  });
+    required double scale,
+    required double width,
+    required EdgeInsets inset,
+    required bool fill,
+    required LayerLink? link,
+  }) : _progress = progress,
+       _color = color,
+       _radius = radius,
+       _fallbackRadius = fallbackRadius,
+       _scale = scale,
+       _width = width,
+       _inset = inset,
+       _fill = fill,
+       _link = link;
 
   Animation<double>? _progress;
   set progress(Animation<double>? value) {

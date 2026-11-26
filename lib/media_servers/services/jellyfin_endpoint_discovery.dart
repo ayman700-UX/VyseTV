@@ -44,9 +44,11 @@ class JellyfinEndpointRaceResult {
     required this.activeBaseUrl,
     required this.baseUrls,
     required this.serverInfo,
-    required this._verifiedEffectiveBaseUrls,
-    required this._machineMismatchBaseUrls,
-  });
+    // VyseTV: named the long way (the webOS build's Dart has no private named parameters)
+    required Map<String, String> verifiedEffectiveBaseUrls,
+    required Set<String> machineMismatchBaseUrls,
+  }) : _verifiedEffectiveBaseUrls = verifiedEffectiveBaseUrls,
+       _machineMismatchBaseUrls = machineMismatchBaseUrls;
 
   /// Reconciles endpoints from an existing authenticated connection after a
   /// partial race.
@@ -107,7 +109,9 @@ class JellyfinEndpointUserInputCandidates {
 class JellyfinEndpointDiscovery {
   static const int defaultPort = 8096;
 
-  JellyfinEndpointDiscovery({this.dialect = MediaBrowserDialect.jellyfin, this._testHttpClientFactory});
+  // VyseTV: named the long way (the webOS build's Dart has no private named parameters)
+  JellyfinEndpointDiscovery({this.dialect = MediaBrowserDialect.jellyfin, http.Client Function()? testHttpClientFactory})
+    : _testHttpClientFactory = testHttpClientFactory;
 
   final MediaBrowserDialect dialect;
   final http.Client Function()? _testHttpClientFactory;

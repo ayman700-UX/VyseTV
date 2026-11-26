@@ -13,6 +13,8 @@ name: Build
 #   * A push to main: the platforms named in the commit message, in square
 #     brackets: [linux] [linux-x64] [linux-arm64] [macos] [ios] [android]
 #     [windows] or [all]. A push that names none builds nothing.
+#   * [webos] builds the LG TV package. It is asked for by its own name only, never by
+#     [all]: see the webos job at the end.
 #
 # On a private repository the macOS and iOS jobs use up build minutes ten times
 # faster than the Linux ones, and Windows twice as fast.
@@ -23,7 +25,7 @@ on:
         description: What to build
         type: choice
         default: linux
-        options: [all, linux, linux-x64, linux-arm64, macos, ios, android, windows]
+        options: [all, linux, linux-x64, linux-arm64, macos, ios, android, windows, webos]
   push:
     branches: [main]
 
@@ -41,6 +43,7 @@ jobs:
       ios: ${{ steps.pick.outputs.ios }}
       android: ${{ steps.pick.outputs.android }}
       windows: ${{ steps.pick.outputs.windows }}
+      webos: ${{ steps.pick.outputs.webos }}
     steps:
       - id: pick
         env:
@@ -51,7 +54,7 @@ jobs:
           if [ "$EVENT" = "workflow_dispatch" ]; then
             pick="$PLATFORM"
           else
-            pick=$(printf '%s' "$MESSAGE" | grep -oE '\[(all|linux|linux-x64|linux-arm64|macos|ios|android|windows)\]' | tr -d '[]' | tr '\n' ' ' || true)
+            pick=$(printf '%s' "$MESSAGE" | grep -oE '\[(all|linux|linux-x64|linux-arm64|macos|ios|android|windows|webos)\]' | tr -d '[]' | tr '\n' ' ' || true)
           fi
           echo "Building: ${pick:-nothing}"
           has() { case " $pick " in *" all "*|*" $1 "*) return 0 ;; esac; return 1; }
@@ -66,6 +69,8 @@ jobs:
           for p in macos ios android windows; do
             if has "$p"; then echo "$p=true" >> "$GITHUB_OUTPUT"; else echo "$p=false" >> "$GITHUB_OUTPUT"; fi
           done
+          # (the LG TV build: by its own name only, "all" does not ask for it)
+          case " $pick " in *" webos "*) echo "webos=true" >> "$GITHUB_OUTPUT" ;; *) echo "webos=false" >> "$GITHUB_OUTPUT" ;; esac
 
   # 64-bit Intel/AMD and 64-bit ARM. Flutter has no 32-bit Linux desktop build.
   linux:
@@ -448,4 +453,51 @@ jobs:
         with:
           name: vysetv-windows-x64
           path: build/windows/x64/runner/Release
+          retention-days: 2 # a private repository has 500 MB for these
+
+  # LG webOS: the TV package (.ipk). Not run on a TV yet (webos/README.md), so it is built only
+  # when asked for by name, [webos], and is not part of [all].
+  #
+  # It is built with LG's own Flutter SDK, not the pinned Flutter above. LG's NDK comes under
+  # the "LG SDK License Agreement", which only the repository's owner can accept: the job runs
+  # once the repository variable LG_NDK_LICENSE is set to "accepted" (Settings > Secrets and
+  # variables > Actions > Variables), and says so when it is not.
+  webos:
+    name: LG webOS
+    needs: plan
+    if: ${{ needs.plan.outputs.webos == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: LG's NDK licence
+        env:
+          LG_NDK_LICENSE: ${{ vars.LG_NDK_LICENSE }}
+        run: |
+          if [ "$LG_NDK_LICENSE" != "accepted" ]; then
+            echo "::error::LG's webOS NDK is under the LG SDK License Agreement. Read it (github.com/lg-flutter-webos/ndk), and if you accept it set the repository variable LG_NDK_LICENSE to: accepted"
+            exit 1
+          fi
+      # The real server settings (the account server, the update addresses) are not in the
+      # repository: they come from the SERVER_CONFIG secret (lib/data/server_config.dart in
+      # base64). A build without them would have no accounts and could never be updated, so it
+      # stops instead.
+      - name: Write the server settings
+        shell: bash
+        env:
+          SERVER_CONFIG: ${{ secrets.SERVER_CONFIG }}
+        run: |
+          if [ -z "$SERVER_CONFIG" ]; then
+            echo "::error::No SERVER_CONFIG secret: this build would have no accounts and no updater."
+            exit 1
+          fi
+          printf '%s' "$SERVER_CONFIG" | base64 -d > lib/data/server_config.dart
+          grep -q updateListAddresses lib/data/server_config.dart
+      - name: LG's Flutter SDK, webOS CLI and NDK
+        run: bash tool/webos/setup.sh --accept-lg-ndk-license
+      - name: Build
+        run: bash tool/webos/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vysetv-webos
+          path: build/webos/*.ipk
           retention-days: 2 # a private repository has 500 MB for these

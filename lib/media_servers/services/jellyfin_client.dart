@@ -285,9 +285,15 @@ class JellyfinClient
         MediaDeletionPermissionClient,
         ScopedMediaServerClient,
         GracefullyCloseable {
-  JellyfinClient._({required this._connection, required this._http, FavoriteChannelsRepository? favoritesRepository})
-    : _favoritesRepository = favoritesRepository ?? const SharedPreferencesFavoriteChannelsRepository(),
-      _paths = MediaBrowserPaths(dialect: _connection.dialect, userId: _connection.userId);
+  // VyseTV: named the long way (the webOS build's Dart has no private named parameters)
+  JellyfinClient._({
+    required JellyfinConnection connection,
+    required FailoverHttpClient http,
+    FavoriteChannelsRepository? favoritesRepository,
+  }) : _connection = connection,
+       _http = http,
+       _favoritesRepository = favoritesRepository ?? const SharedPreferencesFavoriteChannelsRepository(),
+       _paths = MediaBrowserPaths(dialect: connection.dialect, userId: connection.userId);
 
   /// Build a fully-initialised [JellyfinClient]. Endpoint reachability is
   /// raced before construction by onboarding/profile binding; this factory

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/foundation.dart';
 
+import '../../core/platform/webos.dart';
 import '../../core/nav_sections.dart';
 import '../../mpv/mpv.dart' show Upscaler;
 import '../app_settings.dart';
@@ -479,6 +480,10 @@ String cssColor(int argb) {
 List<PhoneSection> phoneSections({required List<SubtitleFontChoice> fonts}) {
   // Media3 is the engine: what only mpv can do is left out (it is back with mpv)
   final m3 = PlayerEngine.isMedia3;
+  // An LG TV plays through its own player, which takes none of the sound and picture options
+  // (the TV's own settings are where its sound and picture are set), and reads styled
+  // subtitles as plain text.
+  final lg = WebOS.isTv;
   return [
     PhoneSection('playback', 'Playback', 'How videos play by default.', [
       _Toggle(AppSettings.streamingMode, 'Streaming mode', "On: videos play right away from VyseTV's servers. Off: pick a source from your addons first"),
@@ -507,7 +512,7 @@ List<PhoneSection> phoneSections({required List<SubtitleFontChoice> fonts}) {
         _Toggle(AppSettings.publicTrackers, 'Public trackers', 'Add well-known public trackers to every torrent'),
         _Trackers(),
       ]),
-    PhoneSection('player', 'Sound and picture', 'Set for this TV only.', [
+    if (!lg) PhoneSection('player', 'Sound and picture', 'Set for this TV only.', [
       if (PlayerEngine.offered) _Engine(),
       if (m3) _Toggle(AppSettings.mpvHandOver, "Switch to mpv when Media3 can't play", 'mpv carries on from the same spot. Off: the video is said not to play'),
       _Stepper(AppSettings.audioDelayMs, 'Audio sync', min: -5000, max: 5000, step: 50, fmt: 'delay', zero: 'In sync', sub: 'Fixes lip-sync. + plays the sound later'),
@@ -549,7 +554,7 @@ List<PhoneSection> phoneSections({required List<SubtitleFontChoice> fonts}) {
       _Choice<bool>(AppSettings.subtitleTop, 'Place at', const [(false, 'Bottom'), (true, 'Top')]),
       _Stepper(AppSettings.subtitleLift, 'Distance from the edge', min: 0, max: 45, step: 1, fmt: 'percent', zero: 'Edge', sub: "Of the screen's height. Bottom subtitles still move up while the controls show."),
       _Toggle(AppSettings.subtitleOnPicture, 'Keep on the picture', "Never put subtitles in a film's black bars"),
-      if (!m3) ...[
+      if (!m3 && !lg) ...[
         _Group('Styled subtitles'),
         _Choice<String>(AppSettings.subtitleAss, 'Show them', const [('scale', 'Keep as made'), ('force', 'Use my style'), ('strip', 'Plain')], sub: 'Anime fansubs (ASS/SSA) often bring their own fonts, colours, signs and karaoke.'),
       ],

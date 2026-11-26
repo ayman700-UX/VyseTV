@@ -34,6 +34,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../core/compat.dart' show tickersOn;
 import 'covered_route_focus_boundary.dart';
 import 'dpad_navigator.dart';
 import 'dpad_reveal.dart';
@@ -166,7 +167,7 @@ class DpadBackScope extends StatefulWidget {
   static bool handle() {
     for (final scope in _live.reversed.toList()) {
       if (!scope.mounted) continue;
-      if (!(ModalRoute.of(scope.context)?.isCurrent ?? true) || !TickerMode.valuesOf(scope.context).enabled) continue;
+      if (!(ModalRoute.of(scope.context)?.isCurrent ?? true) || !tickersOn(scope.context)) continue;
       if (scope.widget.onBack()) return true;
     }
     return false;

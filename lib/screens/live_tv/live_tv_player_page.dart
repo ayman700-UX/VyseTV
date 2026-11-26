@@ -231,8 +231,10 @@ class _LiveTvPlayerPageState extends State<LiveTvPlayerPage> with WidgetsBinding
     });
     try {
       // (Media3 introduces itself to the provider the way mpv does, so a line that plays on one
-      // plays on the other)
-      await _player.open(Media(_item.url, headers: _player.playerType == 'exoplayer' ? const {'User-Agent': 'libmpv'} : null));
+      // plays on the other. An LG TV's player too: it cannot be told what to call itself, so
+      // the channel is asked for through the relay on this device, which says it for it.)
+      final asMpv = _player.playerType == 'exoplayer' || _player.playerType == 'webos';
+      await _player.open(Media(_item.url, headers: asMpv ? const {'User-Agent': 'libmpv'} : null));
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/accent.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/compat.dart' show reorderTo;
 import '../../core/layout.dart';
 import '../../core/theme.dart';
 import '../../core/lean.dart';
@@ -614,7 +615,8 @@ class _QueueView extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(8, 4, 8, 40),
           buildDefaultDragHandles: false,
           itemCount: up.length,
-          onReorderItem: (from, to) => p.reorder(p.index + 1 + from, p.index + 1 + to),
+          // ignore: deprecated_member_use
+          onReorder: reorderTo((from, to) => p.reorder(p.index + 1 + from, p.index + 1 + to)),
           itemBuilder: (context, i) {
             final t = up[i];
             return Pressable(

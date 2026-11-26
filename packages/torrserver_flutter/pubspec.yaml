@@ -39,3 +39,7 @@ flutter:
         pluginClass: TorrserverFlutterPlugin
       windows:
         pluginClass: TorrserverFlutterPluginCApi
+      # VyseTV: LG webOS. No code of its own there: webos/CMakeLists.txt only has LG's tool
+      # ship the engine with the app (other Flutter tools do not know this key and pass it by).
+      webos:
+        ffiPlugin: true

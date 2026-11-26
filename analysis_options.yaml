@@ -31,6 +31,11 @@ linter:
   # `// ignore_for_file: name_of_lint` syntax on the line or in the file
   # producing the lint.
   rules:
+    # Off because of the LG webOS build. That build has to use LG's Flutter SDK, whose Dart (3.10)
+    # has no private named parameters, so a constructor that fills a private field from a named
+    # parameter is written the long way (`Foo({int a = 0}) : _a = a`). The newer Dart every other
+    # platform builds with would ask for `this._a` there, which the older one cannot compile.
+    prefer_initializing_formals: false
     # avoid_print: false  # Uncomment to disable the `avoid_print` rule
     # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
 

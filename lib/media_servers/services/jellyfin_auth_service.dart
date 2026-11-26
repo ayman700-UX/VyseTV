@@ -53,9 +53,11 @@ class JellyfinConnectionAuthService {
     required this.clientVersion,
     required this.deviceName,
     MediaBrowserDialect dialect = MediaBrowserDialect.jellyfin,
-    @visibleForTesting this._testHttpClientFactory,
+    // VyseTV: named the long way (the webOS build's Dart has no private named parameters)
+    @visibleForTesting http.Client Function()? testHttpClientFactory,
   }) : dialect = dialect,
-       _endpointDiscovery = JellyfinEndpointDiscovery(dialect: dialect, testHttpClientFactory: _testHttpClientFactory);
+       _testHttpClientFactory = testHttpClientFactory,
+       _endpointDiscovery = JellyfinEndpointDiscovery(dialect: dialect, testHttpClientFactory: testHttpClientFactory);
 
   /// App identity sent in the `MediaBrowser` Authorization header. Jellyfin
   /// and Emby use `Client`/`Device`/`DeviceId`/`Version` to populate the

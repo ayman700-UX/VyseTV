@@ -13,7 +13,9 @@ import 'player_native.dart';
 import 'player_state.dart';
 import 'player_streams.dart';
 import 'platform/player_linux.dart';
+import 'platform/player_webos.dart';
 import 'platform/player_windows.dart';
+import '../../core/platform/webos.dart';
 import 'video_decoder_hold.dart';
 
 export 'player_base.dart';
@@ -449,6 +451,8 @@ abstract class Player {
   factory Player({bool? useExoPlayer, bool hardwareDecoding = true}) {
     // VyseTV: tests run on a PC; with this on, asking for ExoPlayer gets its Dart side there too.
     if (useExoPlayer == true && debugExoOnAnyPlatform) return PlayerAndroid();
+    // VyseTV: an LG TV plays with the TV's own player. (It runs Linux, so this comes first.)
+    if (WebOS.isTv) return PlayerWebos();
     if (Platform.isAndroid) {
       // Default to MPV on Android, with ExoPlayer as the opt-in alternative.
       // The caller should pass useExoPlayer based on SettingsService.useExoPlayer.
@@ -489,6 +493,9 @@ abstract class Player {
   /// VyseTV: [listener] is a third audio-only core that plays nothing out loud: it decodes
   /// stretches of a video's sound to a file (`ao=pcm`) for subtitle sync by ear.
   factory Player.audio({bool secondary = false, bool listener = false}) {
+    // VyseTV: on an LG TV music plays through the TV's player too. (It has nothing that
+    // decodes sound to a file: whoever asks for a listener there gets a player that hears nothing.)
+    if (WebOS.isTv) return PlayerWebos.audio(secondary: secondary || listener);
     if (Platform.isAndroid || Platform.isMacOS || Platform.isIOS || Platform.isWindows || Platform.isLinux) {
       return PlayerNative.audio(secondary: secondary, listener: listener);
     }

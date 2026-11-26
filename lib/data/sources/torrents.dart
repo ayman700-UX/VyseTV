@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:path_provider/path_provider.dart';
 import 'package:torrserver_flutter/torrserver_flutter.dart';
 
+import '../../core/platform/webos.dart';
 import '../app_settings.dart';
 import 'torrent_file_ask.dart';
 import 'torrent_file_pick.dart';
@@ -56,11 +57,17 @@ class Torrents {
   /// engine shares the app's own memory, and iOS ends an app that takes too much.
   static bool get _phone => Platform.isAndroid || Platform.isIOS;
 
+  /// An LG TV. The engine is a program of its own there, beside the app and the TV's video
+  /// decoder, on a set whose memory all three share (and a TV that runs short restarts): the
+  /// smallest tier, the engine's page reachable from this TV only, and nothing asked of the
+  /// router or the local network.
+  static bool get _tv => WebOS.isTv;
+
   // ── Settings > Playback > Torrents ──
 
   /// The memory the engine keeps pieces in, in MB: this device's default, and the choices.
-  static int get defaultMemory => _phone ? 256 : 1024;
-  static List<int> get memoryChoices => _phone ? const [128, 256, 512, 1024] : const [512, 1024, 2048, 4096];
+  static int get defaultMemory => _tv ? 128 : (_phone ? 256 : 1024);
+  static List<int> get memoryChoices => _tv ? const [64, 128, 256, 512] : (_phone ? const [128, 256, 512, 1024] : const [512, 1024, 2048, 4096]);
   static int get memory => _chosen(AppSettings.torrentMemory.value, memoryChoices, defaultMemory);
 
   /// How much of the start of the video is fetched before the player opens it, in MB (the end,
@@ -70,8 +77,8 @@ class Torrents {
   static int get preload => _chosen(AppSettings.torrentPreload.value, preloadChoices, defaultPreload).clamp(1, memory ~/ 2);
 
   /// Peers one torrent connects to at once.
-  static int get defaultConnections => _phone ? 150 : 300;
-  static List<int> get connectionChoices => _phone ? const [50, 100, 150, 300] : const [100, 200, 300, 500];
+  static int get defaultConnections => _tv ? 100 : (_phone ? 150 : 300);
+  static List<int> get connectionChoices => _tv ? const [50, 100, 150, 200] : (_phone ? const [50, 100, 150, 300] : const [100, 200, 300, 500]);
   static int get connections => _chosen(AppSettings.torrentConnections.value, connectionChoices, defaultConnections);
 
   static int _chosen(int saved, List<int> choices, int fallback) => choices.contains(saved) ? saved : fallback;
@@ -93,7 +100,8 @@ class Torrents {
     final dir = await _dataDir();
     await _wipe(dir, keepPid: true); // whatever a crashed run left (the old process's id stays, so it's killed)
     try {
-      await c.start(dataDir: dir);
+      // (an LG TV: the engine's own page answers this TV only, not the network it is on)
+      await c.start(dataDir: dir, extraArgs: _tv ? const ['-i', '127.0.0.1'] : null);
     } catch (_) {
       _starting = null; // try again next time
       rethrow;
@@ -138,7 +146,8 @@ class Torrents {
     } catch (_) {
       // no Flutter app around (a test): the job object and the next start's wipe still apply
     }
-    if (Platform.isIOS) {
+    // (an LG TV may end a program of an app that is not in front: looked at on the way back)
+    if (Platform.isIOS || _tv) {
       try {
         _resume ??= AppLifecycleListener(onResume: () => unawaited(_checkAlive()));
       } catch (_) {}
@@ -200,13 +209,13 @@ class Torrents {
     'DisableUTP': false,
     // iOS: asking the router for a port and looking for peers on the local network both need
     // a permission (and an entitlement a sideloaded app can't have), so neither is tried there
-    'DisableUPNP': Platform.isIOS,
+    'DisableUPNP': Platform.isIOS || _tv,
     'DisableDHT': false,
     'DisablePEX': false,
     'DisableUpload': !AppSettings.torrentUpload.value,
     'DownloadRateLimit': 0,
     'UploadRateLimit': 0,
-    'EnableLPD': !Platform.isIOS,
+    'EnableLPD': !Platform.isIOS && !_tv,
     'TorrentDisconnectTimeout': 120,
     'EnableDLNA': false,
     'EnableBonjour': false,

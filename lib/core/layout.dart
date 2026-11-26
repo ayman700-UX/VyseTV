@@ -1,9 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'platform/platform_detector.dart' show PlatformDetector;
+import 'platform/webos.dart';
 
+/// A desktop with a window of its own. (An LG TV runs Linux too, and has none.)
 bool get isDesktopNative =>
     !kIsWeb &&
+    !WebOS.isTv &&
     (defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.linux ||
         defaultTargetPlatform == TargetPlatform.macOS);

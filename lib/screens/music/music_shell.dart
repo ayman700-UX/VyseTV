@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/accent.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/compat.dart' show tickersOn;
 import '../../core/layout.dart';
 import '../../core/nav.dart';
 import '../../core/theme.dart';
@@ -129,7 +130,7 @@ class _MusicShellState extends State<MusicShell> {
   bool _key(KeyEvent e) {
     if (e is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed || !mounted) return false;
     if (e.logicalKey != LogicalKeyboardKey.space && e.logicalKey != LogicalKeyboardKey.keyK) return false;
-    if (!(ModalRoute.of(context)?.isCurrent ?? true) || !TickerMode.valuesOf(context).enabled) return false;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true) || !tickersOn(context)) return false;
     _searchFocus.requestFocus();
     _text.selection = TextSelection(baseOffset: 0, extentOffset: _text.text.length);
     return true;

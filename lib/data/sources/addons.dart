@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/platform/webos.dart';
 import '../anime/anilist.dart';
 import '../app_settings.dart';
 import 'badges.dart';
@@ -1219,8 +1220,9 @@ class Addons {
     return q == null ? null : (query: q, plugin: null);
   }
 
-  /// (the Linux build's mpv has no DASH: a manifest it can't open isn't offered)
-  static bool _playsHere(PluginHit h) => !(h.stream.type == 'dash' && Platform.isLinux);
+  /// (the Linux build's mpv has no DASH: a manifest it can't open isn't offered. An LG TV says
+  /// it is Linux, and its own player reads DASH.)
+  static bool _playsHere(PluginHit h) => !(h.stream.type == 'dash' && Platform.isLinux && !WebOS.isTv);
 
   /// What plugins are asked for [t] (the plugin contract's query: plugins/README.md). Null when
   /// it can't be asked: no title known, or a show's episode without its numbers.

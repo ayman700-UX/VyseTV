@@ -33,8 +33,10 @@ class PlayerNative extends PlayerBase {
   /// initializes: the fork's vo=mediacodec (with gpu behind it) for hardware
   /// sessions, gpu-next for software ones (see
   /// MpvPlayerCore.initialVideoOutput; #2010). Other platforms ignore it.
-  PlayerNative({this._hardwareDecoding = true})
-    : methodChannel = const MethodChannel('vyse/mpv_player'),
+  // (VyseTV: named the long way; the webOS build's Dart has no private named parameters)
+  PlayerNative({bool hardwareDecoding = true})
+    : _hardwareDecoding = hardwareDecoding,
+      methodChannel = const MethodChannel('vyse/mpv_player'),
       eventChannel = const EventChannel('vyse/mpv_player/events'),
       audioOnly = false;
 

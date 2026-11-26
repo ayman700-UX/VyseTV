@@ -1,0 +1,25 @@
+{
+    "id": "com.vyse.vysetv",
+    "version": "1.0.2",
+    "vendor": "VyseTV",
+    "type": "native",
+    "main": "vysetv",
+    "title": "VyseTV",
+    "icon": "icon.png",
+    "largeIcon": "largeIcon.png",
+    "iconColor": "#07070f",
+    "handlesRelaunch": true,
+    "visible": true,
+    "defaultWindowType": "card",
+    "trustLevel": "default",
+    "locationHint": "none",
+    "noSplashOnLaunch": true,
+    "spinnerOnLaunch": false,
+    "transparent": true,
+    "uiRevision": 2,
+    "requiredMemory": 500,
+    "requiredACG": [
+        "network.query",
+        "securitykey.operation"
+    ]
+}

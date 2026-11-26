@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../core/platform/webos.dart';
 import '../account/account.dart';
 import '../app_settings.dart';
 import 'dms.dart';
@@ -61,8 +62,11 @@ class PartyAlerts {
 
   static bool get _windows => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
   static bool get _android => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  // (An LG TV says it is Linux and is no desktop: it has no window to ask about or bring forward.)
   static bool get _desktop =>
-      !kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.linux);
+      !kIsWeb &&
+      !WebOS.isTv &&
+      (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.linux);
 
   static Future<void> start() async {
     _room = Rooms.mine.value;
@@ -80,6 +84,9 @@ class PartyAlerts {
 
   static Future<void> play(PartySound s) async {
     if (!AppSettings.partySounds.value) return;
+    // An LG TV has one media player with a few slots, and the film and the music have them:
+    // a tone over a film would take one. No tones there.
+    if (WebOS.isTv) return;
     try {
       // Short bundled tones: audioplayers, so they never take one of the mpv cores
       // the video and music players use.
@@ -176,6 +183,7 @@ class PartyAlerts {
   }
 
   static Future<void> _initNotifications() async {
+    if (WebOS.isTv) return; // (a TV app can put up no notification: the in-app pop-up is all there is)
     try {
       await _notes.initialize(
         settings: const InitializationSettings(
