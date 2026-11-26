@@ -436,13 +436,17 @@ class VyseWebosPlugin : public flutter::Plugin {
       if (HasMuteDisplay()) failed = NDL_MediaMuteDisplay(FlagArg(args, "mute", false));
     } else if (method == "setDisplayWindow") {
       // Where the picture goes, on a TV that cannot place a window under the app (webOS 4):
-      // the media library is told the rectangle itself, in the screen's own pixels.
+      // the media library is told the rectangle itself, in the screen's own pixels. LG's
+      // header gives the call a fifth number, "flag", and says nothing of what it means; the
+      // TV's older call of the same kind ends in "full screen: yes or no", so it is sent as
+      // "no": the rectangle is what is meant. A tester's webOS 4 set has yet to say.
 #ifdef VYSE_HAVE_NDL_SET_DISPLAY_WINDOW
       if (HasDisplayWindow()) {
         failed = NDL_MediaSetDisplayWindow(static_cast<int>(IntArg(args, "x", 0)),
                                            static_cast<int>(IntArg(args, "y", 0)),
                                            static_cast<int>(IntArg(args, "w", 0)),
-                                           static_cast<int>(IntArg(args, "h", 0)));
+                                           static_cast<int>(IntArg(args, "h", 0)),
+                                           static_cast<int>(IntArg(args, "flag", 0)));
       }
 #endif
     } else if (method == "position") {
