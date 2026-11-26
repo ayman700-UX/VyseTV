@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/lean.dart';
 import '../../data/app_settings.dart';
 import '../../data/subtitles/subtitle_style.dart';
+import '../../mpv/player/player.dart' show SubPicture;
 
 /// Subtitle lines drawn by the app itself, in the look from Settings > Subtitles.
 ///
@@ -14,7 +15,7 @@ import '../../data/subtitles/subtitle_style.dart';
 ///
 /// It sits where Settings says and stays there: the lines never move for the controls.
 class CaptionOverlay extends StatelessWidget {
-  const CaptionOverlay({super.key, required this.lines, this.initial = '', this.pictureAspect});
+  const CaptionOverlay({super.key, required this.lines, this.initial = '', this.pictureAspect, this.pictures, this.initialPicture, this.videoHeight = 0});
 
   /// The text to show now ('' for nothing), each time it changes. Several lines come as one
   /// text with line breaks in it.
@@ -25,6 +26,13 @@ class CaptionOverlay extends StatelessWidget {
   /// the picture": the lines then keep out of its black bars. Null when the picture fills the
   /// screen some other way, or its shape is not known yet.
   final double? pictureAspect;
+
+  /// Picture subtitles (a Blu-ray's or a DVD's), from a player that hands them over instead of
+  /// drawing them (a Samsung TV's): each one shown at the size it has on the video, whose
+  /// height is [videoHeight].
+  final Stream<SubPicture?>? pictures;
+  final SubPicture? initialPicture;
+  final int videoHeight;
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
@@ -37,7 +45,20 @@ class CaptionOverlay extends StatelessWidget {
             stream: lines,
             initialData: initial,
             builder: (context, snap) => LayoutBuilder(
-              builder: (context, box) => captionLines(snap.data ?? '', box.biggest, pictureAspect: pictureAspect),
+              builder: (context, box) {
+                final text = captionLines(snap.data ?? '', box.biggest, pictureAspect: pictureAspect);
+                final pictures = this.pictures;
+                if (pictures == null) return text;
+                return StreamBuilder<SubPicture?>(
+                  stream: pictures,
+                  initialData: initialPicture,
+                  builder: (context, shot) {
+                    final picture = shot.data;
+                    if (picture == null) return text;
+                    return Stack(fit: StackFit.expand, children: [text, captionPicture(picture, box.biggest, videoHeight: videoHeight, pictureAspect: pictureAspect)]);
+                  },
+                );
+              },
             ),
           ),
         ),
@@ -125,6 +146,36 @@ class CaptionOverlay extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.only(top: top ? edge : 0, bottom: top ? 0 : edge, left: screen.width * .1, right: screen.width * .1),
         child: Column(mainAxisSize: MainAxisSize.min, children: [for (final r in rows) line(r)]),
+      ),
+    );
+  }
+
+  /// A picture subtitle on a screen of [screen]'s size: as large as it is on the video (whose
+  /// height is [videoHeight]; a 1080-line one when not known), never wider than the screen, at
+  /// the bottom where Settings puts lines. The TV says nothing of where on the video it goes.
+  @visibleForTesting
+  static Widget captionPicture(SubPicture picture, Size screen, {int videoHeight = 0, double? pictureAspect}) {
+    if (picture.bytes.isEmpty || screen.height <= 0) return const SizedBox.shrink();
+    // the video's height on this screen (shown whole: the screen's, or less with bars)
+    var shownH = screen.height;
+    if (pictureAspect != null && pictureAspect > 0 && screen.width / pictureAspect < screen.height) shownH = screen.width / pictureAspect;
+    final scale = shownH / (videoHeight > 0 ? videoHeight : 1080);
+    var w = picture.width > 0 ? picture.width * scale : null;
+    var h = picture.height > 0 ? picture.height * scale : null;
+    if (w != null && w > screen.width * .96) {
+      final fit = screen.width * .96 / w;
+      w *= fit;
+      if (h != null) h *= fit;
+    }
+    final unit = screen.height / 720;
+    final top = AppSettings.subtitleTop.value;
+    var edge = (AppSettings.subtitleLift.value.clamp(0, 45) / 100 * screen.height) + 22 * unit;
+    if (shownH < screen.height) edge += (screen.height - shownH) / 2;
+    return Align(
+      alignment: top ? Alignment.topCenter : Alignment.bottomCenter,
+      child: Padding(
+        padding: EdgeInsets.only(top: top ? edge : 0, bottom: top ? 0 : edge),
+        child: Image.memory(picture.bytes, width: w, height: h, fit: BoxFit.contain, gaplessPlayback: true, filterQuality: FilterQuality.medium, errorBuilder: (_, _, _) => const SizedBox.shrink()),
       ),
     );
   }

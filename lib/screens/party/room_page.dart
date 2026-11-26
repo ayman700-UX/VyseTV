@@ -7,7 +7,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../core/layout.dart';
 import '../../core/platform/apple_tv.dart';
-import '../../core/platform/webos.dart';
+import '../../core/platform/tizen_tv.dart';
 import '../../core/nav.dart' show rootNavigatorKey;
 import '../../core/theme.dart';
 import '../../data/account/account.dart';
@@ -213,7 +213,7 @@ class _RoomPageState extends State<RoomPage> {
 
   Future<void> _joinVoice() async {
     // (the voice library has no LG webOS side, and no Apple TV one)
-    if (WebOS.isTv || AppleTv.isTv) return _toast(context, 'Voice calls are not available on this TV');
+    if (LinuxTv.isTv || AppleTv.isTv) return _toast(context, 'Voice calls are not available on this TV');
     try {
       await Voice.join();
     } catch (e) {

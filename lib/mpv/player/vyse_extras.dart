@@ -12,10 +12,39 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
+/// A subtitle that is a picture (a Blu-ray's or a DVD's), as a TV's own player hands it over:
+/// an image file's bytes (PNG) and its size in the video's own pixels.
+@immutable
+class SubPicture {
+  const SubPicture(this.bytes, {required this.width, required this.height});
+  final Uint8List bytes;
+  final double width;
+  final double height;
+}
+
 mixin VyseExtrasMixin {
   final _subTextController = StreamController<String>.broadcast();
+  final _subPictureController = StreamController<SubPicture?>.broadcast();
   final _videoSizeController = StreamController<(int, int)>.broadcast();
   final _secondaryController = StreamController<(double, double)>.broadcast();
+
+  SubPicture? _subPicture;
+
+  /// The picture subtitle showing now, from an engine that hands those over instead of drawing
+  /// them (Samsung's TV player); null when none. mpv and Media3 draw their own.
+  SubPicture? get currentSubPicture => _subPicture;
+
+  /// Every change of [currentSubPicture].
+  Stream<SubPicture?> get subPicture => _subPictureController.stream;
+
+  /// For such an engine: the picture subtitle to show now (null: none).
+  void vyseShowSubPicture(SubPicture? picture) {
+    if (identical(picture, _subPicture)) return;
+    _subPicture = picture;
+    if (!_subPictureController.isClosed) _subPictureController.add(picture);
+  }
 
   String _subText = '';
   int _videoWidth = 0;
@@ -97,10 +126,12 @@ mixin VyseExtrasMixin {
   void vyseResetForNewFile() {
     _subText = '';
     if (!_subTextController.isClosed) _subTextController.add('');
+    vyseShowSubPicture(null);
   }
 
   Future<void> closeVyseExtras() async {
     await _subTextController.close();
+    await _subPictureController.close();
     await _videoSizeController.close();
     await _secondaryController.close();
   }

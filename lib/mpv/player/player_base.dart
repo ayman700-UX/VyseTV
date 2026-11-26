@@ -259,11 +259,18 @@ abstract class PlayerBase with PlayerStreamControllersMixin, VyseExtrasMixin imp
   String get logPrefix;
 
   PlayerBase() {
-    _nativeOwnershipReady = _eventChannelOwners[eventChannel.name]?._nativeRelease.future;
+    _nativeOwnershipReady = usesNativeChannels ? _eventChannelOwners[eventChannel.name]?._nativeRelease.future : null;
     _streams = createStreams();
-    _setupEventListener();
+    if (usesNativeChannels) _setupEventListener();
     _logSubscription = logController.stream.listen(_forwardToAppLogger);
   }
+
+  /// VyseTV: false for an engine driven through another plugin's API rather than a native side
+  /// of its own (Samsung's TV player, platform/player_tizen.dart). No event stream is listened
+  /// to and no native dispose is sent; such an engine answers [invoke] itself. (Read in this
+  /// constructor: a subclass answers it with a constant.)
+  @protected
+  bool get usesNativeChannels => true;
 
   void _forwardToAppLogger(PlayerLog log) {
     final message = '[$logPrefix:${log.prefix}] ${log.text}'.trimRight();
@@ -1694,6 +1701,15 @@ abstract class PlayerBase with PlayerStreamControllersMixin, VyseExtrasMixin imp
   Future<void> dispose({bool preserveDisplayMode = false}) async {
     if (_disposed) return;
     _disposed = true;
+
+    if (!usesNativeChannels) {
+      // VyseTV: nothing native of ours to release (see [usesNativeChannels]).
+      await _logSubscription?.cancel();
+      if (!_nativeRelease.isCompleted) _nativeRelease.complete();
+      await closeStreamControllers();
+      await closeVyseExtras();
+      return;
+    }
 
     final channelName = eventChannel.name;
     if (identical(_eventChannelOwners[channelName], this)) {

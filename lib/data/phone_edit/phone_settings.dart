@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/foundation.dart';
 
-import '../../core/platform/webos.dart';
+import '../../core/platform/tizen_tv.dart';
 import '../../core/nav_sections.dart';
 import '../../mpv/mpv.dart' show Upscaler;
 import '../app_settings.dart';
@@ -480,10 +480,10 @@ String cssColor(int argb) {
 List<PhoneSection> phoneSections({required List<SubtitleFontChoice> fonts}) {
   // Media3 is the engine: what only mpv can do is left out (it is back with mpv)
   final m3 = PlayerEngine.isMedia3;
-  // An LG TV plays through its own player, which takes none of the sound and picture options
-  // (the TV's own settings are where its sound and picture are set), and reads styled
-  // subtitles as plain text.
-  final lg = WebOS.isTv;
+  // An LG or a Samsung TV plays through its own player, which takes none of the sound and
+  // picture options (the TV's own settings are where its sound and picture are set), and reads
+  // styled subtitles as plain text.
+  final lg = LinuxTv.isTv;
   return [
     PhoneSection('playback', 'Playback', 'How videos play by default.', [
       _Toggle(AppSettings.streamingMode, 'Streaming mode', "On: videos play right away from VyseTV's servers. Off: pick a source from your addons first"),

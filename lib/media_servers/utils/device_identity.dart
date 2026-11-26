@@ -7,6 +7,7 @@ import 'package:unorm_dart/unorm_dart.dart';
 import '../../core/logs/app_logger.dart';
 import '../../core/platform/platform_detector.dart';
 import '../../core/platform/webos.dart';
+import '../../core/platform/tizen_tv.dart';
 
 /// What this install should call itself when talking to media servers and
 /// companion peers: a real platform name, the hardware model, and the
@@ -90,6 +91,9 @@ class DeviceIdentityService {
       if (WebOS.isTv) {
         // VyseTV: what a media server lists this device as
         return const DeviceIdentity(platform: 'webOS', deviceModel: 'LG TV', deviceName: 'LG TV', isTv: true);
+      }
+      if (TizenTv.isTv) {
+        return const DeviceIdentity(platform: 'Tizen', deviceModel: 'Samsung TV', deviceName: 'Samsung TV', isTv: true);
       }
       if (Platform.isLinux) {
         final host = Platform.localHostname.trim();

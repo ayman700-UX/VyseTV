@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- version and api-version are set for each package by tool/tizen/stage.py (see tizen/README.md) -->
+<manifest package="com.vyse.vysetv" version="1.0.0" api-version="6.0" xmlns="http://tizen.org/ns/packages">
+    <profile name="tv"/>
+    <ui-application appid="com.vyse.vysetv" exec="Runner.dll" type="dotnet" multiple="false" taskmanage="true" nodisplay="false">
+        <label>VyseTV</label>
+        <icon>ic_launcher.png</icon>
+        <metadata key="http://tizen.org/metadata/prefer_dotnet_aot" value="true"/>
+    </ui-application>
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+    <privileges>
+        <!-- the web, and the TV's player fetching from it -->
+        <privilege>http://tizen.org/privilege/internet</privilege>
+        <!-- whether the TV is online (connectivity_plus) -->
+        <privilege>http://tizen.org/privilege/network.get</privilege>
+        <!-- what Samsung's player plugin asks for -->
+        <privilege>http://tizen.org/privilege/mediastorage</privilege>
+        <privilege>http://tizen.org/privilege/externalstorage</privilege>
+        <!-- opening a link in the TV's browser (url_launcher) -->
+        <privilege>http://tizen.org/privilege/appmanager.launch</privilege>
+    </privileges>
+</manifest>

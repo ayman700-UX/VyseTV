@@ -43,6 +43,7 @@ import 'core/platform/apple_tv.dart';
 import 'core/platform/device_performance.dart';
 import 'core/platform/platform_detector.dart' show PlatformDetector, TvDetectionService;
 import 'core/platform/webos.dart';
+import 'core/platform/tizen_tv.dart';
 import 'core/platform/tv_secrets.dart';
 import 'core/platform/webos_window.dart';
 import 'screens/home/up_next.dart' show UpNext;
@@ -56,13 +57,13 @@ void _hideSystemBars() => SystemChrome.setEnabledSystemUIMode(SystemUiMode.immer
 Future<void> main() async {
   VyseBinding.ensureInitialized(); // (Flutter's own, with reduce-motion in the app's hands: core/lean.dart)
   // An LG TV older than webOS 24 has no key service for sign-ins and keys: see the class.
-  if (WebOS.isTv) TvSecrets.install();
+  if (LinuxTv.isTv) TvSecrets.install();
   // Apple TV: the plugins Flutter's tool does not register there, and the rest of what an
   // Apple TV needs first (core/platform/apple_tv.dart)
   AppleTv.install();
   // Android TV and Google TV: known before anything is drawn, so the app opens in D-pad mode
-  // there, with the ring on its first control (an LG TV and an Apple TV likewise)
-  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || WebOS.isTv || AppleTv.isTv)) {
+  // there, with the ring on its first control (an LG, a Samsung and an Apple TV likewise)
+  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || LinuxTv.isTv || AppleTv.isTv)) {
     try {
       await TvDetectionService.getInstance();
     } catch (_) {}

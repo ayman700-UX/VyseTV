@@ -10,6 +10,7 @@ import 'apple_tv.dart';
 import 'async_singleton.dart';
 import 'device_channel.dart';
 import 'webos.dart';
+import 'tizen_tv.dart';
 
 const _androidFeatureTelevision = 'android.hardware.type.television';
 const _androidFeatureLeanback = 'android.software.leanback';
@@ -97,10 +98,10 @@ class TvDetectionService {
     if (_initialized) return;
 
     final deviceInfo = DeviceInfoPlugin();
-    if (WebOS.isTv) {
-      // VyseTV: the LG webOS build only runs on a TV
+    if (LinuxTv.isTv) {
+      // VyseTV: the LG webOS build and the Samsung Tizen one only run on a TV
       _detected = true;
-      _detectionReasons = const ['webos'];
+      _detectionReasons = [WebOS.isTv ? 'webos' : 'tizen'];
     } else if (Platform.isAndroid) {
       final nativeDetection = await _getNativeAndroidTvDetection();
       final detection =
@@ -186,12 +187,12 @@ class TvDetectionService {
   /// App code goes through the [PlatformDetector] facade ([PlatformDetector.isTV]
   /// and siblings); these raw accessors exist for the facade and tests.
   ///
-  /// VyseTV: the webOS build is a TV from its first line, before anything was detected.
-  static bool isTVSync() => _debugAppleTVOverride ?? (WebOS.isTv || (_singleton.instance?.isTV ?? false));
+  /// VyseTV: the webOS and Tizen builds are TVs from their first line, before anything was detected.
+  static bool isTVSync() => _debugAppleTVOverride ?? (LinuxTv.isTv || (_singleton.instance?.isTV ?? false));
 
   /// Synchronous TV-hardware check: [isTVSync] without the user's force-TV
   /// override (false before initialization).
-  static bool isTVDeviceSync() => _debugAppleTVOverride ?? (WebOS.isTv || (_singleton.instance?._detected ?? false));
+  static bool isTVDeviceSync() => _debugAppleTVOverride ?? (LinuxTv.isTv || (_singleton.instance?._detected ?? false));
 
   /// Synchronous Apple TV check (returns false if not initialized or not tvOS).
   static bool isAppleTVSync() => _debugAppleTVOverride ?? (_tvosBuild || _singleton.instance?._isAppleTV == true);
@@ -289,8 +290,8 @@ class PlatformDetector {
   /// BuildContext. Use for OS-level capability checks (window state, native
   /// keyboard, etc.); use [isDesktop] for layout decisions.
   static bool isDesktopOS() {
-    // (VyseTV: an LG TV runs Linux, and is no desktop)
-    return _debugIsDesktopOSOverride ?? (Platform.isWindows || Platform.isMacOS || (Platform.isLinux && !WebOS.isTv));
+    // (VyseTV: an LG or a Samsung TV runs Linux, and is no desktop)
+    return _debugIsDesktopOSOverride ?? (Platform.isWindows || Platform.isMacOS || (Platform.isLinux && !LinuxTv.isTv));
   }
 
   static bool? _debugIsDesktopOSOverride;
@@ -326,7 +327,7 @@ class PlatformDetector {
   }
 
   static bool supportsExternalPlayers() {
-    if (WebOS.isTv) return false; // VyseTV: nothing on an LG TV takes a link from another app
+    if (LinuxTv.isTv) return false; // VyseTV: nothing on an LG or a Samsung TV takes a link from another app
     if (AppleTv.isTv) return false; // (nor here: the app has no way to open another on an Apple TV)
     return Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isLinux || Platform.isWindows;
   }
@@ -346,9 +347,9 @@ class PlatformDetector {
     // (shared/apple/MpvPlayer/MpvPlayerCoreBase.swift) takes it. 2.14.0 pinned
     // CoreAudio alone, where a declined bitstream silenced playback instead.
     //
-    // VyseTV: not on LG webOS. Its video goes through the TV's own player, which bitstreams
-    // or decodes as the TV's sound settings say; there is nothing for the app to switch.
-    if (WebOS.isTv) return false;
+    // VyseTV: not on LG webOS or Samsung Tizen. Their video goes through the TV's own player,
+    // which bitstreams or decodes as the TV's sound settings say; there is nothing to switch.
+    if (LinuxTv.isTv) return false;
     return Platform.isIOS ||
         Platform.isMacOS ||
         Platform.isWindows ||

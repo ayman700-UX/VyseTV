@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../core/platform/webos.dart';
+import '../core/platform/tizen_tv.dart';
 import '../core/theme.dart';
 import '../core/lean.dart';
 import '../dpad/dpad_traversal.dart' show DpadLoading;
@@ -353,7 +353,7 @@ class Glass extends StatelessWidget {
 
 /// Android: skip live background blurs. Re-blurring everything behind a panel on every frame is
 /// cheap on a desktop GPU but one of the costliest things a phone does while scrolling.
-final bool lightEffects = !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || WebOS.isTv); // (an LG TV's chip is a phone's too)
+final bool lightEffects = !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || LinuxTv.isTv); // (an LG or a Samsung TV's chip is a phone's too)
 
 /// A gradient of the page's colour over a picture, from one edge, clear from its last stop on.
 ///

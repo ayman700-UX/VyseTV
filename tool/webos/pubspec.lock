@@ -242,6 +242,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.0.3"
+  device_info_plus_tizen:
+    dependency: transitive
+    description:
+      name: device_info_plus_tizen
+      sha256: ae64c6511ec92b45823e520006fbe265fd900f69cdbc9d27c5145438ae53cc6a
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.3"
   duration:
     dependency: "direct main"
     description:
@@ -392,7 +400,7 @@ packages:
     source: hosted
     version: "3.0.3"
   flutter_secure_storage_platform_interface:
-    dependency: "direct overridden"
+    dependency: "direct main"
     description:
       name: flutter_secure_storage_platform_interface
       sha256: "64951127f001f546891c86f414972bf49ef2c4c8a4c92c65f5790cc0c9100045"
@@ -437,6 +445,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_tizen:
+    dependency: transitive
+    description:
+      name: flutter_tizen
+      sha256: "5df51a022828127d8d3bf2af32e67b746b764b1209193148fd33b0d7b7c122a7"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.7"
   flutter_web_plugins:
     dependency: transitive
     description: flutter
@@ -1138,6 +1154,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.11.2"
+  tizen_window_manager:
+    dependency: transitive
+    description:
+      name: tizen_window_manager
+      sha256: "695d56c7976096c4971fbf1f32032d2f99a8f0226fa95ff42b956d7aa7de5d2f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.0"
   torrserver_flutter:
     dependency: "direct main"
     description:
@@ -1274,6 +1298,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  video_player_avplay:
+    dependency: "direct main"
+    description:
+      name: video_player_avplay
+      sha256: "4854c8cda0af405ac96f9ba177334e58fde7e50019a87b6cbb7b3e343e49dd27"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.8.23"
   vm_service:
     dependency: transitive
     description:

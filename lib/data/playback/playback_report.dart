@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/platform/device_channel.dart';
 import '../../core/platform/webos.dart';
+import '../../core/platform/tizen_tv.dart';
 
 /// One line of a report: what it is, and what it says.
 typedef ReportFact = ({String label, String value});
@@ -134,7 +136,7 @@ class PlaybackReport {
   bool get onMedia3 => _s('engine') == 'media3';
 
   /// Played by an LG TV's own player (webOS).
-  bool get onTv => _s('engine') == 'webos';
+  bool get onTv => _s('engine') == 'webos' || _s('engine') == 'tizen';
 
   /// The engine that played it, by name.
   String get _engineName => onTv ? "the TV's player" : (onMedia3 ? 'Media3' : 'mpv');
@@ -265,7 +267,7 @@ class PlaybackReport {
         ('Source', [source, _s('link')].where((x) => x.isNotEmpty).join(' · ')),
         ('Server', host),
         ('When', _when),
-        ('Device', [_str(caps['device']) ?? '', if (_str(caps['android']) != null) 'Android ${caps['android']}', if (_str(caps['webos']) != null) 'webOS ${caps['webos']}'].where((x) => x.isNotEmpty).join(' · ')),
+        ('Device', [_str(caps['device']) ?? '', if (_str(caps['android']) != null) 'Android ${caps['android']}', if (_str(caps['webos']) != null) 'webOS ${caps['webos']}', if (_str(caps['tizen']) != null) 'Tizen ${caps['tizen']}'].where((x) => x.isNotEmpty).join(' · ')),
         ('Display', caps.isEmpty ? '' : (display.isEmpty ? 'No HDR' : display.join(', '))),
         ('Dolby Vision decoders', caps.isEmpty ? '' : (decoders.isEmpty ? 'None' : decoders.join('\n'))),
       ])),
@@ -707,6 +709,7 @@ class PlaybackReport {
   /// Empty anywhere else.
   static Future<Map<String, Object?>> device() => _device ??= () async {
     if (WebOS.isTv) return _tvDevice();
+    if (TizenTv.isTv) return _samsungDevice();
     try {
       final caps = await deviceChannel.invokeMethod<Map<Object?, Object?>>('getPlaybackCapabilities');
       return caps?.cast<String, Object?>() ?? const <String, Object?>{};
@@ -733,6 +736,12 @@ class PlaybackReport {
     } catch (_) {
       return const {};
     }
+  }
+
+  /// The same of a Samsung TV, as far as an app is told: that it is one, and its Tizen.
+  static Map<String, Object?> _samsungDevice() {
+    final version = Platform.environment['TIZEN_API_VERSION'];
+    return {'device': 'Samsung TV', if (version != null && version.isNotEmpty) 'tizen': version};
   }
 
   @visibleForTesting

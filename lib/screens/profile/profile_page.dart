@@ -17,7 +17,7 @@ import '../../data/sources/torrents.dart';
 import '../../data/playback/intro_db.dart' show SegmentKind;
 import '../../data/account/account.dart';
 import '../../core/platform/platform_detector.dart' show PlatformDetector;
-import '../../core/platform/webos.dart';
+import '../../core/platform/tizen_tv.dart';
 import '../../data/phone_edit/phone_session.dart';
 import '../../data/playback/playback_report.dart';
 import '../../data/playback/player_engine.dart';
@@ -1959,7 +1959,7 @@ class _SubtitlesTab extends StatelessWidget {
       ),
       _Section(
         title: 'Caption style',
-        subtitle: m3 || WebOS.isTv
+        subtitle: m3 || LinuxTv.isTv
             ? 'Drawn by the player, so the preview is close but not exact.'
             : "Drawn by the player's subtitle engine (libass), so the preview is close but not exact.",
         children: [
@@ -2066,8 +2066,8 @@ class _SubtitlesTab extends StatelessWidget {
         ],
       ),
       // (Media3 leaves styled subtitles as their makers styled them: nothing to choose)
-      // (an LG TV's player reads styled subtitles as plain text: nothing to choose there)
-      if (!m3 && !WebOS.isTv) ValueListenableBuilder(
+      // (an LG or a Samsung TV's player reads styled subtitles as plain text: nothing to choose there)
+      if (!m3 && !LinuxTv.isTv) ValueListenableBuilder(
         valueListenable: AppSettings.subtitleAss,
         builder: (context, mode, _) => _Section(
           title: 'Styled subtitles',

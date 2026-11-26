@@ -66,6 +66,9 @@ dependencies:
   shared_preferences: ^2.3.3
   # (registered by hand on an Apple TV, where Flutter's tool writes no plugin registrant: lib/core/platform/apple_tv.dart)
   shared_preferences_foundation: ^2.5.7
+  # Samsung TVs (Tizen): the TV's own player, Samsung's plugin (lib/mpv/player/platform/player_tizen.dart).
+  # Its only native side is Tizen's; on every other platform it is Dart that is never used.
+  video_player_avplay: 0.8.23
   crypto: ^3.0.5
   pointycastle: 4.0.0
   # Edit on your phone: the QR code a TV shows

@@ -13,12 +13,16 @@ import 'player_native.dart';
 import 'player_state.dart';
 import 'player_streams.dart';
 import 'platform/player_linux.dart';
+import 'platform/player_tizen.dart';
 import 'platform/player_webos.dart';
 import 'platform/player_windows.dart';
+import '../../core/platform/tizen_tv.dart';
 import '../../core/platform/webos.dart';
+import 'vyse_extras.dart' show SubPicture;
 import 'video_decoder_hold.dart';
 
 export 'player_base.dart';
+export 'vyse_extras.dart' show SubPicture;
 export 'video_decoder_hold.dart';
 
 /// Abstract interface for the video player.
@@ -398,6 +402,8 @@ abstract class Player {
   // VyseTV additions (implemented by VyseExtrasMixin, see vyse_extras.dart).
   String get currentSubText;
   Stream<String> get subText;
+  SubPicture? get currentSubPicture;
+  Stream<SubPicture?> get subPicture;
   (int, int) get currentVideoSize;
   Stream<(int, int)> get videoSize;
   Stream<(double, double)> get secondaryLines;
@@ -453,6 +459,8 @@ abstract class Player {
     if (useExoPlayer == true && debugExoOnAnyPlatform) return PlayerAndroid();
     // VyseTV: an LG TV plays with the TV's own player. (It runs Linux, so this comes first.)
     if (WebOS.isTv) return PlayerWebos();
+    // VyseTV: a Samsung TV too, with Samsung's player (Tizen also says it is Linux).
+    if (TizenTv.isTv) return PlayerTizen();
     if (Platform.isAndroid) {
       // Default to MPV on Android, with ExoPlayer as the opt-in alternative.
       // The caller should pass useExoPlayer based on SettingsService.useExoPlayer.
@@ -496,6 +504,7 @@ abstract class Player {
     // VyseTV: on an LG TV music plays through the TV's player too. (It has nothing that
     // decodes sound to a file: whoever asks for a listener there gets a player that hears nothing.)
     if (WebOS.isTv) return PlayerWebos.audio(secondary: secondary || listener);
+    if (TizenTv.isTv) return PlayerTizen.audio(secondary: secondary || listener);
     if (Platform.isAndroid || Platform.isMacOS || Platform.isIOS || Platform.isWindows || Platform.isLinux) {
       return PlayerNative.audio(secondary: secondary, listener: listener);
     }

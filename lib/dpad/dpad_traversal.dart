@@ -23,7 +23,7 @@ import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/widgets.dart';
 
-import '../core/platform/webos.dart';
+import '../core/platform/tizen_tv.dart';
 import 'dpad_reveal.dart';
 import 'focus_navigation_intent.dart';
 import 'input_mode_tracker.dart';
@@ -521,8 +521,8 @@ abstract final class Dpad {
   // keyboard token (FocusNode.consumeKeyboardToken) is spent before the box can use it, and
   // OK brings the keyboard up (DpadRoot). A box that opens to be typed in (Search, a name box)
   // still brings it up, as it does with a finger.
-  // (An LG TV too: its on-screen keyboard comes up for a text box as an Android TV's does.)
-  static bool get _softKeyboard => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS || WebOS.isTv);
+  // (An LG or a Samsung TV too: its on-screen keyboard comes up for a text box as an Android TV's does.)
+  static bool get _softKeyboard => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS || LinuxTv.isTv);
   static FocusNode? _quietBox;
 
   // the control last given focus on purpose (see [giveFocus] and [takeChosen])

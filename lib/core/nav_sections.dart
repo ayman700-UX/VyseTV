@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/app_settings.dart';
 import 'platform/apple_tv.dart';
+import 'platform/tizen_tv.dart';
 
 /// One section of the navbar: the rail on a desktop or tablet, the bottom bar on a phone.
 class NavItem {
@@ -76,7 +77,8 @@ abstract final class NavLayout {
 
   /// Whether this device has the section at all. Downloads are not on an Apple TV: an app
   /// there has no storage the system will not clear when it runs short (as upstream has it).
-  static bool _here(NavItem s) => !(s.id == 'downloads' && AppleTv.isTv);
+  /// Nor on a Samsung TV: little room, and its player is never handed a file there.
+  static bool _here(NavItem s) => !(s.id == 'downloads' && (AppleTv.isTv || TizenTv.isTv));
 
   /// What the navbar shows, in order. Never empty: if the saved value hides everything this
   /// version has, the first section shows anyway.

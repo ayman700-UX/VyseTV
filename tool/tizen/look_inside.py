@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""Looks inside a Samsung TV package (.tpk) built by tool/tizen/build.sh, and says what is not
+right: what nothing on a PC can run, at least has to be there.
+
+    python3 tool/tizen/look_inside.py build/tizen/VyseTV-1.0.2-tizen6.5.tpk --api 6.5
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+import zipfile
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("tpk")
+    ap.add_argument("--api", required=True)
+    args = ap.parse_args()
+
+    z = zipfile.ZipFile(args.tpk)
+    names = z.namelist()
+    sizes = {i.filename: i.file_size for i in z.infolist()}
+    wrong: list[str] = []
+
+    def has(pattern: str, what: str, least: int = 1) -> list[str]:
+        found = [n for n in names if re.search(pattern, n)]
+        if not found:
+            wrong.append(f"no {what} ({pattern})")
+        elif least > 1 and max(sizes[n] for n in found) < least:
+            wrong.append(f"{what} is too small: {max(sizes[n] for n in found)} bytes")
+        return found
+
+    manifest = z.read("tizen-manifest.xml").decode("utf-8") if "tizen-manifest.xml" in names else ""
+    if not manifest:
+        wrong.append("no tizen-manifest.xml")
+    else:
+        if f'api-version="{args.api}"' not in manifest:
+            wrong.append(f"the manifest is not for Tizen {args.api}")
+        if '<profile name="tv"/>' not in manifest and "<profile name=\"tv\" />" not in manifest:
+            wrong.append("the manifest is not a TV app's")
+        for p in ("internet", "mediastorage"):
+            if f"http://tizen.org/privilege/{p}" not in manifest:
+                wrong.append(f"the manifest does not ask for {p}")
+
+    has(r"^bin/Runner\.dll$", "C# entry (Runner.dll)")
+    has(r"(^|/)libflutter_engine\.so$", "Flutter engine")
+    # the app's Dart, compiled for the TV's ARM: tens of MB
+    has(r"(^|/)libapp\.so$", "compiled Dart (libapp.so)", least=5_000_000)
+    # Samsung's player plugin and the TV player libraries it carries for this Tizen version
+    has(r"video_player_avplay|video_player_tizen_plugin", "Samsung's player plugin")
+    has(r"libplusplayer", "Samsung's player libraries")
+    has(r"flutter_assets/AssetManifest", "the app's assets")
+    has(r"(^|/)author-signature\.xml$", "author signature")
+
+    print(f"{args.tpk}: {len(names)} files, {sum(sizes.values()) // 1_000_000} MB unpacked")
+    for n in sorted(names):
+        if n.endswith(".so") or n.endswith(".dll") or n == "tizen-manifest.xml":
+            print(f"  {sizes[n]:>11}  {n}")
+    if wrong:
+        print("NOT RIGHT:\n  " + "\n  ".join(wrong))
+        sys.exit(1)
+    print("looks right")
+
+
+if __name__ == "__main__":
+    main()

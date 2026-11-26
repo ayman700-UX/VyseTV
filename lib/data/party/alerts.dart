@@ -10,7 +10,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/platform/apple_tv.dart';
-import '../../core/platform/webos.dart';
+import '../../core/platform/tizen_tv.dart';
 import '../account/account.dart';
 import '../app_settings.dart';
 import 'dms.dart';
@@ -63,10 +63,10 @@ class PartyAlerts {
 
   static bool get _windows => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
   static bool get _android => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-  // (An LG TV says it is Linux and is no desktop: it has no window to ask about or bring forward.)
+  // (An LG or a Samsung TV says it is Linux and is no desktop: it has no window to ask about or bring forward.)
   static bool get _desktop =>
       !kIsWeb &&
-      !WebOS.isTv &&
+      !LinuxTv.isTv &&
       (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.linux);
 
   static Future<void> start() async {
@@ -86,9 +86,9 @@ class PartyAlerts {
   static Future<void> play(PartySound s) async {
     if (!AppSettings.partySounds.value) return;
     // An LG TV has one media player with a few slots, and the film and the music have them:
-    // a tone over a film would take one. No tones there. (Nor on an Apple TV: audioplayers has
-    // no tvOS side.)
-    if (WebOS.isTv || AppleTv.isTv) return;
+    // a tone over a film would take one. No tones there, nor on a Samsung TV (the same holds,
+    // and audioplayers has no Tizen side). Nor on an Apple TV: audioplayers has no tvOS side.
+    if (LinuxTv.isTv || AppleTv.isTv) return;
     try {
       // Short bundled tones: audioplayers, so they never take one of the mpv cores
       // the video and music players use.
@@ -186,7 +186,7 @@ class PartyAlerts {
 
   static Future<void> _initNotifications() async {
     // (a TV app can put up no notification: the in-app pop-up is all there is)
-    if (WebOS.isTv || AppleTv.isTv) return;
+    if (LinuxTv.isTv || AppleTv.isTv) return;
     try {
       await _notes.initialize(
         settings: const InitializationSettings(

@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:torrserver_flutter/torrserver_flutter.dart';
 
 import '../../core/platform/webos.dart';
+import '../../core/platform/tizen_tv.dart';
 import '../app_settings.dart';
 import 'torrent_file_ask.dart';
 import 'torrent_file_pick.dart';
@@ -37,8 +38,11 @@ class Torrents {
   /// Where the engine runs: Windows, Android, macOS and Linux, and on iPhone and iPad when the
   /// build carries it (there it is a framework inside the app, and a build can be made without
   /// it: [initialize] asks).
+  ///
+  /// Not on a Samsung TV (which says it is Linux): the engine is a program of its own beside the
+  /// app, and a Samsung TV runs no program that Samsung has not signed.
   static bool get supported =>
-      !kIsWeb && (Platform.isWindows || Platform.isAndroid || Platform.isMacOS || Platform.isLinux || (Platform.isIOS && _iosEngine));
+      !kIsWeb && !TizenTv.isTv && (Platform.isWindows || Platform.isAndroid || Platform.isMacOS || Platform.isLinux || (Platform.isIOS && _iosEngine));
 
   static bool _iosEngine = false;
 

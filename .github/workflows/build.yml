@@ -18,6 +18,7 @@ name: Build
 #   * [tvos] builds the Apple TV package, likewise by its own name only (the tvos job).
 #     [tvos-torrent] builds the torrent engine for it (the tvos-torrent job), which is then
 #     committed to packages/torrserver_flutter/binaries.
+#   * [tizen] builds the Samsung TV packages, likewise by its own name only (the tizen job).
 #
 # On a private repository the macOS and iOS jobs use up build minutes ten times
 # faster than the Linux ones, and Windows twice as fast.
@@ -28,7 +29,7 @@ on:
         description: What to build
         type: choice
         default: linux
-        options: [all, linux, linux-x64, linux-arm64, macos, ios, android, windows, webos, tvos, tvos-torrent]
+        options: [all, linux, linux-x64, linux-arm64, macos, ios, android, windows, webos, tvos, tvos-torrent, tizen]
   push:
     branches: [main]
 
@@ -49,6 +50,7 @@ jobs:
       webos: ${{ steps.pick.outputs.webos }}
       tvos: ${{ steps.pick.outputs.tvos }}
       tvos_torrent: ${{ steps.pick.outputs.tvos_torrent }}
+      tizen: ${{ steps.pick.outputs.tizen }}
     steps:
       - id: pick
         env:
@@ -59,7 +61,7 @@ jobs:
           if [ "$EVENT" = "workflow_dispatch" ]; then
             pick="$PLATFORM"
           else
-            pick=$(printf '%s' "$MESSAGE" | grep -oE '\[(all|linux|linux-x64|linux-arm64|macos|ios|android|windows|webos|tvos|tvos-torrent)\]' | tr -d '[]' | tr '\n' ' ' || true)
+            pick=$(printf '%s' "$MESSAGE" | grep -oE '\[(all|linux|linux-x64|linux-arm64|macos|ios|android|windows|webos|tvos|tvos-torrent|tizen)\]' | tr -d '[]' | tr '\n' ' ' || true)
           fi
           echo "Building: ${pick:-nothing}"
           has() { case " $pick " in *" all "*|*" $1 "*) return 0 ;; esac; return 1; }
@@ -79,6 +81,8 @@ jobs:
           # (the Apple TV build: likewise by its own name only)
           case " $pick " in *" tvos "*) echo "tvos=true" >> "$GITHUB_OUTPUT" ;; *) echo "tvos=false" >> "$GITHUB_OUTPUT" ;; esac
           case " $pick " in *" tvos-torrent "*) echo "tvos_torrent=true" >> "$GITHUB_OUTPUT" ;; *) echo "tvos_torrent=false" >> "$GITHUB_OUTPUT" ;; esac
+          # (the Samsung TV build: likewise by its own name only)
+          case " $pick " in *" tizen "*) echo "tizen=true" >> "$GITHUB_OUTPUT" ;; *) echo "tizen=false" >> "$GITHUB_OUTPUT" ;; esac
 
   # 64-bit Intel/AMD and 64-bit ARM. Flutter has no 32-bit Linux desktop build.
   linux:
@@ -655,3 +659,58 @@ jobs:
           name: torrserverkit-tvos
           path: dist/TorrServerKit-tvos.xcframework.zip
           retention-days: 2
+
+  # Samsung TVs (Tizen): .tpk packages, one for each Tizen version Samsung's player plugin is
+  # made for (tizen/README.md). Not run on a TV yet, so built only when asked for by name,
+  # [tizen], and not part of [all].
+  #
+  # Built with flutter-tizen at the release made from this project's own Flutter, as
+  # flutter-tizen's own plugins are built on GitHub. The Tizen SDK comes under the Tizen SDK
+  # licence, which only the repository's owner can accept: the job runs once the repository
+  # variable TIZEN_SDK_LICENSE is set to "accepted", and says so when it is not.
+  tizen:
+    name: Samsung TV (Tizen)
+    needs: plan
+    if: ${{ needs.plan.outputs.tizen == 'true' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: The Tizen SDK licence
+        env:
+          TIZEN_SDK_LICENSE: ${{ vars.TIZEN_SDK_LICENSE }}
+        run: |
+          if [ "$TIZEN_SDK_LICENSE" != "accepted" ]; then
+            echo "::error::The Tizen SDK is under the Tizen SDK licence. Read it (developer.tizen.org), and if you accept it set the repository variable TIZEN_SDK_LICENSE to: accepted"
+            exit 1
+          fi
+      # The real server settings (the account server, the update addresses) are not in the
+      # repository: they come from the SERVER_CONFIG secret (lib/data/server_config.dart in
+      # base64). A build without them would have no accounts, so it stops instead.
+      - name: Write the server settings
+        shell: bash
+        env:
+          SERVER_CONFIG: ${{ secrets.SERVER_CONFIG }}
+        run: |
+          if [ -z "$SERVER_CONFIG" ]; then
+            echo "::error::No SERVER_CONFIG secret: this build would have no accounts."
+            exit 1
+          fi
+          printf '%s' "$SERVER_CONFIG" | base64 -d > lib/data/server_config.dart
+          grep -q updateListAddresses lib/data/server_config.dart
+      # (the app's Tizen side is C#: a Samsung TV takes no C++ app)
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: The Tizen SDK's tools, and flutter-tizen
+        run: bash tool/tizen/setup.sh --accept-tizen-sdk-license
+      - name: Build (Tizen 6.0, 6.5 and 10.0)
+        run: bash tool/tizen/build.sh
+      # (also when the look inside a package found something missing: the packages are then
+      # what there is to look at)
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: vysetv-tizen
+          path: build/tizen/*.tpk
+          if-no-files-found: ignore
+          retention-days: 2 # a private repository has 500 MB for these

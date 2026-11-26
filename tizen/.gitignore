@@ -1,0 +1,6 @@
+# written by flutter-tizen as it builds
+flutter/
+bin/
+obj/
+.vs/
+*.user
