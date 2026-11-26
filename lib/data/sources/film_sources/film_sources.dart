@@ -15,7 +15,7 @@ import 'scrapers.dart';
 ///
 /// Each goes by the site's own name.
 class FilmSource {
-  const FilmSource({required this.id, required this.name, required this.note, this.scraper, this.filmsOnly = false, this.showsOnly = false});
+  const FilmSource({required this.id, required this.name, required this.note, this.scraper, this.filmsOnly = false, this.showsOnly = false, this.ready});
 
   /// Stable key, kept in the saved order ('movy', or the SDK's key for the source).
   final String id;
@@ -32,6 +32,10 @@ class FilmSource {
 
   /// Only asked for episodes, the same way round.
   final bool showsOnly;
+
+  /// Whether it can be asked at all. Null: always. FebBox: once your account's token is on
+  /// this device; until then it counts as off, whatever its switch says.
+  final bool Function()? ready;
 }
 
 const movySource = FilmSource(id: 'movy', name: 'Movy', note: '17 servers, some in other languages');

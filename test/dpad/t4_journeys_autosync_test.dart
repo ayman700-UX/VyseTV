@@ -180,14 +180,15 @@ void main() {
     });
 
     /// Opens a film you watched a few seconds of with the French file on ([delay]: the timing
-    /// you had; [mine]: the automatic sync's, not yours), and lets mpv list its tracks.
-    Future<dynamic> open(WidgetTester t, {double delay = 0, bool mine = false}) async {
+    /// you had; [mine]: the automatic sync's, not yours), and lets mpv list its tracks. [from]:
+    /// where the file is from ("Built in": it came in the video's torrent).
+    Future<dynamic> open(WidgetTester t, {double delay = 0, bool mine = false, String from = 'OpenSubtitles'}) async {
       final film = Bed.freshTitle();
       WatchProgress.record(
         film,
         position: const Duration(seconds: 4),
         duration: const Duration(minutes: 100),
-        subtitle: {'id': 'fr-1', 'provider': 'OpenSubtitles', 'lang': 'fr', 'language': 'French', 'release': '', 'url': 'http://subs.test/film.fr.srt', 'format': 'srt', if (mine) 'autoSync': true},
+        subtitle: {'id': 'fr-1', 'provider': from, 'lang': 'fr', 'language': 'French', 'release': '', 'url': 'http://subs.test/film.fr.srt', 'format': 'srt', if (mine) 'autoSync': true},
         subDelay: delay,
       );
       Bed.videoCalls.clear();
@@ -247,6 +248,51 @@ void main() {
     String set(String name) => 'setProperty {name: $name, ';
     List<String> sets(String name) => [for (final c in Bed.videoCalls) if (c.startsWith(set(name))) c];
     final none = {'setProperty {name: sub-delay, value: 0.000}'};
+
+    /// Opens a film you watched a few seconds of with its own English track on, at [delay]
+    /// ([mine]: a delay the automatic sync left on it, as it could before built-in subtitles
+    /// were left alone), and lets mpv list its tracks.
+    Future<dynamic> openOwn(WidgetTester t, {double delay = 0, bool mine = false}) async {
+      final film = Bed.freshTitle();
+      WatchProgress.record(
+        film,
+        position: const Duration(seconds: 4),
+        duration: const Duration(minutes: 100),
+        subtitle: {'id': 'builtin-1', 'provider': 'Built in', 'lang': 'en', 'language': 'English', 'release': '', 'url': 'mpv-sid:1', 'format': 'srt', if (mine) 'autoSync': true},
+        subDelay: delay,
+      );
+      Bed.videoCalls.clear();
+      await Bed.openPlayer(t, media: film);
+      await Bed.settle(t, rounds: 4);
+      await Bed.videoProperty(t, 'duration', 6000.0);
+      await Bed.videoProperty(t, 'track-list', [
+        {'id': 1, 'type': 'video', 'selected': true},
+        {'id': 1, 'type': 'sub', 'lang': 'eng', 'codec': 'subrip'},
+      ]);
+      await t.pump(const Duration(milliseconds: 400)); // (the page reads the list 300 ms after a change)
+      await Bed.settle(t, rounds: 4);
+      expect(sets('sid').where((c) => c.contains('value: 1}')), isNotEmpty, reason: "the video's own English track is on: ${Bed.videoCalls}");
+      return film;
+    }
+
+    MenuRow syncRow(WidgetTester t) => t.widget<MenuRow>(find.byWidgetPredicate((w) => w is MenuRow && w.title == 'Sync automatically'));
+
+    /// The dock's Subtitles, then along the list (from its tabs: the file in use, restored with
+    /// your progress, is in no language's list here) to "Sync automatically", under Sync subtitles.
+    Future<void> toSyncRow(WidgetTester t) async {
+      await Bed.down(t);
+      final tool = Bed.nodeOf(t, find.byWidgetPredicate((w) => w is Pressable && w.tooltip == 'Subtitles (C)'));
+      for (var i = 0; i < 14 && !tool.hasPrimaryFocus; i++) {
+        await Bed.right(t);
+      }
+      await Bed.ok(t);
+      await Bed.settle(t, rounds: 3);
+      final from = Bed.focused();
+      for (var i = 0; i < 6 && !Bed.focused().contains('Sync automatically'); i++) {
+        await (from.contains('MenuSegments') ? Bed.down(t) : Bed.up(t));
+      }
+      expect(Bed.focused(), contains('Sync automatically'), reason: 'right under Sync subtitles (the menu opened on $from)');
+    }
 
     testWidgets("the French file timed 2.4 s early: the video's English track goes on hidden, and after two minutes or so the file is moved 2.4 s, said once", (t) async {
       file = srt(retimed(own, 2.4, 22));
@@ -310,28 +356,59 @@ void main() {
       await close(t);
     }, variant: desktop);
 
+    // "Never sync built in subtitles automatically, they're always perfect."
+    testWidgets("the video's own English track is never timed: a delay the automatic sync left on it is taken off, one you set yourself stays", (t) async {
+      file = srt(retimed(own, 2.4, 31));
+      final film = await openOwn(t, delay: 2.4, mine: true);
+      expect(sets('sub-delay').last, none.single, reason: "the sync's 2.4 s is not kept on a built-in track: ${sets('sub-delay')}");
+      expect(sets('secondary-sid').where((c) => !c.contains('value: no}')), isEmpty, reason: 'nothing is listened to');
+      await play(t, 0, 40);
+      expect(sets('sub-delay').last, none.single, reason: 'and nothing moves it as it plays');
+      expect(find.textContaining('Subtitles synced'), findsNothing);
+      expect(Bed.audioCalls.where((c) => c.startsWith('mpv_audio_listener')), isEmpty, reason: 'nothing heard by ear');
+      await close(t);
+      final saved = WatchProgress.find(film)!;
+      expect(saved.subDelay, 0, reason: 'remembered in time');
+      expect(saved.subtitle?['autoSync'], isNull);
+
+      await openOwn(t, delay: 1.5);
+      expect(sets('sub-delay').last, 'setProperty {name: sub-delay, value: 1.500}', reason: 'your own timing is yours');
+      await close(t);
+    }, variant: desktop);
+
+    testWidgets('a subtitle file that came in the torrent ("Built in") is never timed either, and the menu says so', (t) async {
+      file = srt(retimed(own, 2.4, 32)); // (2.4 s off the video's own track: a downloaded file would be moved)
+      await open(t, from: 'Built in', delay: 2.4, mine: true);
+      expect(sets('secondary-sid').where((c) => !c.contains('value: no}')), isEmpty, reason: "the video's track is never put on to time it by");
+      expect(sets('sub-delay').last, none.single, reason: "the sync's 2.4 s is taken off: ${sets('sub-delay')}");
+      await play(t, 0, 40);
+      expect(sets('sub-delay').last, none.single);
+      expect(find.textContaining('Subtitles synced'), findsNothing);
+      expect(Bed.audioCalls.where((c) => c.startsWith('mpv_audio_listener')), isEmpty, reason: 'nothing heard by ear');
+
+      await toSyncRow(t);
+      expect((syncRow(t).value, syncRow(t).detail), ('On', 'Not for built-in subtitles'));
+      // off and on again in the menu: still nothing times it
+      await Bed.ok(t);
+      await Bed.settle(t, rounds: 2);
+      await Bed.ok(t);
+      await Bed.settle(t, rounds: 3);
+      expect(AppSettings.autoSyncSubtitles.value, isTrue);
+      expect(sets('secondary-sid').where((c) => !c.contains('value: no}')), isEmpty, reason: 'turning it on again does not start it');
+      expect(sets('sub-delay').last, none.single);
+      await Bed.back(t);
+      await close(t);
+    }, variant: desktop);
+
     testWidgets('"Sync automatically" in the subtitle menu: with a remote, off puts back the timing it set and stops listening; a click turns it on again', (t) async {
       file = srt(retimed(own, 2.4, 28));
       await open(t);
       await play(t, 0, 260);
       expect(delays(Bed.videoCalls, 'setProperty').last, closeTo(2.4, .1));
       await t.pump(const Duration(seconds: 10)); // (the note goes)
-      MenuRow row() => t.widget<MenuRow>(find.byWidgetPredicate((w) => w is MenuRow && w.title == 'Sync automatically'));
+      MenuRow row() => syncRow(t);
 
-      // the dock's Subtitles, then along the list (from its tabs: the file in use, restored with
-      // your progress, is in no language's list here) to under Sync subtitles
-      await Bed.down(t);
-      final tool = Bed.nodeOf(t, find.byWidgetPredicate((w) => w is Pressable && w.tooltip == 'Subtitles (C)'));
-      for (var i = 0; i < 14 && !tool.hasPrimaryFocus; i++) {
-        await Bed.right(t);
-      }
-      await Bed.ok(t);
-      await Bed.settle(t, rounds: 3);
-      final from = Bed.focused();
-      for (var i = 0; i < 6 && !Bed.focused().contains('Sync automatically'); i++) {
-        await (from.contains('MenuSegments') ? Bed.down(t) : Bed.up(t));
-      }
-      expect(Bed.focused(), contains('Sync automatically'), reason: 'right under Sync subtitles (the menu opened on $from)');
+      await toSyncRow(t);
       expect((row().value, row().detail), ('On', 'Synced to the video'));
 
       await Bed.ok(t);

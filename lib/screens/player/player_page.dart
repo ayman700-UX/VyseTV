@@ -1210,6 +1210,10 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   /// A subtitle track inside the video file, as the list names it: `mpv-sid:3` (mpv's number
   /// for it) or `exo-sid:3_0` (Media3's).
   static bool _isBuiltIn(String url) => url.startsWith('mpv-sid:') || url.startsWith('exo-sid:');
+
+  /// It came with the video: a track inside its file, or a subtitle file in its torrent. Made for
+  /// this very video, so it is in time as it is and the automatic sync never touches it.
+  static bool _cameWithVideo(sub.SubtitleTrack? t) => t != null && (t.provider == 'Built in' || _isBuiltIn(t.url));
   String get _sidPrefix => _media3 ? 'exo-sid:' : 'mpv-sid:';
 
   Future<String> _writeSub(sub.SubtitleTrack track, String content) async {
@@ -2823,7 +2827,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       // a track inside the video file: the player already has it
       final sid = track.url.substring(8);
       _subPath = null;
-      _autoSyncStop(); // (in time already; and it may be the one listened to)
+      _autoSyncLeaves(); // (in time already; and it may be the one listened to)
       try {
         if (_media3) {
           final t = _player.state.tracks.subtitle.where((x) => x.id == sid).firstOrNull;
@@ -3056,8 +3060,10 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   /// video's own track on, hidden; with none of its own, by the speech in its sound (whatever
   /// the engine). Not when it is off in Settings, for a party guest on the
   /// host's subtitles (the host's timing comes with them), or when the timing is yours: set by
-  /// hand, or remembered that way.
+  /// hand, or remembered that way. And never for a subtitle that came with the video (inside its
+  /// file, or a file in its torrent): that one is in time already.
   void _autoSyncStart() {
+    if (_cameWithVideo(_activeSubTrack)) return _autoSyncLeaves();
     _autoSyncStop();
     if (!AppSettings.autoSyncSubtitles.value || (_follower && !_ownSubs) || _subPath == null || _cues.isEmpty) return;
     if (_subOffset != 0 && _subOffset != _autoOffset) return;
@@ -3069,6 +3075,18 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       _autoSyncLooked = 0;
     }
     unawaited(_autoSyncArm());
+  }
+
+  /// A subtitle that came with the video is on: nothing times it, and a delay the automatic sync
+  /// set for the file before it doesn't stay on it. (A delay you set yourself does.)
+  void _autoSyncLeaves() {
+    _autoSyncStop();
+    final its = _autoOffset != null && (_subOffset - _autoOffset!).abs() < .01;
+    _autoOffset = null;
+    if (!its || _subOffset == 0 || !mounted) return;
+    SubLog.line('AUTO-SYNC leaves it alone: it came with the video (the ${_subOffset}s set for the file before is taken off)');
+    setState(() => _subOffset = 0);
+    _applySubDelay();
   }
 
   /// The video's own text subtitle to time a file by: a full one (not only the forced lines),
@@ -3168,7 +3186,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   void _autoSyncSetting() {
     if (!mounted) return;
     if (AppSettings.autoSyncSubtitles.value) {
-      if (_syncFile == null && _subPath != null && !(_follower && !_ownSubs)) {
+      if (_syncFile == null && _subPath != null && !_cameWithVideo(_activeSubTrack) && !(_follower && !_ownSubs)) {
         _autoOffset = _subOffset;
         _autoSyncStart();
       }
@@ -3189,6 +3207,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   String get _autoSyncNote {
     final on = AppSettings.autoSyncSubtitles.value;
     if (on && _syncMap != null) return 'Synced to the video';
+    if (on && _cameWithVideo(_activeSubTrack)) return 'Not for built-in subtitles';
     if (on && _follower && !_ownSubs) return "The host's timing is used";
     if (on && _subPath != null && _subOffset != 0 && _subOffset != _autoOffset) return 'Your own timing comes first';
     return 'Lines them up with the video';

@@ -11,6 +11,7 @@ import 'package:pointycastle/export.dart' as pc;
 import '../../net.dart';
 import '../../playback/stream_proxy.dart' show qualityLabel;
 import 'common.dart';
+import 'febbox.dart';
 import 'film_sources.dart' show FilmSource;
 /// The film and TV scrapers ported from the Vyla SDK (`src/sources/*.js`) that passed VyseTV's
 /// checks: each found a stream for a real title, played it through the relay (or straight, for
@@ -63,6 +64,9 @@ const portedSources = [
   FilmSource(id: 'hexa', name: 'Hexa', note: 'Films and shows', scraper: hexa), // hexa.js
   FilmSource(id: 'cinesrc', name: 'CineSrc', note: 'Films and shows', scraper: cinesrc), // cinesrc.js
   FilmSource(id: 'mapple', name: 'Mapple', note: 'Films and shows, from 6 servers', scraper: mapple), // mapple.js
+  // (not from the SDK: it plays from your own FebBox account, and is only asked once its token
+  // is on this device; Settings then switches it on and puts it first)
+  FilmSource(id: 'febbox', name: 'FebBox', note: 'Films and shows from your own FebBox account, up to 4K', scraper: febbox, ready: febboxReady), // febbox.js
 ];
 
 /// vidlink.js — token from enc-dec.app, streams from vidlink.pro

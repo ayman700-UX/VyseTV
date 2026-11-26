@@ -9,6 +9,8 @@ import '../../data/sources/plugins/plugin_catalogs.dart' show PluginCatalogs;
 import 'plugin_index_page.dart';
 import '../../core/nav.dart' show ShellRoute;
 import '../../data/catalog/meta_addons.dart' show MetaAddons;
+import '../../data/sources/film_sources/febbox.dart' show FebBoxUser;
+import '../../data/sources/film_sources/febbox_account.dart';
 import '../../data/sources/film_sources/film_sources.dart';
 import '../../data/sources/film_sources/source_settings.dart';
 import '../../data/sources/torrents.dart';
@@ -3366,7 +3368,7 @@ class _SourcesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([AppSettings.sourceOrder, AppSettings.sourcesOff]),
+    listenable: Listenable.merge([AppSettings.sourceOrder, AppSettings.sourcesOff, FebBox.signedIn]),
     builder: (context, _) {
       final list = orderedFilmSources();
       final firstOn = list.indexWhere(filmSourceOn);
@@ -3377,7 +3379,9 @@ class _SourcesTab extends StatelessWidget {
         setFilmSourceOrder(next);
       }
 
-      return _Section(
+      return Column(children: [
+        const _FebBoxSection(),
+        _Section(
         title: 'Film and TV sources',
         subtitle: 'When a film or episode starts these are asked from the top down, and the first to answer plays. '
             'Drag a row or use the arrows to change the order; switch one off to skip it. Anime has servers of its own.',
@@ -3424,8 +3428,175 @@ class _SourcesTab extends StatelessWidget {
             ),
           ),
         ],
+        ),
+      ]);
+    },
+  );
+}
+
+/// Settings → Sources → FebBox, above the list: your FebBox account's "ui" token. FebBox checks
+/// it; a valid account's token is kept in the keychain, and the FebBox source is switched on
+/// and put first in the list below.
+class _FebBoxSection extends StatefulWidget {
+  const _FebBoxSection();
+
+  @override
+  State<_FebBoxSection> createState() => _FebBoxSectionState();
+}
+
+class _FebBoxSectionState extends State<_FebBoxSection> {
+  bool _stale = false; // FebBox no longer takes the saved token
+
+  @override
+  void initState() {
+    super.initState();
+    if (FebBox.signedIn.value && FebBox.user.value == null) _look();
+  }
+
+  /// Whose the saved token is, for the row. (FebBox not reached: the row says a token is
+  /// saved, and no more.)
+  Future<void> _look() async {
+    try {
+      final u = await FebBox.check();
+      if (mounted) setState(() => _stale = u == null);
+    } catch (_) {}
+  }
+
+  Future<void> _ask() async {
+    final u = await showDialog<FebBoxUser>(context: context, builder: (_) => const _FebBoxTokenDialog());
+    if (u == null || !mounted) return;
+    setState(() => _stale = false);
+    showToast(context, const Text('FebBox is on and asked first', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)), icon: Icons.check_circle_rounded);
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([FebBox.signedIn, FebBox.user]),
+    builder: (context, _) {
+      final on = FebBox.signedIn.value;
+      final u = FebBox.user.value;
+      return _Section(
+        title: 'FebBox',
+        subtitle: "Films and shows from your own FebBox account. Its token stays in this device's keychain and never goes to your VyseTV account.",
+        children: [
+          _Row(
+            title: !on ? 'FebBox UI token' : (_stale ? 'Token not accepted' : (u == null ? 'Token saved' : 'Signed in')),
+            subtitle: !on
+                ? 'Add it, and FebBox is switched on and asked first'
+                : _stale
+                ? 'FebBox no longer takes the saved token. Add a new one'
+                : (u?.describe ?? 'FebBox is asked with it'),
+            trailing: on ? null : _SmallButton(label: 'Add token', icon: Icons.key_rounded, primary: true, onTap: _ask),
+            below: !on
+                ? null
+                : Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _SmallButton(label: 'Change token', icon: Icons.key_rounded, onTap: _ask),
+                      _SmallButton(
+                        label: 'Remove',
+                        icon: Icons.logout_rounded,
+                        danger: true,
+                        onTap: () {
+                          setState(() => _stale = false);
+                          FebBox.signOut();
+                        },
+                      ),
+                    ],
+                  ),
+          ),
+        ],
       );
     },
+  );
+}
+
+/// The box the FebBox token is pasted into. "Check and save" asks FebBox whose it is: a token
+/// FebBox doesn't take stays in the box with the reason under it, and nothing is saved.
+class _FebBoxTokenDialog extends StatefulWidget {
+  const _FebBoxTokenDialog();
+
+  @override
+  State<_FebBoxTokenDialog> createState() => _FebBoxTokenDialogState();
+}
+
+class _FebBoxTokenDialogState extends State<_FebBoxTokenDialog> {
+  final _token = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _token.dispose();
+    super.dispose();
+  }
+
+  Future<void> _check() async {
+    final text = _token.text.trim();
+    if (_busy || text.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    FebBoxUser? u;
+    var problem = "FebBox didn't accept that token. Check you copied all of it";
+    try {
+      u = await FebBox.signIn(text);
+    } catch (_) {
+      problem = "Couldn't reach FebBox. Try again in a moment";
+    }
+    if (!mounted) return;
+    if (u != null) return Navigator.pop(context, u);
+    setState(() {
+      _busy = false;
+      _error = problem;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    backgroundColor: VyseColors.surface,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    title: const Text('FebBox UI token', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+    content: SizedBox(
+      width: 420,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Sign in at febbox.com in a browser, then copy the value of its "ui" cookie and paste it here.',
+            style: TextStyle(color: VyseColors.textDim, height: 1.35),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _token,
+            autofocus: true,
+            enabled: !_busy,
+            autocorrect: false,
+            enableSuggestions: false,
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) => _check(),
+            cursorColor: VyseColors.accent,
+            style: const TextStyle(fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Paste your FebBox UI token',
+              hintStyle: const TextStyle(color: VyseColors.textFaint, fontSize: 14),
+              errorText: _error,
+              errorMaxLines: 3,
+            ),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+      TextButton(
+        onPressed: _busy || _token.text.trim().isEmpty ? null : _check,
+        child: Text(_busy ? 'Checking…' : 'Check and save', style: const TextStyle(fontWeight: FontWeight.w700)),
+      ),
+    ],
   );
 }
 
@@ -3450,6 +3621,7 @@ class _SourceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = source;
     final on = filmSourceOn(s);
+    final ready = filmSourceReady(s); // (FebBox: only with its token on this device)
     final phone = Layout.isPhone(context);
     final handle = ReorderableDragStartListener(
       index: index,
@@ -3487,7 +3659,7 @@ class _SourceRow extends StatelessWidget {
             if (first) const _Kind('Asked first', Icons.bolt_rounded),
             if (s.filmsOnly) const _Kind('Films only', Icons.movie_outlined),
             if (s.showsOnly) const _Kind('Shows only', Icons.live_tv_rounded),
-            if (!on) const _Kind('Off', Icons.block_rounded),
+            if (!ready) const _Kind('Needs its token', Icons.key_rounded) else if (!on) const _Kind('Off', Icons.block_rounded),
           ],
         ),
         const SizedBox(height: 4),
@@ -3501,8 +3673,8 @@ class _SourceRow extends StatelessWidget {
         _IconAction(icon: Icons.arrow_downward_rounded, tooltip: 'Move down', onTap: index == count - 1 ? null : () => onMove(1)),
         const SizedBox(width: 8),
         Tooltip(
-          message: locked ? 'At least one source stays on' : (on ? 'Skip this source' : 'Use this source'),
-          child: _Switch(value: on, onChanged: (v) => locked ? null : setFilmSourceOn(s, v)),
+          message: !ready ? 'Add its token above first' : (locked ? 'At least one source stays on' : (on ? 'Skip this source' : 'Use this source')),
+          child: _Switch(value: on, onChanged: (v) => locked || !ready ? null : setFilmSourceOn(s, v)),
         ),
       ],
     );

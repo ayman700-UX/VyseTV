@@ -43,6 +43,10 @@ class FakeHttp extends HttpOverrides {
   /// Requests nothing answered.
   final missed = <String>[];
 
+  /// The headers the latest request to each address went out with, by "GET https://…" (names in
+  /// lower case). There before the route is asked, so a route can answer by a cookie.
+  final sent = <String, Map<String, String>>{};
+
   @override
   HttpClient createHttpClient(SecurityContext? context) => _Client(this);
 
@@ -153,6 +157,9 @@ class _Request implements HttpClientRequest {
   Future<HttpClientResponse> close() async {
     final wait = net.delay?.call(uri) ?? Duration.zero;
     if (wait > Duration.zero) await Future<void>.delayed(wait);
+    final sent = <String, String>{};
+    headers.forEach((name, values) => sent[name] = values.join(', '));
+    net.sent['$method $uri'] = sent;
     var reply = net.answer(method, uri);
     final range = RegExp(r'bytes=(\d+)-(\d*)').firstMatch(headers.value('range') ?? '');
     if (reply.ranged && reply.status == 200 && range != null) {

@@ -23,6 +23,7 @@ import 'data/downloads/downloads.dart';
 import 'data/sources/torrents.dart' show Torrents;
 import 'data/music/music_library.dart' show MusicLibrary;
 import 'data/sources/debrid/debrid.dart' show Debrid;
+import 'data/sources/film_sources/febbox_account.dart' show FebBox;
 import 'data/playback/watch_progress.dart';
 import 'data/trackers/tracker_hub.dart';
 import 'package:flutter/foundation.dart';
@@ -90,6 +91,7 @@ Future<void> main() async {
   await MyList.initialize();
   await MusicLibrary.initialize();
   await Debrid.initialize();
+  await FebBox.initialize(); // (its token, from the keychain: the FebBox source is asked with one)
   await Account.initialize();
   PartyPresence.start();
   Friends.start();

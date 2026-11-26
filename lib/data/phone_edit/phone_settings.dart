@@ -12,6 +12,7 @@ import '../playback/intro_db.dart' show SegmentKind;
 import '../playback/player_engine.dart';
 import '../sources/addons.dart';
 import '../sources/debrid/debrid.dart';
+import '../sources/film_sources/febbox_account.dart';
 import '../sources/film_sources/film_sources.dart' show FilmSource;
 import '../sources/film_sources/source_settings.dart';
 import '../sources/torrents.dart';
@@ -366,6 +367,36 @@ class _DebridKey extends PhoneItem {
   }
 }
 
+/// The FebBox token, pasted on the phone: checked with FebBox, then kept in the TV's keychain
+/// like one typed on the TV (and FebBox is switched on and asked first). It never comes back to
+/// the phone.
+class _FebBoxToken extends PhoneItem {
+  _FebBoxToken() : super('febbox.token', 'FebBox UI token', "For films and shows from your own FebBox account. Kept in this TV's keychain; it never goes to your VyseTV account.");
+  @override
+  String get kind => 'secret';
+  @override
+  Map<String, Object?> get fields => {
+    'value': FebBox.signedIn.value ? 'saved' : '',
+    'placeholder': 'Paste your FebBox UI token',
+    'button': 'Save',
+  };
+
+  @override
+  List<Listenable> get watched => [FebBox.signedIn];
+  @override
+  Future<PhoneTook?> take(Map<String, Object?> change) async {
+    final token = change['v'];
+    if (token is! String || token.trim().isEmpty || token.length > 2000) return null;
+    try {
+      final u = await FebBox.signIn(token);
+      if (u == null) return const PhoneTook(null, PhoneNote("FebBox didn't accept that token. Check you copied all of it.", bad: true));
+      return PhoneTook('FebBox is on and asked first', PhoneNote('Signed in to FebBox (${u.describe}). It is on and asked first.'));
+    } catch (_) {
+      return const PhoneTook(null, PhoneNote("Couldn't reach FebBox. Try again in a moment.", bad: true));
+    }
+  }
+}
+
 /// The lean way of drawing (core/lean.dart), on or off: on unless the TV's owner says otherwise.
 class _Lean extends PhoneItem {
   _Lean()
@@ -542,6 +573,7 @@ List<PhoneSection> phoneSections({required List<SubtitleFontChoice> fonts}) {
       ),
     ]),
     PhoneSection('sources', 'Sources', 'Where films and shows play from, and in what order.', [
+      _FebBoxToken(),
       _Order<FilmSource>(
         'sources',
         'Film and TV sources',
@@ -556,7 +588,7 @@ List<PhoneSection> phoneSections({required List<SubtitleFontChoice> fonts}) {
           AppSettings.sourceOrder.set('');
           AppSettings.sourcesOff.set('');
         },
-        watched: [AppSettings.sourceOrder, AppSettings.sourcesOff],
+        watched: [AppSettings.sourceOrder, AppSettings.sourcesOff, FebBox.signedIn],
       ),
     ]),
     PhoneSection('addons', 'Addons', 'Stremio addons for sources and subtitles.', [_Addons()]),

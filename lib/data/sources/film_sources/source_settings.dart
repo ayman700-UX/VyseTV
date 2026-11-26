@@ -18,7 +18,11 @@ List<FilmSource> orderedFilmSources() {
   return out;
 }
 
-bool filmSourceOn(FilmSource s) => !_ids(AppSettings.sourcesOff.value).contains(s.id);
+/// It can be asked at all: every source but one that needs an account not set up here (FebBox
+/// without its token).
+bool filmSourceReady(FilmSource s) => s.ready?.call() ?? true;
+
+bool filmSourceOn(FilmSource s) => filmSourceReady(s) && !_ids(AppSettings.sourcesOff.value).contains(s.id);
 
 void setFilmSourceOrder(List<FilmSource> order) {
   final ids = [for (final s in order) s.id];
