@@ -100,6 +100,15 @@ On webOS 4 that last point shows: the media library can put the whole picture in
 and no more. Fit, Stretch, the fixed shapes and zooming out work. Fill and zooming in show as
 Fit.
 
+**Sign-ins and keys.** LG's webOS side of the keychain plugin seals each value with the TV's
+key service, which LG's reference gives to apps from webOS 24. On an older set nothing answers
+and LG's plugin then keeps nothing, without a word: a debrid key or a tracker sign-in would be
+gone as it was saved. The app tries the TV's store once (`lib/core/platform/webos_secrets.dart`,
+in both packages), and where it does not keep what it is given, values go to a file in the
+app's own folder on the TV instead. That file is not sealed by the TV: this app reads it, and
+so can whoever has the TV in Developer Mode, as with everything a web app stores on a TV. If the
+TV later gains the service, the file's values move into it.
+
 **A record of the start.** Nobody here has such a TV, so the package writes down how it
 started: everything the app, LG's embedder and the loader print goes to
 `appdata/vysetv-start.log` in the app's folder, headed by the TV's kernel, its webOS and every
@@ -136,7 +145,9 @@ ares-novacom --device <tv> --run "/media/developer/apps/usr/palm/applications/co
   side was checked against the configuration of a real 2021 set (the helpers this runtime
   needs from the kernel are on, and the kernel filters no system calls).
 - The player's own side of it (`test/webos_player_test.dart`: a TV with no exported windows,
-  a TV with one player, a TV that does not answer what it has).
+  a TV with one player, a TV that does not answer what it has), and where sign-ins are kept
+  (`test/webos_secrets_test.dart`: a TV's store that works, one that keeps nothing, one that
+  refuses, one that never answers, and one that starts working after an update).
 
 **What only a TV can say.** Whether LG's embedder, made for the compositor of webOS 26, gets
 along with an older one in what cannot be read from its code. Whether an older set's graphics

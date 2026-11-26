@@ -80,6 +80,8 @@ dependencies:
     path: packages/torrserver_flutter
   path_provider: ^2.1.6
   flutter_secure_storage: ^10.3.4
+  # (named for lib/core/platform/webos_secrets.dart, which stands in front of the plugin's store on an LG TV)
+  flutter_secure_storage_platform_interface: ^2.1.1
   flutter_js: ^0.8.7
   ffi: ^2.2.0
 

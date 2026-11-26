@@ -220,11 +220,21 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
           return null;
         }
         final id = await _windows.invokeMethod<String>('create', <String, Object?>{});
-        if (id != null && id.isNotEmpty && id != 'invalid') _windowId = id;
+        if (id != null && id.isNotEmpty && id != 'invalid') {
+          _windowId = id;
+          _noWindows = false;
+        }
       } catch (e) {
         appLogger.w('[webOS] no exported window: $e');
       } finally {
         _windowFuture = null;
+      }
+      // A TV whose library knows such windows and whose compositor gave none (the feature is
+      // not on this set, or not for this app): better a picture placed the older way than no
+      // picture. Asked for again the next time a video opens.
+      if (_windowId == null && await _tvHas('displayWindow')) {
+        appLogger.w('[webOS] no window from the compositor: the media library places the picture');
+        _noWindows = true;
       }
       return _windowId;
     }();

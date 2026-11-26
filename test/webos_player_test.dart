@@ -23,6 +23,7 @@ class _Tv {
   final resizes = <Map<Object?, Object?>>[];
   final placed = <Map<Object?, Object?>>[]; // where the media library was told to put the picture
   var windows = 0;
+  var givesWindows = true; // false: the compositor answers a request for a window with none
   int? position;
 
   /// What this TV says it has, when asked (null: it does not know the question, as a
@@ -39,7 +40,7 @@ class _Tv {
       final args = call.arguments is Map ? call.arguments as Map<Object?, Object?> : const <Object?, Object?>{};
       if (channel == 'webos/exported_windows') {
         calls.add('windows ${call.method}');
-        if (call.method == 'create') return Future.value(_methods.encodeSuccessEnvelope('window-${++windows}'));
+        if (call.method == 'create') return Future.value(_methods.encodeSuccessEnvelope(givesWindows ? 'window-${++windows}' : 'invalid'));
         if (call.method == 'resize') resizes.add(args);
         return Future.value(_methods.encodeSuccessEnvelope(null));
       }
@@ -595,6 +596,26 @@ void main() {
     await t.runAsync(() => player.setBoxFitMode(2));
     expect(tv.placed.last, {'x': 0, 'y': 0, 'w': 1920, 'h': 1080});
     expect(tv.resizes, isEmpty);
+  });
+
+  tvTest('a TV whose compositor gives no window, though its library knows them: the picture is placed the older way', (t) async {
+    tv.has = {'exportedWindows': true, 'displayWindow': true, 'players': true, 'muteDisplay': true, 'initWithWindowId': false};
+    tv.givesWindows = false;
+    final player = await opened(t);
+    expect(tv.calls, contains('windows create'));
+    expect(tv.loads.single['windowId'], '', reason: 'it opens all the same');
+    await player.setVideoRect(left: 0, top: 0, right: 1920, bottom: 1080, devicePixelRatio: 1);
+    await tv.says(t, {'loadCompleted': {}});
+    await tv.says(t, {
+      'videoInfo': {'width': 1920, 'height': 800},
+    });
+    await t.runAsync(() => Future<void>.delayed(Duration.zero));
+    expect(tv.placed.last, {'x': 0, 'y': 140, 'w': 1920, 'h': 800});
+
+    // a window that is given the next time is used the next time
+    tv.givesWindows = true;
+    await t.runAsync(() => player.open(const Media('http://127.0.0.1:8090/stream/other.mkv')));
+    expect(tv.loads.last['windowId'], 'window-1');
   });
 
   tvTest('a TV that says nothing of what it has is taken to have it all', (t) async {

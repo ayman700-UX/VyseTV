@@ -42,6 +42,7 @@ import 'dpad/input_mode_tracker.dart';
 import 'core/platform/device_performance.dart';
 import 'core/platform/platform_detector.dart' show PlatformDetector, TvDetectionService;
 import 'core/platform/webos.dart';
+import 'core/platform/webos_secrets.dart';
 import 'core/platform/webos_window.dart';
 import 'screens/home/up_next.dart' show UpNext;
 import 'screens/shell/intro_screen.dart';
@@ -53,6 +54,8 @@ void _hideSystemBars() => SystemChrome.setEnabledSystemUIMode(SystemUiMode.immer
 
 Future<void> main() async {
   VyseBinding.ensureInitialized(); // (Flutter's own, with reduce-motion in the app's hands: core/lean.dart)
+  // An LG TV older than webOS 24 has no key service for sign-ins and keys: see the class.
+  if (WebOS.isTv) WebosSecrets.install();
   // Android TV and Google TV: known before anything is drawn, so the app opens in D-pad mode
   // there, with the ring on its first control (an LG TV likewise)
   if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || WebOS.isTv)) {
