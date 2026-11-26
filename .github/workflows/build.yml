@@ -701,9 +701,18 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      # (the torrent engine is Go, and TorrServer's web page is made with Node as it is fetched:
+      # tool/tizen/native.sh)
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - name: The Tizen SDK's tools, and flutter-tizen
         run: bash tool/tizen/setup.sh --accept-tizen-sdk-license
-      - name: Build (Tizen 6.0, 6.5 and 10.0)
+      - name: Build (the TV's own libraries, then Tizen 6.0, 6.5 and 10.0)
         run: bash tool/tizen/build.sh
       # (also when the look inside a package found something missing: the packages are then
       # what there is to look at)

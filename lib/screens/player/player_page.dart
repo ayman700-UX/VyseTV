@@ -72,9 +72,8 @@ import 'picture_shape.dart';
 import 'sources_page.dart';
 import '../../media_servers/media_servers.dart' show serverError;
 import 'subtitle_sync_panel.dart';
-import '../../core/platform/apple_tv.dart';
 import '../../core/platform/platform_detector.dart' show PlatformDetector;
-import '../../core/platform/tizen_tv.dart';
+import '../../core/nav_sections.dart';
 
 /// The episode being played, when the title is a show.
 class PlayerEpisode {
@@ -1599,8 +1598,8 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   /// More → Download. Not in a watch party (the link there may be the host's own), not for a
   /// title from your server (it keeps its own copies), not for something already downloaded.
   bool get _canDownload {
-    // (nothing is downloaded on an Apple TV or a Samsung TV: see NavLayout)
-    if (AppleTv.isTv || TizenTv.isTv || widget.party || _sources.isEmpty || _playUrl.isEmpty || _loadingSources) return false;
+    // (nothing is downloaded on a TV: see NavLayout.downloadsHere)
+    if (!NavLayout.downloadsHere || widget.party || _sources.isEmpty || _playUrl.isEmpty || _loadingSources) return false;
     final s = widget.server;
     return s == null || (s is DirectPlayback && s.downloadable && !s.isLocal);
   }

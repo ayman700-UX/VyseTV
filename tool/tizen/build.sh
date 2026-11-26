@@ -25,10 +25,14 @@ version="$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' "$REPO/pubspec.yaml" | 
 out="$REPO/build/tizen"
 mkdir -p "$out"
 
+# the TV's own libraries (the JavaScript engine, the torrent engine): one build for every package
+native="$TOOLS/native-libs"
+bash "$REPO/tool/tizen/native.sh" "$native"
+
 for api in "${apis[@]}"; do
   echo "== Tizen $api"
   stage="$STAGES/$api"
-  python3 "$REPO/tool/tizen/stage.py" --api "$api" --out "$stage"
+  python3 "$REPO/tool/tizen/stage.py" --api "$api" --out "$stage" --native "$native"
   rm -rf "$stage/build/tizen/tpk"
   (cd "$stage" && flutter-tizen pub get)
   dbus-run-session -- bash -c "

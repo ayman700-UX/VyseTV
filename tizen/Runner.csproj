@@ -24,4 +24,13 @@
     </TizenTpkUserIncludeFiles>
   </ItemGroup>
 
+  <!-- The libraries tool/tizen/native.sh builds (the JavaScript engine scraper plugins run in,
+       the torrent engine), put in native/lib/ by tool/tizen/stage.py: into the package's lib/. -->
+  <ItemGroup>
+    <VyseNative Include="native\**\*" />
+    <TizenTpkUserIncludeFiles Include="@(VyseNative)">
+      <TizenTpkSubDir>%(RecursiveDir)</TizenTpkSubDir>
+    </TizenTpkUserIncludeFiles>
+  </ItemGroup>
+
 </Project>

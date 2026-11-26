@@ -9,15 +9,23 @@ import 'port_finder.dart';
 import 'rest_client.dart';
 import 'torrserver_controller.dart';
 
-/// In-process MethodChannel implementation of [TorrServerController] for iOS.
+/// In-process implementation of [TorrServerController]: the engine runs inside the app.
+///
+/// On iOS and Apple TV it is started over the plugin's MethodChannel. A system that loads it
+/// as a shared library instead (a Samsung TV: torrserver_controller_ffi.dart) passes its own
+/// [startNative] and [stopNative].
 class TorrServerControllerIos implements TorrServerController {
   static const MethodChannel _channel = MethodChannel('torrserver_flutter');
   int? _port;
   Uri? _baseUrl;
   TorrServerRestClient? _restClient;
   bool _isRunning = false;
+  final Future<void> Function(int port, String dataDir)? _startNative;
+  final Future<void> Function()? _stopNative;
 
-  TorrServerControllerIos();
+  TorrServerControllerIos({Future<void> Function(int port, String dataDir)? startNative, Future<void> Function()? stopNative})
+      : _startNative = startNative,
+        _stopNative = stopNative;
 
   @override
   bool get isRunning => _isRunning;
@@ -51,12 +59,17 @@ class TorrServerControllerIos implements TorrServerController {
       await resolvedDataDir.create(recursive: true);
     }
 
-    // 3. Invoke native iOS Swift plugin over MethodChannel
+    // 3. Start the engine: the native plugin over the MethodChannel, or the caller's own way
     try {
-      await _channel.invokeMethod('startServer', {
-        'port': selectedPort,
-        'dataDir': resolvedDataDir.path,
-      });
+      final startNative = _startNative;
+      if (startNative != null) {
+        await startNative(selectedPort, resolvedDataDir.path);
+      } else {
+        await _channel.invokeMethod('startServer', {
+          'port': selectedPort,
+          'dataDir': resolvedDataDir.path,
+        });
+      }
     } on PlatformException catch (e) {
       throw TorrServerStartException(
         'Failed to start TorrServer on iOS: ${e.message}',
@@ -104,7 +117,12 @@ class TorrServerControllerIos implements TorrServerController {
     _restClient = null;
 
     try {
-      await _channel.invokeMethod('stopServer');
+      final stopNative = _stopNative;
+      if (stopNative != null) {
+        await stopNative();
+      } else {
+        await _channel.invokeMethod('stopServer');
+      }
     } catch (_) {}
 
     _port = null;

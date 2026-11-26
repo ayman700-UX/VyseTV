@@ -9,7 +9,6 @@ import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:path_provider/path_provider.dart';
 import 'package:torrserver_flutter/torrserver_flutter.dart';
 
-import '../../core/platform/webos.dart';
 import '../../core/platform/tizen_tv.dart';
 import '../app_settings.dart';
 import 'torrent_file_ask.dart';
@@ -39,10 +38,17 @@ class Torrents {
   /// build carries it (there it is a framework inside the app, and a build can be made without
   /// it: [initialize] asks).
   ///
-  /// Not on a Samsung TV (which says it is Linux): the engine is a program of its own beside the
-  /// app, and a Samsung TV runs no program that Samsung has not signed.
+  /// On a Samsung TV (which says it is Linux) it is a library inside the app's own process
+  /// ([_samsungEngine]): a Samsung TV starts no program of an app's own. Without that library in
+  /// the package, torrents stay hidden there.
   static bool get supported =>
-      !kIsWeb && !TizenTv.isTv && (Platform.isWindows || Platform.isAndroid || Platform.isMacOS || Platform.isLinux || (Platform.isIOS && _iosEngine));
+      !kIsWeb &&
+      (TizenTv.isTv
+          ? _samsungEngine != null
+          : (Platform.isWindows || Platform.isAndroid || Platform.isMacOS || Platform.isLinux || (Platform.isIOS && _iosEngine)));
+
+  /// The torrent engine a Samsung TV package carries (tool/tizen/native.sh), if it does.
+  static final String? _samsungEngine = TizenTv.isTv ? TizenTv.library('libtorrserver.so') : null;
 
   static bool _iosEngine = false;
 
@@ -61,11 +67,11 @@ class Torrents {
   /// engine shares the app's own memory, and iOS ends an app that takes too much.
   static bool get _phone => Platform.isAndroid || Platform.isIOS;
 
-  /// An LG TV. The engine is a program of its own there, beside the app and the TV's video
-  /// decoder, on a set whose memory all three share (and a TV that runs short restarts): the
-  /// smallest tier, the engine's page reachable from this TV only, and nothing asked of the
-  /// router or the local network.
-  static bool get _tv => WebOS.isTv;
+  /// An LG or a Samsung TV. The engine runs beside the app and the TV's video decoder (a program
+  /// of its own on LG, inside the app on Samsung), on a set whose memory all share (and a TV
+  /// that runs short restarts): the smallest tier, the engine's page reachable from this TV
+  /// only, and nothing asked of the router or the local network.
+  static bool get _tv => LinuxTv.isTv;
 
   // ── Settings > Playback > Torrents ──
 
@@ -100,7 +106,7 @@ class Torrents {
   static Map<String, Object> get debugEngineSettings => _fast;
 
   static Future<TorrServerController> _ready() => _starting ??= () async {
-    final c = createTorrServerController();
+    final c = createTorrServerController(inProcessLibrary: _samsungEngine);
     final dir = await _dataDir();
     await _wipe(dir, keepPid: true); // whatever a crashed run left (the old process's id stays, so it's killed)
     try {

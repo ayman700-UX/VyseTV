@@ -52,6 +52,9 @@ def main() -> None:
     has(r"video_player_avplay|video_player_tizen_plugin", "Samsung's player plugin")
     has(r"libplusplayer", "Samsung's player libraries")
     has(r"flutter_assets/AssetManifest", "the app's assets")
+    # the TV's own libraries (tool/tizen/native.sh): scraper plugins and torrents need them
+    has(r"^lib/libquickjs_c_bridge_plugin\.so$", "the JavaScript engine (libquickjs_c_bridge_plugin.so)", least=500_000)
+    has(r"^lib/libtorrserver\.so$", "the torrent engine (libtorrserver.so)", least=5_000_000)
     has(r"(^|/)author-signature\.xml$", "author signature")
 
     print(f"{args.tpk}: {len(names)} files, {sum(sizes.values()) // 1_000_000} MB unpacked")

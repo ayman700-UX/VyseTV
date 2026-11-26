@@ -17,10 +17,12 @@ Samsung's player plugin carries a library for each Tizen version, and a package 
 one: the copy's tizen-manifest.xml gets the api-version asked for (tizen/README.md says which
 TVs each one is for).
 
-    python tool/tizen/stage.py --api 6.0 [--out DIR] [--check]
+    python tool/tizen/stage.py --api 6.0 [--out DIR] [--native DIR] [--check]
 
 --api       6.0 (2021 TVs), 6.5 (2022 to 2025 TVs, Tizen 6.5 to 9.0) or 10.0 (2026 TVs)
 --out DIR   where the copy goes (default: build/tizen_stage/<api>)
+--native    the folder tool/tizen/native.sh built the TV's own libraries into: they go into
+            the copy's tizen/native/lib/, which tizen/Runner.csproj puts in the package's lib/
 --check     print the pubspec the copy would get, and write nothing
 """
 
@@ -145,6 +147,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--api", required=True, choices=API_VERSIONS)
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--native", type=Path, default=None)
     ap.add_argument("--check", action="store_true")
     args = ap.parse_args()
     out = (args.out or REPO / "build" / "tizen_stage" / args.api).resolve()
@@ -184,6 +187,15 @@ def main() -> None:
     # built with at its version, and only adds the Tizen sides.
     write_if_changed(out / "pubspec.lock", (REPO / "pubspec.lock").read_text(encoding="utf-8").replace("\r\n", "\n"))
     write_if_changed(out / "tizen" / "tizen-manifest.xml", manifest)
+    if args.native is not None:
+        libs = sorted(args.native.glob("*.so"))
+        if not libs:
+            raise SystemExit(f"{args.native}: no libraries (run tool/tizen/native.sh)")
+        dest = out / "tizen" / "native" / "lib"
+        dest.mkdir(parents=True, exist_ok=True)
+        for lib in libs:
+            shutil.copy2(lib, dest / lib.name)
+        print("  with " + ", ".join(lib.name for lib in libs))
     print(f"staged VyseTV {version} for Tizen {args.api} in {out} ({n} files written)")
 
 

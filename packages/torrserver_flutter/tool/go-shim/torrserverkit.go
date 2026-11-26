@@ -23,6 +23,12 @@ var (
 // StartServer starts the embedded TorrServer HTTP engine and BitTorrent client.
 // Returns an empty string on success, or an error message on failure.
 func StartServer(port int, dataDir string) string {
+	return StartServerOn(port, dataDir, "")
+}
+
+// StartServerOn is StartServer listening on one address only ("127.0.0.1": the engine's
+// page and streams answer this device alone); an empty ip listens on every address.
+func StartServerOn(port int, dataDir string, ip string) string {
 	runningMu.Lock()
 	defer runningMu.Unlock()
 
@@ -58,6 +64,9 @@ func StartServer(port int, dataDir string) string {
 		Path:     dataDir,
 		RDB:      false,
 		SearchWA: true,
+	}
+	if ip != "" {
+		settings.Args.IPs = []string{ip}
 	}
 
 	atomic.StoreInt32(&running, 1)

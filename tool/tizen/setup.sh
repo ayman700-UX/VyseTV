@@ -19,7 +19,7 @@ FLUTTER_TIZEN_TAG="3.47.1-tizen.1.1.2"
 FLUTTER_TIZEN_COMMIT="7a70c89c3d11bbd97f5919f0a7ab2175e39d26e7"
 FLUTTER_COMMIT="6655482ec06e547f90abf8ae7590466f4415978d"
 TIZEN_SDK_URL="https://download.tizen.org/sdk/Installer/tizen-sdk_10.0/web-cli_Tizen_SDK_10.0_ubuntu-64.bin"
-TIZEN_PACKAGES=(NativeToolchain-Gcc-9.2 IOT-Headed-6.0-NativeAppDevelopment-CLI IOT-Headed-6.5-NativeAppDevelopment-CLI)
+TIZEN_PACKAGES=(NativeToolchain-Gcc-9.2 IOT-Headed-6.0-NativeAppDevelopment-CLI IOT-Headed-6.5-NativeAppDevelopment-CLI TIZEN-10.0-NativeAppDevelopment-CLI)
 
 # The signing profile the packages are built with (a certificate made on this machine, which
 # signs nothing anyone relies on: its password is no secret).

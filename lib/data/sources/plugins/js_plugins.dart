@@ -27,6 +27,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/platform/webos.dart';
+import '../../../core/platform/tizen_tv.dart';
 import '../../net.dart';
 import '../film_sources/common.dart';
 import 'web_crypto.dart';
@@ -1140,9 +1141,11 @@ bool _deepBound = false;
 /// The QuickJS library as Linux is asked for it. On a desktop its name is enough. On an LG TV
 /// (which says it is Linux) it is the one built for the TV (packages/vyse_webos/webos), in lib/
 /// beside the app's program, and it is named by its whole path: nothing promises that a TV
-/// looks in that folder for a library asked for by name alone.
-String get _quickJsLibrary =>
-    WebOS.isTv ? '${File(Platform.resolvedExecutable).parent.path}/lib/libquickjs_c_bridge_plugin.so' : 'libquickjs_c_bridge_plugin.so';
+/// looks in that folder for a library asked for by name alone. On a Samsung TV likewise, in its
+/// package's lib/ (built by tool/tizen/native.sh; [TizenTv.library] finds it).
+String get _quickJsLibrary => WebOS.isTv
+    ? '${File(Platform.resolvedExecutable).parent.path}/lib/libquickjs_c_bridge_plugin.so'
+    : (TizenTv.isTv ? (TizenTv.library('libquickjs_c_bridge_plugin.so') ?? 'libquickjs_c_bridge_plugin.so') : 'libquickjs_c_bridge_plugin.so');
 
 /// Linux: loads the QuickJS library so that it uses its own functions before anyone else's.
 ///

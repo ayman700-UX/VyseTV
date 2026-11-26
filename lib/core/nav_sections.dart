@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/app_settings.dart';
 import 'platform/apple_tv.dart';
+import 'platform/platform_detector.dart';
 import 'platform/tizen_tv.dart';
 
 /// One section of the navbar: the rail on a desktop or tablet, the bottom bar on a phone.
@@ -75,10 +76,14 @@ abstract final class NavLayout {
     return out;
   }
 
-  /// Whether this device has the section at all. Downloads are not on an Apple TV: an app
-  /// there has no storage the system will not clear when it runs short (as upstream has it).
-  /// Nor on a Samsung TV: little room, and its player is never handed a file there.
-  static bool _here(NavItem s) => !(s.id == 'downloads' && (AppleTv.isTv || TizenTv.isTv));
+  /// Whether this device has the section at all. Downloads are on no TV (the user's call,
+  /// 2026-11-26): Android TV, LG, Samsung and Apple TV alike. A TV has little room, an Apple
+  /// TV's system clears an app's files when it runs short, and a TV streams anyway.
+  static bool _here(NavItem s) => !(s.id == 'downloads' && !downloadsHere);
+
+  /// Whether anything is downloaded on this device: the section, and the player's Download.
+  /// Not on a TV, whatever the layout setting says (the device, not the look).
+  static bool get downloadsHere => !(PlatformDetector.isTVDevice() || AppleTv.isTv || LinuxTv.isTv);
 
   /// What the navbar shows, in order. Never empty: if the saved value hides everything this
   /// version has, the first section shows anyway.
