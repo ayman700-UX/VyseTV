@@ -16,17 +16,26 @@ OPUS_VERSION="1.5.2"
 OPUS_SHA256="65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1"
 mkdir -p "$OUT" "$WORK"
 
+# Everything fetched first, with this machine's own settings: once LG's settings are loaded,
+# its tools look for certificates in the NDK and no HTTPS download can be checked.
+PREFIX="$WORK/opus-prefix"
+if [ ! -f "$PREFIX/lib/libopus.a" ]; then
+  echo "== libopus $OPUS_VERSION: the source"
+  curl -fsSL "https://downloads.xiph.org/releases/opus/opus-$OPUS_VERSION.tar.gz" -o "$WORK/opus.tar.gz"
+  echo "$OPUS_SHA256  $WORK/opus.tar.gz" | sha256sum -c -
+  rm -rf "$WORK/opus-src" && mkdir -p "$WORK/opus-src"
+  tar -xzf "$WORK/opus.tar.gz" -C "$WORK/opus-src" --strip-components=1
+fi
+echo "== the Go modules"
+(cd "$HERE" && go mod download)
+
 # the NDK's compiler and the TV's libraries (in a subshell: its settings stay there)
 (
   # shellcheck disable=SC1090
   . "$NDK_ENV"
-  echo "== libopus $OPUS_VERSION with LG's compiler ($CC)"
-  PREFIX="$WORK/opus-prefix"
+  unset SSL_CERT_FILE SSL_CERT_DIR CURL_CA_BUNDLE REQUESTS_CA_BUNDLE
   if [ ! -f "$PREFIX/lib/libopus.a" ]; then
-    curl -fsSL "https://downloads.xiph.org/releases/opus/opus-$OPUS_VERSION.tar.gz" -o "$WORK/opus.tar.gz"
-    echo "$OPUS_SHA256  $WORK/opus.tar.gz" | sha256sum -c -
-    rm -rf "$WORK/opus-src" && mkdir -p "$WORK/opus-src"
-    tar -xzf "$WORK/opus.tar.gz" -C "$WORK/opus-src" --strip-components=1
+    echo "== libopus $OPUS_VERSION with LG's compiler ($CC)"
     (cd "$WORK/opus-src" && ./configure ${CONFIGURE_FLAGS:-} --prefix="$PREFIX" --disable-shared --enable-static \
       --disable-doc --disable-extra-programs --with-pic CFLAGS="${CFLAGS:-} -O2 -fPIC" >/dev/null && make -j"$(nproc)" >/dev/null && make install >/dev/null)
   fi
@@ -34,6 +43,8 @@ mkdir -p "$OUT" "$WORK"
 
   echo "== libvyse_voice.so (linux/arm, cgo with LG's compiler)"
   cd "$HERE"
+  # (the modules are here already: nothing is fetched from inside LG's settings)
+  export GOFLAGS=-mod=readonly GOPROXY=off
   export CGO_ENABLED=1 GOOS=linux GOARCH=arm GOARM=7
   export CGO_CFLAGS="-I$PREFIX/include -O2"
   export CGO_LDFLAGS="-L$PREFIX/lib"
