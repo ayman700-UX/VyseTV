@@ -79,3 +79,4 @@ FRONTEND_PROMPT.md
 # (the Go shim's build: TorrServer's source and the frameworks it makes)
 packages/torrserver_flutter/tool/go-shim/torrserver-src/
 packages/torrserver_flutter/dist/
+packages/torrserver_flutter/tool/go-shim/tools_tvos.go

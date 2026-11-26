@@ -35,8 +35,22 @@ if [ ! -d torrserver-src ]; then
 fi
 
 echo "== the shim's module, against this TorrServer and the fork's bind package"
+# gobind-netbird generates code against the fork's own bind packages, so the module must keep
+# them: a build-only file names them (as tools.go names golang.org/x/mobile's), or `go mod tidy`
+# drops the fork again for being unused.
+cat > tools_tvos.go <<'GO'
+//go:build tools
+
+package torrserverkit
+
+import (
+	_ "github.com/netbirdio/gomobile-tvos-fork/bind"
+	_ "github.com/netbirdio/gomobile-tvos-fork/bind/objc"
+)
+GO
 go get "$GOMOBILE_FORK@$GOMOBILE_COMMIT"
 go mod tidy
+go list "$GOMOBILE_FORK/bind" "$GOMOBILE_FORK/bind/objc"
 
 echo "== TorrServerKit.xcframework (tvOS, tvOS simulator)"
 rm -rf "$OUTPUT_DIR/TorrServerKit.xcframework"
