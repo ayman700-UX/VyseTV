@@ -24,6 +24,8 @@ import '../../dpad/input_mode_tracker.dart';
 import '../../widgets/audiobook_widgets.dart' show SeekBar;
 import '../../widgets/common.dart';
 import '../../widgets/section_chrome.dart';
+import '../player/picture_shape.dart';
+import '../player/picture_shape_button.dart';
 import '../party/rooms_view.dart' show openRoom;
 import '../shell/shell.dart' show WindowBar;
 
@@ -85,6 +87,21 @@ class _LiveTvPlayerPageState extends State<LiveTvPlayerPage> with WidgetsBinding
   Timer? _hide;
 
   LiveItem get _item => widget.items[_index];
+
+  // The picture's shape (the button beside the controls; the film player's Aspect ratio): Fit,
+  // Fill or Stretch as last picked on this device, a fixed shape until the player closes.
+  PictureShape _shape = rememberedPictureShape();
+  final _videoBox = GlobalKey();
+
+  Size? get _box => (_videoBox.currentContext?.findRenderObject() as RenderBox?)?.size;
+
+  void _nextShape() {
+    final s = nextPictureShape(_shape);
+    keepPictureShape(s);
+    setState(() => _shape = s);
+    unawaited(applyPictureShape(_player, s, _box));
+    _poke();
+  }
 
   late final _picture = DpadPicture(
     debugLabel: 'live player',
@@ -235,6 +252,8 @@ class _LiveTvPlayerPageState extends State<LiveTvPlayerPage> with WidgetsBinding
       // the channel is asked for through the relay on this device, which says it for it.)
       final asMpv = _player.playerType == 'exoplayer' || _player.playerType == 'webos' || _player.playerType == 'tizen';
       await _player.open(Media(_item.url, headers: asMpv ? const {'User-Agent': 'libmpv'} : null));
+      // (said again for each channel: a new file is a new picture to the engines)
+      if (mounted) unawaited(applyPictureShape(_player, _shape, _box));
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     }
@@ -373,7 +392,7 @@ class _LiveTvPlayerPageState extends State<LiveTvPlayerPage> with WidgetsBinding
                 }
               },
               child: Stack(children: [
-                Positioned.fill(child: VyseVideo(player: _player)),
+                Positioned.fill(child: KeyedSubtree(key: _videoBox, child: VyseVideo(player: _player))),
                 if (_buffering && _error == null)
                   const Center(child: SizedBox.square(dimension: 36, child: CircularProgressIndicator(strokeWidth: 2.6, color: VyseColors.accent))),
                 if (_error != null) Center(child: _errorCard()),
@@ -513,6 +532,8 @@ class _LiveTvPlayerPageState extends State<LiveTvPlayerPage> with WidgetsBinding
                               ),
                             ),
                           const Spacer(),
+                          PictureShapeButton(shape: _shape, onTap: _nextShape),
+                          const SizedBox(width: 8),
                           if (isDesktopNative)
                             IconButton(
                               tooltip: 'Full screen (F)',

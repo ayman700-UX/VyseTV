@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vyse_tv/data/app_settings.dart';
 import 'package:vyse_tv/core/nav.dart';
 import 'package:vyse_tv/data/live_tv/live_tv.dart';
 import 'package:vyse_tv/dpad/input_mode_tracker.dart';
@@ -132,6 +133,34 @@ void main() {
     expect(find.byType(HomePage), findsOneWidget);
     expect(Bed.focused(), isNot('nothing'));
   }, variant: screen);
+
+  // (the user, 2026-11-27: "add aspect ratio to iptv player")
+  testWidgets('Live TV: the remote reaches Aspect ratio on the controls; OK moves to the next shape and the engine is told', (t) async {
+    final kept = AppSettings.pictureShape.value;
+    addTearDown(() => AppSettings.pictureShape.value = kept);
+    AppSettings.pictureShape.value = 'fit';
+    await _open(t);
+    await Bed.right(t);
+    expect(_hasTooltip('Play') || _hasTooltip('Pause'), isTrue);
+    for (var i = 0; i < 6 && !_hasTooltip('Aspect ratio: Fit'); i++) {
+      await Bed.right(t);
+    }
+    expect(_hasTooltip('Aspect ratio: Fit'), isTrue, reason: 'Right along the controls reaches it (${Bed.focused()})');
+    final at = Bed.videoCalls.length;
+    await Bed.ok(t);
+    await Bed.settle(t);
+    expect(find.text('Fill'), findsOneWidget, reason: 'the button says the shape in use');
+    await Bed.picture(t, 'live/aspect_ratio');
+    expect(Bed.videoCalls.skip(at).where((c) => c.contains('panscan') && c.contains('1.0')), isNotEmpty, reason: 'Fill: the engine crops the picture');
+    expect(AppSettings.pictureShape.value, 'fill', reason: 'kept for the next player, as the film player keeps it');
+    await Bed.ok(t);
+    await Bed.ok(t);
+    await Bed.settle(t);
+    expect(find.text('16:9'), findsOneWidget);
+    expect(Bed.videoCalls.where((c) => c.contains('video-aspect-override') && c.contains('16:9')), isNotEmpty);
+    expect(AppSettings.pictureShape.value, 'stretch', reason: 'a fixed shape is about this video only: not kept');
+    await _close(t);
+  }, variant: OnScreens([Screens.tv]));
 
   testWidgets('Live TV: the channel list opens in place on the channel that is on, keeps the arrows, and Back closes it', (t) async {
     await _open(t);

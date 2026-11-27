@@ -17,6 +17,8 @@ import '../../dpad/focusable_wrapper.dart';
 import '../../dpad/input_mode_tracker.dart';
 import '../../widgets/common.dart';
 import '../../widgets/section_chrome.dart';
+import '../player/picture_shape.dart';
+import '../player/picture_shape_button.dart';
 import '../party/rooms_view.dart' show openRoom;
 import '../../core/platform/platform_detector.dart' show PlatformDetector;
 import '../../core/layout.dart';
@@ -65,6 +67,24 @@ class _BrowserLivePlayerState extends State<BrowserLivePlayer> {
   static final _touch = (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) && !PlatformDetector.isTV(); // (a TV has no touchscreen)
 
   late final _player = Player();
+
+  // The picture's shape (the button on the full screen's controls; the film player's Aspect
+  // ratio). In the pane beside the list it is always Fit, as in any small window.
+  PictureShape _shape = rememberedPictureShape();
+  PictureShape get _shapeNow => widget.expanded ? _shape : PictureShape.fit;
+  final _videoBox = GlobalKey();
+
+  Size? get _box => (_videoBox.currentContext?.findRenderObject() as RenderBox?)?.size;
+
+  void _applyShape() => unawaited(applyPictureShape(_player, _shapeNow, _box));
+
+  void _nextShape() {
+    final s = nextPictureShape(_shape);
+    keepPictureShape(s);
+    setState(() => _shape = s);
+    _applyShape();
+    _poke();
+  }
   final _subs = <StreamSubscription<Object?>>[];
   late final _picture = DpadPicture(
     debugLabel: 'browser player',
@@ -158,6 +178,10 @@ class _BrowserLivePlayerState extends State<BrowserLivePlayer> {
       });
     }
     if (old.expanded != widget.expanded) {
+      // (the shape goes with it: Fit in the pane; told once the new box is laid out)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _applyShape();
+      });
       // (with a D-pad on its full screen button, focus stays on that button)
       if (widget.expanded && !(DpadPicture.dpad && _picture.onControls)) _keys.requestFocus();
       _poke();
@@ -187,6 +211,8 @@ class _BrowserLivePlayerState extends State<BrowserLivePlayer> {
     try {
       await _player.setVolume(_volume);
       await _player.open(Media(widget.item.url));
+      // (said again for each channel: a new file is a new picture to the engines)
+      if (mounted) _applyShape();
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     }
@@ -363,7 +389,7 @@ class _BrowserLivePlayerState extends State<BrowserLivePlayer> {
                 return Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (_stopped) const ColoredBox(color: Colors.black) else VyseVideo(player: _player),
+                    if (_stopped) const ColoredBox(color: Colors.black) else KeyedSubtree(key: _videoBox, child: VyseVideo(player: _player)),
                     if (_buffering && _error == null && !_stopped)
                       Center(child: SizedBox.square(dimension: full ? 36 : 28, child: CircularProgressIndicator(strokeWidth: 2.4, color: accent))),
                     if (_error != null && !_stopped) Center(child: _errorCard()),
@@ -498,6 +524,10 @@ class _BrowserLivePlayerState extends State<BrowserLivePlayer> {
                   ),
                 ),
               const Spacer(),
+              if (full) ...[
+                PictureShapeButton(shape: _shape, onTap: _nextShape),
+                const SizedBox(width: 6),
+              ],
               ValueListenableBuilder(
                 valueListenable: Rooms.mine,
                 builder: (context, room, _) {
