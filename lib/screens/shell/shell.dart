@@ -31,6 +31,7 @@ import '../../dpad/input_mode_tracker.dart';
 import '../../dpad/key_event_utils.dart';
 import '../../core/platform/apple_tv.dart';
 import '../../core/platform/platform_detector.dart' show PlatformDetector;
+import '../../core/platform/tizen_tv.dart' show LinuxTv;
 import '../../widgets/dialogs/update_dialog.dart';
 import '../../widgets/common.dart';
 import '../../widgets/dialogs/p2p_consent.dart';
@@ -509,7 +510,43 @@ class _AppShellState extends State<AppShell> {
             }));
       }
     } else if (!isDesktopNative) {
-      SystemNavigator.pop();
+      // An LG or a Samsung TV asks first: there Back is the remote's busiest key, and one press
+      // too many closed the app (an LG tester, 2026-11-27: "Add a confirmation prompt when
+      // exiting the app via the back button").
+      if (LinuxTv.isTv) {
+        unawaited(_askToLeave());
+      } else {
+        SystemNavigator.pop();
+      }
+    }
+  }
+
+  bool _asking = false;
+
+  /// "Leave VyseTV?", with Stay where Enter lands. Back closes it, staying.
+  Future<void> _askToLeave() async {
+    if (_asking) return;
+    _asking = true;
+    try {
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: VyseColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Leave VyseTV?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          actions: [
+            TextButton(autofocus: true, onPressed: () => Navigator.pop(ctx, false), child: const Text('Stay')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: VyseColors.accent, foregroundColor: Colors.black),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Leave', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      );
+      if (leave == true) await SystemNavigator.pop();
+    } finally {
+      _asking = false;
     }
   }
 

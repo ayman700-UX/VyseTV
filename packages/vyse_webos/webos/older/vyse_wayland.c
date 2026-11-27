@@ -24,6 +24,14 @@
 //                            offers (wl_registry): there it notes each interface's version on
 //                            the way to whoever listens, which is how the first knows.
 //
+// And a third thing, the Magic Remote. An older TV's compositor offers several input "seats"
+// (the Magic Remote, a USB mouse, ...) and names none of them, so the embedder makes a pointer
+// on each but listens to the first one's only. The remote's pointer and wheel arrive on
+// another, where nobody listens and the library drops them (an LG webOS 5.6 tester, 2026-11-27:
+// "Add support for the Smart Magic remote's pointer and scroll function"). So every pointer
+// the embedder makes (wl_seat.get_pointer) is given the listener it gave its first one, with
+// the same data: the embedder's handlers are its window's, whichever seat a motion came from.
+//
 // On a TV that needs neither (webOS 26) nothing changes: the same requests go out through the
 // TV's own call. Wayland's headers are not used: the few types below are the library's
 // public, fixed layout. See webos/README.md, "Older webOS".
@@ -93,6 +101,7 @@ static struct {
   void (*array)(struct wl_proxy *, uint32_t, union wl_argument *);
   void (*destroy)(struct wl_proxy *);
   int (*add_listener)(struct wl_proxy *, vyse_listener *, void *);
+  uint32_t (*get_version)(struct wl_proxy *);  // (Wayland 1.10 and later)
 } tv;
 
 static pthread_once_t vyse_looked = PTHREAD_ONCE_INIT;
@@ -106,6 +115,7 @@ static void vyse_look(void) {
   tv.array = (void (*)(struct wl_proxy *, uint32_t, union wl_argument *))dlsym(RTLD_NEXT, "wl_proxy_marshal_array");
   tv.destroy = (void (*)(struct wl_proxy *))dlsym(RTLD_NEXT, "wl_proxy_destroy");
   tv.add_listener = (int (*)(struct wl_proxy *, vyse_listener *, void *))dlsym(RTLD_NEXT, "wl_proxy_add_listener");
+  tv.get_version = (uint32_t (*)(struct wl_proxy *))dlsym(RTLD_NEXT, "wl_proxy_get_version");
   if (tv.add_listener == NULL || (tv.array_flags == NULL && (tv.array_constructor == NULL || tv.array == NULL || tv.destroy == NULL))) {
     fprintf(stderr, "[vyse] the TV's Wayland library lacks what the app sends its requests with\n");
   }
@@ -205,11 +215,97 @@ static void vyse_on_global_remove(void *data, struct wl_proxy *registry, uint32_
 
 static vyse_listener vyse_registry_listener[2] = {(vyse_listener)vyse_on_global, (vyse_listener)vyse_on_global_remove};
 
-// A listener is set on [proxy]. Only for a wl_registry is anything done: this library's two
-// functions go in its place and call the real ones, with the same data, after taking note.
+// ── pointers on every seat (the Magic Remote: see the top of the file) ──
+
+#define VYSE_POINTERS 8
+
+// Who a pointer's listener is from.
+enum { VYSE_NOBODY, VYSE_GIVEN_HERE, VYSE_EMBEDDERS, VYSE_LEFT_ALONE };
+
+static struct {
+  struct wl_proxy *pointer;
+  int listener;  // one of the above
+} vyse_pointers[VYSE_POINTERS];
+static int vyse_pointer_count;
+static vyse_listener *vyse_pointer_listener;  // the embedder's, from the first pointer it listened to
+static void *vyse_pointer_data;
+static uint32_t vyse_pointer_version;
+
+static int vyse_is(struct wl_proxy *proxy, const char *name) {
+  const struct wl_interface *own = proxy == NULL ? NULL : ((const struct wl_object *)proxy)->interface;
+  return own != NULL && own->name != NULL && strcmp(own->name, name) == 0;
+}
+
+static uint32_t vyse_version(struct wl_proxy *proxy) { return tv.get_version != NULL ? tv.get_version(proxy) : 0; }
+
+// (with the lock held) Gives the embedder's pointer listener to every pointer that has none.
+// Only to a pointer of no newer version than the one it was written for: a newer one has
+// events the listener has no place for.
+static void vyse_listen_to_every_pointer(void) {
+  if (vyse_pointer_listener == NULL) return;
+  for (int i = 0; i < vyse_pointer_count; i++) {
+    if (vyse_pointers[i].listener != VYSE_NOBODY) continue;
+    const uint32_t version = vyse_version(vyse_pointers[i].pointer);
+    if (version != 0 && vyse_pointer_version != 0 && version > vyse_pointer_version) {
+      vyse_pointers[i].listener = VYSE_LEFT_ALONE;
+      fprintf(stderr, "[vyse] a pointer of another seat is version %u, newer than the app's %u: not listened to\n", version, vyse_pointer_version);
+      continue;
+    }
+    if (tv.add_listener(vyse_pointers[i].pointer, vyse_pointer_listener, vyse_pointer_data) == 0) {
+      vyse_pointers[i].listener = VYSE_GIVEN_HERE;
+      fprintf(stderr, "[vyse] the pointer of another seat (%d) now reaches the app (a Magic Remote's, perhaps)\n", i);
+    } else {
+      vyse_pointers[i].listener = VYSE_LEFT_ALONE;
+    }
+  }
+}
+
+// A pointer the embedder just made on a seat.
+static void vyse_note_pointer(struct wl_proxy *pointer) {
+  pthread_mutex_lock(&vyse_lock);
+  if (vyse_pointer_count < VYSE_POINTERS) {
+    vyse_pointers[vyse_pointer_count].pointer = pointer;
+    vyse_pointers[vyse_pointer_count].listener = VYSE_NOBODY;
+    vyse_pointer_count++;
+    vyse_listen_to_every_pointer();
+  }
+  pthread_mutex_unlock(&vyse_lock);
+}
+
+// The embedder listens to [pointer]: that is the listener every other pointer gets.
+static int vyse_pointer_listened(struct wl_proxy *pointer, vyse_listener *implementation, void *data) {
+  pthread_mutex_lock(&vyse_lock);
+  int at = -1;
+  for (int i = 0; i < vyse_pointer_count; i++) {
+    if (vyse_pointers[i].pointer == pointer) at = i;
+  }
+  int result;
+  if (at >= 0 && vyse_pointers[at].listener == VYSE_GIVEN_HERE) {
+    // (given the embedder's listener here already: the one it is setting now, so it is told
+    // yes, and from now on it is the embedder's own)
+    vyse_pointers[at].listener = VYSE_EMBEDDERS;
+    result = 0;
+  } else {
+    result = tv.add_listener(pointer, implementation, data);
+    if (result == 0 && at >= 0) vyse_pointers[at].listener = VYSE_EMBEDDERS;
+  }
+  if (result == 0 && vyse_pointer_listener == NULL) {
+    vyse_pointer_listener = implementation;
+    vyse_pointer_data = data;
+    vyse_pointer_version = vyse_version(pointer);
+  }
+  vyse_listen_to_every_pointer();
+  pthread_mutex_unlock(&vyse_lock);
+  return result;
+}
+
+// A listener is set on [proxy]. For a wl_registry this library's two functions go in its
+// place and call the real ones, with the same data, after taking note; a pointer's listener is
+// noted for the pointers of the other seats. Anything else is passed straight on.
 EXPORT int wl_proxy_add_listener(struct wl_proxy *proxy, vyse_listener *implementation, void *data) {
   pthread_once(&vyse_looked, vyse_look);
   if (tv.add_listener == NULL) return -1;
+  if (implementation != NULL && vyse_is(proxy, "wl_pointer")) return vyse_pointer_listened(proxy, implementation, data);
   if (implementation == NULL || !vyse_is_registry(proxy)) return tv.add_listener(proxy, implementation, data);
 
   // (the lock is held across the two steps: an offer that arrives in between, on another
@@ -290,14 +386,19 @@ EXPORT struct wl_proxy *wl_proxy_marshal_flags(struct wl_proxy *proxy, uint32_t 
   }
 
   pthread_once(&vyse_looked, vyse_look);
-  if (tv.array_flags != NULL) return tv.array_flags(proxy, opcode, interface, version, flags, args);
-
+  // (wl_seat.get_pointer: a pointer on a seat, noted for the Magic Remote, see the top)
+  const int pointer = interface != NULL && opcode == 0 && own->name != NULL && strcmp(own->name, "wl_seat") == 0;
   struct wl_proxy *made = NULL;
-  if (interface != NULL) {
-    if (tv.array_constructor != NULL) made = tv.array_constructor(proxy, opcode, args, interface, version);
-  } else if (tv.array != NULL) {
-    tv.array(proxy, opcode, args);
+  if (tv.array_flags != NULL) {
+    made = tv.array_flags(proxy, opcode, interface, version, flags, args);
+  } else {
+    if (interface != NULL) {
+      if (tv.array_constructor != NULL) made = tv.array_constructor(proxy, opcode, args, interface, version);
+    } else if (tv.array != NULL) {
+      tv.array(proxy, opcode, args);
+    }
+    if ((flags & VYSE_MARSHAL_FLAG_DESTROY) != 0 && tv.destroy != NULL) tv.destroy(proxy);
   }
-  if ((flags & VYSE_MARSHAL_FLAG_DESTROY) != 0 && tv.destroy != NULL) tv.destroy(proxy);
+  if (pointer && made != NULL) vyse_note_pointer(made);
   return made;
 }

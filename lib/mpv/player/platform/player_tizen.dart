@@ -27,6 +27,7 @@
 // See tizen/README.md for what is proven and what is not.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:clock/clock.dart';
@@ -293,6 +294,8 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     _subId = 'no';
     _cues = SubtitleCues.empty;
     _tvLine = null;
+    _polledMs = null;
+    _stillPolls = 0;
     _stopClock();
     vyseResetForNewFile();
   }
@@ -355,6 +358,7 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     if (disposed || source != _sources) return;
     handlePlayerEvent('file-loaded', {'sourceId': source});
     unawaited(_placePicture());
+    _watchPosition();
     // where it starts (see [dataSource])
     if (_startMs > 0) await _quiet(() => _seekTv(id, _startMs));
     if (disposed || source != _sources) return;
@@ -482,22 +486,98 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     };
   }
 
+  /// Something the TV's player said went wrong. It says a lot it gets over by itself: a seek it
+  /// could not make where it was asked, a track it cannot read. Ending the film on every one of
+  /// them left "Playback stopped" on screen over a film that played on, and the subtitles
+  /// stopped with it (a Samsung tester, 2026-11-27: "The stream still works ... but this
+  /// playback stopped error stayed"). So: a half of the video the TV plays on without is said
+  /// as such; once the film is open, it ends only if the TV's player has really stopped; before
+  /// that, it did not play.
   void _onError(int source, Object error) {
     if (disposed || source != _sources) return;
     final code = error is PlatformException ? error.code : '';
     final message = error is PlatformException ? (error.message ?? '') : error.toString();
     appLogger.w('[Tizen] player error $code $message');
-    _clockPause();
     final what = errorNote(message);
+    switch (partGone(message)) {
+      case 'subtitle':
+        // (the line is in the log; the film goes on, without that subtitle)
+        logController.add(PlayerLog(level: PlayerLogLevel.warn, prefix: 'tv', text: what));
+        return;
+      case 'audio' || 'video':
+        // (the player page says it: no sound, or no picture, and what to do)
+        logController.add(PlayerLog(level: PlayerLogLevel.error, prefix: 'tv-part', text: what));
+        return;
+    }
+    if (_loaded && _id != null) {
+      unawaited(_endIfStopped(source, what));
+      return;
+    }
+    _end(source, what);
+  }
+
+  /// The film ends with [what] on screen.
+  void _end(int source, String what) {
+    if (disposed || source != _sources) return;
+    _clockPause();
     logController.add(PlayerLog(level: PlayerLogLevel.error, prefix: 'tv', text: what));
     handlePlayerEvent('end-file', {'reason': 'error', 'message': what, 'sourceId': source});
   }
 
-  /// A fault of the TV's player in words: the report card shows it.
+  /// After a fault with a film open: looks at the TV's player for a few seconds, and ends the
+  /// film only if it has stopped. The TV gives a position only while it plays or is paused, so
+  /// a position that moves (or one that is there at all while paused) means it carries on.
+  Future<void> _endIfStopped(int source, String what) async {
+    final id = _id;
+    int? last;
+    for (var i = 0; i < 8; i++) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      if (disposed || source != _sources || id == null || id != _id) return;
+      final at = (await _quiet(() => _tv.getPosition(id)))?.inMilliseconds ?? 0;
+      if (disposed || source != _sources || id != _id) return;
+      if (at <= 0) {
+        // (stopped; a film that had not started yet is given its few seconds to)
+        if (_started) break;
+        continue;
+      }
+      if (!_wantPlay || (last != null && at > last)) {
+        appLogger.i('[Tizen] played on after: $what');
+        logController.add(PlayerLog(level: PlayerLogLevel.warn, prefix: 'tv', text: '$what · it played on'));
+        _tick(at);
+        if (_wantPlay) _clockRun();
+        handlePropertyChange('paused-for-cache', false);
+        return;
+      }
+      last = at;
+    }
+    _end(source, what);
+  }
+
+  /// Which half of the video the TV plays on without, by its own words: 'audio', 'video' or
+  /// 'subtitle'; null for a fault that is not one of those.
+  @visibleForTesting
+  static String? partGone(String message) {
+    final m = message.toLowerCase();
+    if (m.contains('not supported subtitle')) return 'subtitle';
+    if (m.contains('not supported audio codec')) return 'audio';
+    if (m.contains('not supported video codec')) return 'video';
+    return null;
+  }
+
+  /// A fault of the TV's player in words: what the screen and the report card show.
+  ///
+  /// The TV says some in its media framework's own terms, a JSON text whose `detail_info` is a
+  /// GStreamer line ("…gstbasesrc.c(3248): gst_base_src_loop (): /GstPlayBin:…/GstSoupHTTPSrc:
+  /// source:\nstreaming stopped, reason error (-5)"). Of that, what it says happened and in
+  /// which part of the player is kept: the rest was a file name and a line number, cut off on
+  /// screen (a Samsung tester's photo, 2026-11-27).
   @visibleForTesting
   static String errorNote(String message) {
-    final m = message.toLowerCase();
-    final kind = m.contains('not supported file')
+    var said = message.replaceFirst(RegExp(r'^Error:\s*'), '').trim();
+    final framework = gstreamerLine(said);
+    if (framework != null) said = framework;
+    final m = said.toLowerCase();
+    final kind = m.contains('not supported file') || m.contains('file format not supported')
         ? "The TV can't read this file"
         : m.contains('not supported audio')
         ? "The TV can't play this sound"
@@ -505,13 +585,54 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
         ? "The TV can't play this picture"
         : m.contains('subtitle')
         ? "The TV can't read this subtitle"
+        : m.contains('not-negotiated') || m.contains('not-linked') || m.contains('not supported media format')
+        ? "The TV can't read this stream"
+        : m.contains('forbidden') || m.contains('403') || m.contains('not found') || m.contains('404') || (m.contains('reason error') && m.contains('httpsrc'))
+        ? "The TV couldn't fetch the video"
         : m.contains('connection') || m.contains('network') || m.contains('timed out') || m.contains('timeout')
         ? "The TV couldn't reach the video"
         : m.contains('no such file')
         ? "The TV couldn't find the video"
         : "The TV couldn't play this";
-    final said = message.replaceFirst(RegExp(r'^Error:\s*'), '').trim();
     return said.isEmpty ? kind : '$kind ($said)';
+  }
+
+  /// What a GStreamer error the TV hands over says, shortened: its last line ("streaming
+  /// stopped, reason not-negotiated (-4)") and the part of the player it came from
+  /// ("GstSoupHTTPSrc"). Null when [said] is not one.
+  @visibleForTesting
+  static String? gstreamerLine(String said) {
+    String? detail;
+    if (said.startsWith('{')) {
+      try {
+        final j = jsonDecode(said);
+        if (j is Map) {
+          final d = j['detail_info'] ?? j['detail'] ?? j['message'];
+          if (d is String && d.trim().isNotEmpty) detail = d;
+        }
+      } catch (_) {
+        // (cut short: the field is read as far as it goes)
+        detail = RegExp(r'"detail_info"\s*:\s*"((?:[^"\\]|\\.)*)').firstMatch(said)?.group(1)?.replaceAll(r'\n', '\n');
+      }
+    } else if (said.contains('.c(') && said.contains('/Gst')) {
+      detail = said;
+    }
+    if (detail == null) return null;
+    final lines = detail.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    if (lines.isEmpty) return null;
+    // the part of the player: the last element named in the path ("…/GstSoupHTTPSrc:source:")
+    final element = RegExp(r'/Gst(\w+):[\w-]+(?::|$)').allMatches(detail).map((m) => 'Gst${m[1]}').lastOrNull;
+    // what happened: the last line, after that path if it is on the same line
+    var what = lines.last;
+    final path = RegExp(r'/Gst\w+:[\w-]+:\s*').allMatches(what).lastOrNull;
+    if (path != null && path.end < what.length) {
+      what = what.substring(path.end);
+    } else if (what.contains('.c(')) {
+      what = what.split('): ').last;
+    }
+    what = what.trim();
+    if (what.isEmpty) return element;
+    return element == null || what.contains(element) ? what : '$what, in $element';
   }
 
   // ── the app going away and coming back ──
@@ -531,6 +652,7 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     final id = _id;
     if (id == null || !_suspended) return;
     _suspended = false;
+    _polledMs = null;
     try {
       await _tv.restore(id);
     } catch (e) {
@@ -599,18 +721,45 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     _positionPoll = null;
   }
 
-  /// The TV says nothing of the position by itself: it is asked, twice a second while the film
-  /// plays (as Samsung's own widget does).
+  int? _polledMs; // the TV's position at the last ask (null: none since the open or a seek)
+  int _stillPolls = 0; // asks in a row it did not move
+  bool _polling = false;
+
+  /// The TV says nothing of the position by itself: it is asked, twice a second, for as long as
+  /// a film is open, playing or not. What it answers is the film's clock, whatever it did or did
+  /// not say about playing and loading: subtitles follow the TV's own position. (They followed
+  /// its events, and around a seek the TV leaves some out: the clock stood still, or ran on
+  /// while the TV loaded, and a Samsung tester's subtitles "went out of sync entirely" after
+  /// fast-forwarding, 2026-11-27.)
   void _watchPosition() {
-    _positionPoll ??= Timer.periodic(const Duration(milliseconds: 500), (_) async {
-      final id = _id;
-      if (disposed || id == null || !_loaded || !state.playing || state.buffering || _seeking > 0) return;
+    _positionPoll ??= Timer.periodic(const Duration(milliseconds: 500), (_) => unawaited(_pollPosition()));
+  }
+
+  Future<void> _pollPosition() async {
+    final id = _id;
+    if (disposed || id == null || !_loaded || _suspended || _seeking > 0 || _polling) return;
+    _polling = true;
+    try {
       final at = await _quiet(() => _tv.getPosition(id));
       if (at == null || disposed || id != _id || _seeking > 0) return;
-      // (it says 0 while it is not playing or paused: not a position)
-      if (at.inMilliseconds <= 0 && _clockNowMs() > 1500) return;
-      _tick(at.inMilliseconds);
-    });
+      final ms = at.inMilliseconds;
+      // (it says 0 while it is neither playing nor paused: not a position)
+      if (ms <= 0) return;
+      final last = _polledMs;
+      _polledMs = ms;
+      if (last != null && ms > last) {
+        // moving: it plays, whatever was said, and nothing is loading
+        _stillPolls = 0;
+        if (_wantPlay && !_ended) _clockRun();
+        if (state.buffering) handlePropertyChange('paused-for-cache', false);
+      } else if (last != null && ++_stillPolls >= 2) {
+        // a second without moving: it stopped (to load, or paused), and the lines stop with it
+        _clockPause();
+      }
+      _tick(ms);
+    } finally {
+      _polling = false;
+    }
   }
 
   // ── subtitles ──
@@ -874,8 +1023,16 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     final target = sourcePositionFor(position).inMilliseconds;
     await runSeek(position, () async {
       _tvLine = null;
-      await _seekTv(id, target);
+      _polledMs = null;
+      try {
+        await _seekTv(id, target);
+      } catch (e) {
+        // (the TV gave the seek up or refused it: where it really is, the next ask says)
+        appLogger.w('[Tizen] seek to $target ms: $e');
+      }
       if (id != _id) return;
+      _polledMs = null;
+      _stillPolls = 0;
       _ended = false;
       _clockMs = target;
       _clock.reset();

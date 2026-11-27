@@ -716,7 +716,12 @@ abstract final class Dpad {
     if (best == null) return null;
 
     // Arriving in a rail: on the item it marks (a tab strip's selected tab: the one whose
-    // content you are coming from), else where you were in it last time, if that is still there.
+    // content you are coming from), else where you were in it last time, if that is still there
+    // and in line with where you are now (a row of cards you go back up to gives you your card,
+    // and never one off to the side: an LG tester, 2026-11-27, "it doesn't go directly up to the
+    // card above ... it goes up and to the right, or up and to the left"). Out of line, the
+    // nearest in line, as anywhere else. (A column entered from beside it, a list of tabs, still
+    // gives back the one you were on, wherever it is.)
     final into = best.rail;
     if (into != null && !identical(into, rail) && !_isAlong(into.widget.axis, direction)) {
       into.enteredFrom = from;
@@ -724,7 +729,13 @@ abstract final class Dpad {
         if (identical(s.rail, into) && ((DpadReveal.startsPageElse[s.node] ?? false) || (DpadReveal.entersRail[s.node] ?? false))) return s.node;
       }
       final was = into.remembered;
-      if (was != null && was.context != null && isStop(was) && identical(was.nearestScope, scope)) return was;
+      if (was != null &&
+          was.context != null &&
+          isStop(was) &&
+          identical(was.nearestScope, scope) &&
+          (into.widget.axis == Axis.vertical || _beamsOverlap(here.rect, was.rect, direction))) {
+        return was;
+      }
     }
     return best.node;
   }

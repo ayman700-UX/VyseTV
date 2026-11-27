@@ -5,6 +5,7 @@ import '../core/accent.dart'; // VyseTV
 import '../core/platform/device_performance.dart';
 // VyseTV: upstream's theme tokens (theme/mono_tokens.dart) are not here; durations are fixed.
 import '../core/platform/platform_detector.dart';
+import '../core/platform/tizen_tv.dart' show LinuxTv; // VyseTV
 
 class FocusTheme {
   FocusTheme._();
@@ -17,6 +18,18 @@ class FocusTheme {
   static const double playerControlFocusScale = 1.12;
   // VyseTV: 2 px (upstream: 2.5) and a tighter glow, to sit with VyseTV's thin outlines.
   static const double focusBorderWidth = 2;
+
+  /// VyseTV: how many times thicker the ring is drawn on an LG or a Samsung TV. An Android TV
+  /// lays the app out at 960 by 540 on a 1080p screen, so 2 points of ring are 4 pixels; an LG
+  /// TV lays it out at 1920 by 1080, where they were 2, half as thick from the sofa (an LG
+  /// tester, 2026-11-27: "highlight selected options, making them easier to see"). Drawn as
+  /// thick on the screen as on an Android TV.
+  static double get ringBoost {
+    if (!LinuxTv.isTv) return 1;
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    final ratio = views.isEmpty ? 2.0 : views.first.devicePixelRatio;
+    return ratio > 0 ? (2 / ratio).clamp(1.0, 2.0).toDouble() : 1;
+  }
 
   /// Where the ring goes for a control that is only text (a link in a line of them: a studio's
   /// name, an artist's). It has no room of its own: drawn inside its edge the ring cuts through
@@ -69,7 +82,7 @@ class FocusTheme {
       borderRadius: radii ?? BorderRadius.circular(borderRadius),
       border: Border.all(
         color: isFocused ? focusColor : Colors.transparent,
-        width: focusBorderWidth,
+        width: focusBorderWidth * ringBoost, // VyseTV: see ringBoost
         strokeAlign: borderStrokeAlign,
       ),
     );

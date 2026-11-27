@@ -133,6 +133,7 @@ void main() {
     tv = _Tv()..install();
     WebOS.debugIs = true;
     PlayerWebos.debugForgetTv();
+    PlayerWebos.debugForgetWindow();
   });
 
   tearDown(() {
@@ -730,5 +731,24 @@ void main() {
     tv.calls.clear();
     await t.runAsync(player.dispose);
     expect(tv.calls, ['0 dispose', 'windows dispose']);
+  });
+
+  testWidgets('before webOS 26: one window for every video of the app, never taken away', (t) async {
+    // (the media library there is started once with a window and keeps it)
+    tv.has = {'initWithWindowId': false, 'players': true, 'exportedWindows': true, 'muteDisplay': true, 'displayWindow': true};
+    PlayerWebos.debugForgetWindow();
+    addTearDown(PlayerWebos.debugForgetWindow);
+    final first = PlayerWebos();
+    await t.runAsync(() => first.open(const Media('http://127.0.0.1:1/a.mkv')));
+    final window = tv.loads.last['windowId'];
+    expect(window, 'window-1');
+    tv.calls.clear();
+    await t.runAsync(first.dispose);
+    expect(tv.calls, ['0 dispose'], reason: 'the window stays for the next video');
+    final second = PlayerWebos();
+    await t.runAsync(() => second.open(const Media('http://127.0.0.1:1/b.mkv')));
+    expect(tv.loads.last['windowId'], window, reason: 'the next video shows in it');
+    expect(tv.calls, isNot(contains('windows create')));
+    await t.runAsync(second.dispose);
   });
 }

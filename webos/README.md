@@ -100,6 +100,24 @@ package a small library sits between the embedder and the TV's Wayland library
 for at a higher version than that. Everything the embedder then uses of the interface is in
 version 1.
 
+*The media library's window.* Before webOS 26 the TV's media library cannot be handed the
+window a video goes in. When a player starts it asks SDL (the library LG's own native apps are
+made with) for the app's window and for the id of the window exported from it. This app has no
+SDL window, so the library got nothing and the app fell at once on every video and every song
+(a webOS 5.6 tester, 27 November 2026: "App closes when playing any media"). The package now
+brings a stand-in for SDL (`older/vyse_sdl.c`, under SDL's own name), loaded by the player just
+before the first player starts: asked for the window, it answers with the one the app made for
+the picture, or a placeholder for sound alone. On such a TV the media library also keeps the
+window it started with for good, so one window serves every video of the app's life. An open
+project that runs LG's Flutter apps on older webOS found and fixed the same thing on webOS 6.5.
+
+*The Magic Remote.* An older set's compositor offers several input seats (the Magic Remote, a
+mouse) without names, and LG's embedder listens to the first seat's pointer only. The remote's
+pointer and wheel arrive on another and were dropped. `older/vyse_wayland.c` gives every seat's
+pointer the embedder's listener. Pointed with for real (a long move, a click, the wheel), the
+pointer then has the app as a mouse has a desktop, and an arrow key hands it back to the
+remote's keys (`lib/dpad/input_mode_tracker.dart`).
+
 **Sign-ins and keys.** LG's webOS side of the keychain plugin seals each value with the TV's
 key service, which LG's reference gives to apps from webOS 24. On an older set nothing answers
 and LG's plugin then keeps nothing, without a word: a debrid key or a tracker sign-in would be
@@ -299,7 +317,7 @@ listens for.
 | The player's native side (C++) | Built with LG's NDK, against the TV's real media library, with LG's own warning settings. It asks the TV for `libNDL_media.so.1` and `libglib-2.0.so.0`. Never run |
 | The JavaScript engine for plugins | Built with LG's NDK, every function the app needs present. Never run on a TV |
 | The package for webOS 26 (.ipk) | Built by `tool/webos/build.sh` on GitHub (26 November 2026): 55 MB, 32-bit ARM, the app's code stamped for LG's engine, the torrent engine marked as a program. One tester reports it opening, playing video and streaming a torrent on a webOS 26 set |
-| The package for older webOS | Built the same way, the same day. Checked by name against one firmware of each release from webOS 4.4 on, and started in an emulator as far as the first library only a TV has ("Older webOS" above). Never run on a TV |
+| The package for older webOS | Built the same way, the same day. Checked by name against one firmware of each release from webOS 4.4 on, and started in an emulator as far as the first library only a TV has ("Older webOS" above). A webOS 5.6 tester (27 November): it starts, the menus, search, the manga reader and signing in work; every video and song closed the app (the media library's window, fixed since, not yet tried there); the Magic Remote's pointer did nothing (fixed since, not yet tried there) |
 | Anything else on a TV | Not reported yet: Back, HDR and Dolby Vision, sound formats, music, plugins |
 
 What only a TV can answer, in the order it would show up:

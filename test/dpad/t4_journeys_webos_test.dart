@@ -108,6 +108,35 @@ void main() {
     expect(Bed.watchdog, isEmpty, reason: 'focus was not lost on the way');
   }, variant: tv);
 
+  testWidgets("the Magic Remote's pointer, pointed with, has the app; an arrow gives it back", (t) async {
+    await Bed.pumpShell(t);
+    BuildContext page() => t.element(find.byType(Scaffold).first);
+    await Bed.down(t);
+    expect(InputModeTracker.isKeyboardMode(page()), isTrue);
+    final mouse = await t.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(400, 300));
+    await mouse.moveTo(const Offset(470, 340));
+    await mouse.moveTo(const Offset(540, 380));
+    await t.pump();
+    expect(InputModeTracker.isKeyboardMode(page()), isFalse, reason: 'moved a long way: it is being pointed with');
+    await mouse.removePointer();
+    await Bed.right(t);
+    expect(InputModeTracker.isKeyboardMode(page()), isTrue, reason: "an arrow: the remote's keys again");
+  }, variant: tv);
+
+  testWidgets('Back at Home asks before the app closes, and Back again stays', (t) async {
+    await Bed.pumpShell(t);
+    await Bed.down(t);
+    for (var i = 0; i < 4 && find.text('Leave VyseTV?').evaluate().isEmpty; i++) {
+      await Bed.back(t);
+    }
+    expect(find.text('Leave VyseTV?'), findsOneWidget);
+    expect(Bed.focused(), contains('Stay'), reason: 'Enter gives the safe answer');
+    await Bed.back(t);
+    await Bed.settle(t);
+    expect(find.text('Leave VyseTV?'), findsNothing);
+  }, variant: tv);
+
   testWidgets("the player is the TV's own: no mpv, no Media3, and its subtitle lines are drawn by the app", (t) async {
     Bed.videoCalls.clear();
     Bed.exoCalls.clear();

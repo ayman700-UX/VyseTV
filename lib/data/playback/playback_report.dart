@@ -114,6 +114,10 @@ class PlaybackReport {
   /// It did not play, and why (the player's error, or the app's own words for it).
   PlaybackReport withFailure(String why) => _with({'failure': scrub(why)});
 
+  /// What the player asked of the app's relay on this device and what went wrong there
+  /// (RelayLog.line), for a video opened through one: whether a TV's player reached it at all.
+  PlaybackReport withRelay(String line) => _with({'relay': scrub(line)});
+
   /// The player gave up one half of the video and played on with the other: [part] is 'audio'
   /// or 'video', [line] the engine's own words as it did.
   PlaybackReport withDropped(String part, String line) => _with({'dropped': {'part': part, 'line': scrub(line)}});
@@ -301,6 +305,7 @@ class PlaybackReport {
           _ => '',
         }),
         ('What Media3 said', _str(_m('handOver')['detail']) ?? _str(_m('handOver')['reason']) ?? ''),
+        ('Relay on this device', _s('relay')),
       ])),
     ];
   }

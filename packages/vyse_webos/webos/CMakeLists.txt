@@ -107,10 +107,10 @@ target_link_libraries(quickjs_c_bridge_plugin PRIVATE m Threads::Threads atomic)
 # ── stand-ins for older webOS ──
 #
 # LG's engine and embedder are made for webOS 26. The package for older sets (tool/webos/
-# build.sh, "older webOS") runs the same build on a runtime of its own, and these five small
-# libraries give LG's embedder what an older TV's own libraries lack. Each file says what it
-# is for; webos/README.md has the whole of it. In the package for webOS 26 they are files in
-# lib/ that nothing asks for.
+# build.sh, "older webOS") runs the same build on a runtime of its own, and these six small
+# libraries give LG's embedder and the TV's media library what an older TV's own libraries
+# lack. Each file says what it is for; webos/README.md has the whole of it. In the package for
+# webOS 26 they are files in lib/ that nothing asks for.
 #
 #   vyse_start     the record of how the app started (made part of the program)
 #   vyse_wayland   how requests reach the compositor, and at which version an interface of
@@ -119,6 +119,7 @@ target_link_libraries(quickjs_c_bridge_plugin PRIVATE m Threads::Threads atomic)
 #   vyse_wlegl     the window the embedder draws into, whatever the TV's library is called
 #   vyse_fallback  what is looked for last: the description of exported windows, for TVs
 #                  whose library has none
+#   vyse_sdl       the window the TV's media library asks SDL for (loaded by the player)
 add_library(vyse_fallback SHARED "older/vyse_fallback.c")
 # (it uses two names of the TV's Wayland library, which is always loaded before it; it is
 # not linked against that library, so the build needs no Wayland files of its own)
@@ -141,7 +142,14 @@ target_link_libraries(vyse_wlegl PRIVATE dl)
 
 add_library(vyse_start SHARED "older/vyse_start.c")
 
-foreach(standin vyse_fallback vyse_wayland vyse_sdevent vyse_wlegl vyse_start)
+# vyse_sdl: what an older TV's media library is told when it asks SDL for the app's window.
+# It carries SDL's own name (its soname), and the player's native side loads it just before
+# the first player starts, so the media library's request for SDL by that name finds it.
+add_library(vyse_sdl SHARED "older/vyse_sdl.c")
+set_target_properties(vyse_sdl PROPERTIES NO_SONAME ON)
+target_link_options(vyse_sdl PRIVATE "-Wl,-soname,libSDL2-2.0.so.0")
+
+foreach(standin vyse_fallback vyse_wayland vyse_sdevent vyse_wlegl vyse_start vyse_sdl)
   target_compile_options(${standin} PRIVATE -O2 -Wall -Werror)
   set_target_properties(${standin} PROPERTIES
     POSITION_INDEPENDENT_CODE ON
@@ -176,6 +184,7 @@ set(VYSE_BUNDLED
   "$<TARGET_FILE:vyse_sdevent>"
   "$<TARGET_FILE:vyse_wlegl>"
   "$<TARGET_FILE:vyse_start>"
+  "$<TARGET_FILE:vyse_sdl>"
 )
 # A party's voice call, listening (packages/vyse_webos/voice: Go, built with this NDK by
 # tool/webos/build.sh before LG's tool runs). Without it the app says voice is not here.

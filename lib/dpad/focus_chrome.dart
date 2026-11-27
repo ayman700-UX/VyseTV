@@ -462,6 +462,7 @@ void paintFocusGlow(Canvas canvas, RRect shape, Color color, double t) {
 /// The ring itself: [width] of [color] just inside [shape], with a hair of shadow inside that
 /// so it stays readable on a picture of its own colour.
 void paintFocusRing(Canvas canvas, RRect shape, Color color, double t, {double width = FocusTheme.focusBorderWidth}) {
+  width *= FocusTheme.ringBoost; // (as thick on an LG's screen as on an Android TV's)
   canvas.drawRRect(
     shape.deflate(width + .5),
     Paint()

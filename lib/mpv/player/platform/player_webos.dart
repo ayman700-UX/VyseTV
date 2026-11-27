@@ -207,6 +207,17 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
   // placed by the media library ([_placeWindow]).
   bool _noWindows = false;
 
+  /// Before webOS 26 the media library is started once and keeps the window it was started
+  /// with for good (it learns it through VyseTV's stand-in for SDL, see the native side): a
+  /// window made for a later video would never be used, and one taken away under it leaves the
+  /// next video with nowhere to go (an open project on such a set: "the second video never
+  /// loaded"). So there one window is made, and every video of the app's life shows in it.
+  static String? _keptWindow;
+
+  /// Tests: the next player makes its window again.
+  @visibleForTesting
+  static void debugForgetWindow() => _keptWindow = null;
+
   /// The id of the window the TV's video plane shows in, made the first time it is needed.
   /// Null for sound alone, and on a TV that has no such windows.
   Future<String?> _window() {
@@ -219,10 +230,18 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
           _noWindows = true;
           return null;
         }
+        final keep = !await _tvHas('initWithWindowId');
+        final kept = _keptWindow;
+        if (keep && kept != null) {
+          _windowId = kept;
+          _noWindows = false;
+          return kept;
+        }
         final id = await _windows.invokeMethod<String>('create', <String, Object?>{});
         if (id != null && id.isNotEmpty && id != 'invalid') {
           _windowId = id;
           _noWindows = false;
+          if (keep) _keptWindow = id;
         }
       } catch (e) {
         appLogger.w('[webOS] no exported window: $e');
@@ -1150,8 +1169,9 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
     final id = _windowId;
     _windowId = null;
     await super.dispose(preserveDisplayMode: preserveDisplayMode);
-    // (after the player is gone: a plane taken away under a playing video is a black flash)
-    if (id != null) await _quiet(() => _windows.invokeMethod<void>('dispose', {'windowId': id}));
+    // (after the player is gone: a plane taken away under a playing video is a black flash.
+    // The window an older TV keeps for good stays: see [_keptWindow].)
+    if (id != null && id != _keptWindow) await _quiet(() => _windows.invokeMethod<void>('dispose', {'windowId': id}));
   }
 }
 

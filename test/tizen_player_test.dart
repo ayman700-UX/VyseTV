@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:video_player_avplay/video_player.dart' show AudioTrack, TextTrack, Track, TrackType, VideoTrack;
 import 'package:video_player_avplay/video_player_platform_interface.dart';
 import 'package:vyse_tv/core/platform/tizen_tv.dart';
+import 'package:vyse_tv/data/playback/playback_failure.dart';
 import 'package:vyse_tv/mpv/models.dart' as m;
 import 'package:vyse_tv/mpv/player/platform/player_tizen.dart';
 import 'package:vyse_tv/mpv/player/player.dart';
@@ -395,7 +396,9 @@ void main() {
     await t.pump(const Duration(milliseconds: 600));
     expect(player.currentSubText, 'Second');
 
-    // paused, the clock stands still and so does the line
+    // paused, the clock stands still and so does the line (the TV's position too: the clock
+    // follows it)
+    await tv.pause(0);
     await say(t, _playing(false));
     await t.pump(const Duration(seconds: 5));
     expect(player.currentSubText, 'Second');
@@ -446,6 +449,94 @@ void main() {
     expect(errors.single.message, "The TV can't read this file (Not supported file)");
     expect(PlayerTizen.errorNote('Error: Connection timed out'), "The TV couldn't reach the video (Connection timed out)");
     expect(PlayerTizen.errorNote(''), "The TV couldn't play this");
+  });
+
+  test("the TV's GStreamer faults: what happened, and where, without the file and line", () {
+    const json = 'Error: {"detail_info":"../subprojects/gstreamer/libs/gst/base/gstbasesrc.c(3248): gst_base_src_loop (): '
+        '/GstPlayBin3:playbin/GstURISourceBin:urisourcebin0/GstSoupHTTPSrc:source:\\nstreaming stopped, reason error (-5)","error_code":"x"}';
+    expect(PlayerTizen.errorNote(json), "The TV couldn't fetch the video (streaming stopped, reason error (-5), in GstSoupHTTPSrc)");
+    const typefind = '{"detail_info":"gstbasesrc.c(3248): gst_base_src_loop (): /GstPlayBin3:playbin/GstHLSDemux:hlsdemux0: '
+        'streaming stopped, reason not-negotiated (-4)"}';
+    expect(PlayerTizen.errorNote(typefind), "The TV can't read this stream (streaming stopped, reason not-negotiated (-4), in GstHLSDemux)");
+    // (cut short, as it can reach the app)
+    expect(PlayerTizen.gstreamerLine('{"detail_info":"x.c(1): f (): /GstFoo:foo:\\nstreaming stopped, reason not-linked (-1)'),
+        'streaming stopped, reason not-linked (-1), in GstFoo');
+    expect(PlayerTizen.gstreamerLine('Not supported media format'), isNull);
+    expect(PlayerTizen.errorNote('Error: Not supported media format'), "The TV can't read this stream (Not supported media format)");
+  });
+
+  test('what the TV plays on without', () {
+    expect(PlayerTizen.partGone('Error: Not supported audio codec but video can be played'), 'audio');
+    expect(PlayerTizen.partGone('Error: Not supported video codec but audio can be played'), 'video');
+    expect(PlayerTizen.partGone('Error: Not supported subtitle format'), 'subtitle');
+    expect(PlayerTizen.partGone('Error: Not supported media format'), isNull);
+  });
+
+  tvTest('a fault the TV plays on after (a seek it could not make) does not end the film', (t) async {
+    tv.position = 0;
+    final player = await playing(t);
+    final errors = <m.PlayerError>[];
+    final logs = <m.PlayerLog>[];
+    player.streams.error.listen(errors.add);
+    player.streams.log.listen(logs.add);
+    await t.pump(const Duration(seconds: 2));
+    tv.events[0]!.addError(PlatformException(code: 'PlusPlayer error', message: 'Error: Not supported media format'));
+    for (var i = 0; i < 4; i++) {
+      await t.pump(const Duration(seconds: 1));
+    }
+    expect(errors, isEmpty, reason: 'the TV went on playing: nothing to end');
+    expect(logs.map((l) => l.text), contains(contains('it played on')));
+    expect(player.state.playing, isTrue);
+  });
+
+  tvTest('a fault the TV really stopped at ends the film', (t) async {
+    tv.position = 0;
+    final player = await playing(t);
+    final errors = <m.PlayerError>[];
+    player.streams.error.listen(errors.add);
+    await t.pump(const Duration(seconds: 1));
+    tv.position = null; // (it says no position: neither playing nor paused)
+    tv.events[0]!.addError(PlatformException(code: 'PlusPlayer error', message: 'Error: Streaming connection failed'));
+    for (var i = 0; i < 4; i++) {
+      await t.pump(const Duration(seconds: 1));
+    }
+    expect(errors.single.message, startsWith("The TV couldn't reach the video"));
+  });
+
+  tvTest('a sound the TV cannot play: the film goes on and the page is told which half is gone', (t) async {
+    tv.position = 0;
+    final player = await playing(t);
+    final errors = <m.PlayerError>[];
+    final logs = <m.PlayerLog>[];
+    player.streams.error.listen(errors.add);
+    player.streams.log.listen(logs.add);
+    tv.events[0]!.addError(PlatformException(code: 'PlusPlayer error', message: 'Error: Not supported audio codec but video can be played'));
+    for (var i = 0; i < 4; i++) {
+      await t.pump(const Duration(seconds: 1));
+    }
+    expect(errors, isEmpty);
+    final said = logs.firstWhere((l) => l.prefix == 'tv-part');
+    expect(PlaybackFailure.droppedPart(error: true, prefix: said.prefix, text: said.text), 'audio');
+  });
+
+  tvTest("after a seek the subtitles follow the TV's own position, whatever its events left out", (t) async {
+    final dir = Directory.systemTemp.createTempSync('vyse_tizen_seek');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final file = File('${dir.path}${Platform.pathSeparator}film.en.srt')
+      ..writeAsStringSync('1\n00:29:57,000 --> 00:29:59,500\nJust before\n\n2\n00:30:00,000 --> 00:30:03,000\nAsked for\n');
+    tv.position = 0;
+    final player = await playing(t);
+    await t.runAsync(() => player.addSubtitleFile(Uri.file(file.path).toString(), title: 'English', language: 'en'));
+    await t.pump(const Duration(seconds: 2));
+    await player.seek(const Duration(minutes: 30));
+    await t.pump();
+    // the TV says it is loading and never that it is done, and it landed a few seconds early
+    // (on a key frame)
+    await say(t, VideoEvent(eventType: VideoEventType.bufferingStart));
+    tv.moveTo(30 * 60000 - 4000);
+    await t.pump(const Duration(milliseconds: 2500));
+    expect(player.currentSubText, 'Just before', reason: "the line for where the TV is, not where it was asked to go");
+    expect(player.state.buffering, isFalse, reason: 'it moves, so nothing is loading');
   });
 
   group('where the picture goes', () {

@@ -80,7 +80,10 @@ void main() {
     expect(_focused(), 'card1', reason: 'down goes to what is under it');
   });
 
-  testWidgets('rows remember their place; Up and Down give it back', (t) async {
+  // (Until 2026-11-27 a row gave back where you were in it wherever that was, so Up from b1 went
+  // to a4, up and to the right. An LG tester: "it doesn't go directly up to the card above
+  // where he's currently located". Now it is given back only when it is in line.)
+  testWidgets('Up and Down go straight; a row gives back your card when it is in line', (t) async {
     await t.pumpWidget(_host(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       for (final row in ['a', 'b', 'c'])
         DpadRail(child: Row(mainAxisSize: MainAxisSize.min, children: [for (var i = 0; i < 6; i++) _box('$row$i')])),
@@ -91,16 +94,19 @@ void main() {
     expect(_focused(), 'a4');
     await _press(t, _down);
     expect(_focused(), 'b4', reason: 'a row never visited: the item under you');
+    await _press(t, _up);
+    expect(_focused(), 'a4', reason: 'straight back up: your card');
+    await _press(t, _down);
     await _press(t, _left, 3);
     expect(_focused(), 'b1');
     await _press(t, _up);
-    expect(_focused(), 'a4', reason: 'back in the first row: where you were, not above b1');
+    expect(_focused(), 'a1', reason: 'straight above b1, not a4 off to the side');
     await _press(t, _down);
     expect(_focused(), 'b1');
     await _press(t, _down);
     expect(_focused(), 'c1');
     await _press(t, _up, 2);
-    expect(_focused(), 'a4');
+    expect(_focused(), 'a1');
   });
 
   testWidgets('buttons on a list row: Right steps in, Left steps out, Down keeps to the same button', (t) async {

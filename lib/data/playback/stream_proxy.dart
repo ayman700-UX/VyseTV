@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../../core/platform/tizen_tv.dart' show LinuxTv;
+import '../../mpv/support/relay_log.dart';
+
 /// Local HLS relay on 127.0.0.1, modelled on the London relay's stream-proxy + nginx pipes.
 ///
 /// * Playlists are fetched with spoofed Referer/Origin and every URL is rewritten back through here.
@@ -73,7 +76,27 @@ class StreamProxy {
   /// A URL mpv can open in place of [url], optionally starting at the segment holding [from].
   Future<String> wrap(String url, {double? from}) async {
     final s = await _start();
+    RelayLog.instance.start();
     return 'http://127.0.0.1:${s.port}/hls/${_enc(url)}.m3u8${from == null ? '' : '?from=${from.toStringAsFixed(3)}'}';
+  }
+
+  /// Whether the pieces of a playlist get a file ending in their address here (`.ts`, `.m4s`,
+  /// `.mp4` for the init section). mpv and Media3 look at what a piece holds; a TV's own player
+  /// (an LG's, a Samsung's) may go by the name, and the real names are often made up (`.jpg`,
+  /// `.html`, none at all) to look like something else.
+  static bool get namesPieces => LinuxTv.isTv;
+
+  /// The ending a piece's address gets on a TV: its own when it is a real one, else what the
+  /// playlist says it is ([fmp4]: the playlist has an init section).
+  static String pieceEnding(String url, {required bool fmp4, bool init = false, bool key = false, bool subtitles = false}) {
+    if (key) return '.key';
+    if (init) return '.mp4';
+    final name = Uri.tryParse(url)?.pathSegments.where((p) => p.isNotEmpty).lastOrNull ?? '';
+    final dot = name.lastIndexOf('.');
+    final own = dot < 0 ? '' : name.substring(dot + 1).toLowerCase();
+    if (const {'ts', 'aac', 'ac3', 'ec3', 'mp3', 'm4a', 'm4s', 'mp4', 'm4v', 'vtt', 'webvtt'}.contains(own)) return '.$own';
+    if (subtitles) return '.vtt';
+    return fmp4 ? '.m4s' : '.ts';
   }
 
   /// For fMP4 streams: where a playlist trimmed at [from] really starts (in seconds).
@@ -216,18 +239,31 @@ class StreamProxy {
 
   Future<void> _handle(HttpRequest req) async {
     final seg = req.uri.pathSegments;
+    final log = RelayLog.instance;
     try {
+      // (an address's own name is base64url, which has no dot: what follows one is the ending a
+      // TV's player was given, see namesPieces)
       if (seg.length == 2 && seg[0] == 'hls') {
-        await _playlist(req, _dec(seg[1].replaceAll('.m3u8', '')), double.tryParse(req.uri.queryParameters['from'] ?? ''));
+        log.playlists++;
+        await _playlist(req, _dec(seg[1].split('.').first), double.tryParse(req.uri.queryParameters['from'] ?? ''),
+            subtitles: req.uri.queryParameters['sub'] == '1');
       } else if (seg.length == 2 && seg[0] == 'seg') {
-        await _segment(req, _dec(seg[1]));
+        log.pieces++;
+        final dot = seg[1].indexOf('.');
+        await _segment(req, _dec(seg[1].split('.').first), ending: dot < 0 ? '' : seg[1].substring(dot));
       } else if (seg.length >= 3 && seg[0] == 'files') {
         await _saved(req, seg[1], seg.sublist(2));
       } else {
         req.response.statusCode = HttpStatus.notFound;
         await req.response.close();
       }
-    } catch (_) {
+    } catch (e) {
+      final what = seg.isNotEmpty && seg[0] == 'hls' ? 'playlist' : 'piece';
+      String host = '';
+      try {
+        host = seg.length == 2 ? Uri.parse(_dec(seg[1].split('.').first)).host : '';
+      } catch (_) {}
+      log.trouble(what, e is HttpException ? e.message : e.runtimeType.toString(), host: host);
       try {
         req.response.statusCode = HttpStatus.badGateway;
         await req.response.close();
@@ -235,14 +271,18 @@ class StreamProxy {
     }
   }
 
-  Future<void> _playlist(HttpRequest req, String target, double? from) async {
+  Future<void> _playlist(HttpRequest req, String target, double? from, {bool subtitles = false}) async {
     var text = await _text(target);
     if (!text.contains('#EXTM3U')) throw const HttpException('not a playlist');
     final base = Uri.parse(target);
     final port = _server!.port;
     final q = from == null ? '' : '?from=${from.toStringAsFixed(3)}';
-    String hls(String u) => 'http://127.0.0.1:$port/hls/${_enc(u)}.m3u8$q';
-    String piped(String u) => 'http://127.0.0.1:$port/seg/${_enc(u)}';
+    // (on a TV a subtitle rendition says it is one, so its pieces are named as WebVTT)
+    String hls(String u, {bool sub = false}) =>
+        'http://127.0.0.1:$port/hls/${_enc(u)}.m3u8$q${sub && namesPieces ? '${q.isEmpty ? '?' : '&'}sub=1' : ''}';
+    final fmp4 = text.contains('#EXT-X-MAP');
+    String piped(String u, {bool init = false, bool key = false}) =>
+        'http://127.0.0.1:$port/seg/${_enc(u)}${namesPieces ? pieceEnding(u, fmp4: fmp4, init: init, key: key, subtitles: subtitles) : ''}';
     final own = _hosts[base.host];
     String abs(String u) {
       final r = base.resolve(u).toString();
@@ -275,9 +315,11 @@ class StreamProxy {
           }
         }
         if (line.startsWith('#EXT-X-MEDIA:') || line.startsWith('#EXT-X-I-FRAME-STREAM-INF')) {
-          out.writeln(_replaceUri(line, (u) => hls(abs(u))));
+          final sub = _attr(line, 'TYPE') == 'SUBTITLES';
+          out.writeln(_replaceUri(line, (u) => hls(abs(u), sub: sub)));
         } else if (line.startsWith('#EXT-X-MAP:') || line.startsWith('#EXT-X-KEY:') || line.startsWith('#EXT-X-SESSION-KEY:')) {
-          out.writeln(_replaceUri(line, (u) => piped(abs(u))));
+          final init = line.startsWith('#EXT-X-MAP:');
+          out.writeln(_replaceUri(line, (u) => piped(abs(u), init: init, key: !init)));
         } else {
           out.writeln(line);
         }
@@ -308,7 +350,7 @@ class StreamProxy {
     await req.response.close();
   }
 
-  Future<void> _segment(HttpRequest req, String target) async {
+  Future<void> _segment(HttpRequest req, String target, {String ending = ''}) async {
     final range = req.headers.value(HttpHeaders.rangeHeader);
     final hidden = _hidden[target];
     // a part of a piece hidden in a picture: the same part of the video inside it
@@ -328,6 +370,7 @@ class StreamProxy {
         if (i > 0) rethrow;
       }
     }
+    if (up.statusCode >= 400) RelayLog.instance.trouble('piece', 'HTTP ${up.statusCode}', host: Uri.tryParse(target)?.host ?? '');
     final zipped = _gzipped(up);
     final body = StreamIterator<List<int>>(zipped ? up.cast<List<int>>().transform(gzip.decoder) : up);
     // the first bytes say whether the piece is video dressed up as a PNG picture
@@ -360,7 +403,7 @@ class StreamProxy {
       return res.close();
     }
     res.statusCode = up.statusCode;
-    res.headers.contentType = _segmentType(up.headers.contentType, target);
+    res.headers.contentType = _segmentType(up.headers.contentType, target, ending: ending);
     if (up.contentLength >= 0 && !zipped) res.headers.contentLength = up.contentLength;
     final cr = up.headers.value(HttpHeaders.contentRangeHeader);
     if (cr != null) res.headers.set(HttpHeaders.contentRangeHeader, cr);
@@ -615,7 +658,29 @@ class StreamProxy {
   static bool _gzipped(HttpClientResponse r) => (r.headers.value(HttpHeaders.contentEncodingHeader) ?? '').contains('gzip');
 
   /// Disguised segments arrive as text/html or text/css; say what they really are.
-  static ContentType _segmentType(ContentType? t, String url) {
+  static ContentType _segmentType(ContentType? t, String url, {String ending = ''}) {
+    // (asked by the ending the relay gave it, on a TV: what the playlist says it is, whatever
+    // its host calls it)
+    switch (ending) {
+      case '.ts':
+        return ContentType('video', 'mp2t');
+      case '.m4s' || '.mp4' || '.m4v':
+        return ContentType('video', 'mp4');
+      case '.m4a':
+        return ContentType('audio', 'mp4');
+      case '.aac':
+        return ContentType('audio', 'aac');
+      case '.ac3':
+        return ContentType('audio', 'ac3');
+      case '.ec3':
+        return ContentType('audio', 'eac3');
+      case '.mp3':
+        return ContentType('audio', 'mpeg');
+      case '.vtt' || '.webvtt':
+        return ContentType('text', 'vtt', charset: 'utf-8');
+      case '.key':
+        return ContentType('application', 'octet-stream');
+    }
     final m = t?.mimeType ?? '';
     if (m.startsWith('video/') || m.startsWith('audio/')) return t!;
     if (url.contains('.m4s') || url.contains('.mp4')) return ContentType('video', 'mp4');

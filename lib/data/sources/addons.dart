@@ -620,6 +620,17 @@ class AddonStream {
   /// It plays in VyseTV's player (a link or a torrent), rather than opening elsewhere.
   bool get playable => external == null;
 
+  /// Not a stream but a message the addon lists as one, whose link goes nowhere
+  /// (`stremio:///`): AIOStreams' "[❌] …" when a debrid service or an addon it asked failed.
+  /// It was shown as "Opens in your browser", and on a Samsung TV the browser opened and closed
+  /// again (a tester, 2026-11-27). It is shown as what it is, the addon's words.
+  bool get notice {
+    final e = external;
+    if (e == null || !e.startsWith('stremio:')) return false;
+    final u = Uri.tryParse(e);
+    return u == null || (u.host.isEmpty && u.pathSegments.every((p) => p.isEmpty) && !u.hasQuery);
+  }
+
   // the description and the file name (which often says more), with dots as spaces
   late final String _raw = '$text\n${filename ?? ''}';
   late final String _t = _raw.replaceAll(RegExp(r'[._]'), ' ');

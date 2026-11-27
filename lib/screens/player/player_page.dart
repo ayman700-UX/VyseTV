@@ -41,6 +41,7 @@ import '../../data/playback/player_engine.dart';
 import '../../data/sources/sources.dart';
 import '../../data/playback/stream_proxy.dart';
 import '../../mpv/mpv.dart' as pz;
+import '../../mpv/support/relay_log.dart';
 import '../../data/playback/watch_progress.dart';
 import '../../data/trackers/media_ref.dart';
 import '../../data/trackers/tracker_hub.dart';
@@ -3501,7 +3502,8 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   /// The player's errors. Every one goes on the report card. One that ended the video (it would
   /// not open, nothing here decodes it, the link died) is also said on screen: [_playerFailed].
   void _onPlayerError(pz.PlayerError e) {
-    _editReport((r) => r.withFailure(e.message));
+    final relay = RelayLog.instance;
+    _editReport((r) => relay.used ? r.withFailure(e.message).withRelay(relay.line) : r.withFailure(e.message));
     final ended = _gaveUp ||
         const {pz.PlayerError.playerInitFailed, pz.PlayerError.serverHttp404, pz.PlayerError.serverHttp500, pz.PlayerError.audioOutputFailed}.contains(e.cause);
     _gaveUp = false;

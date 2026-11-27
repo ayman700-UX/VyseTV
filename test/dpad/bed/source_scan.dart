@@ -57,6 +57,7 @@ const _phases = <(String, int)>[
   ('lib/widgets/dialogs/debrid_consent.dart', 4),
   ('lib/widgets/dialogs/torrent_file_dialog.dart', 4),
   ('lib/widgets/dialogs/update_dialog.dart', 4),
+  ('lib/widgets/dialogs/link_qr.dart', 4),
   ('lib/screens/profile/account_sheet.dart', 4),
   ('lib/screens/player/', 5),
   ('lib/screens/player/subtitle_sync_panel.dart', 5),

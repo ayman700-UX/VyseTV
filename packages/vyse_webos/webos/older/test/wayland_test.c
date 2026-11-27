@@ -38,6 +38,11 @@ static const struct wl_interface thing_interface = {"vyse_thing", 3, 3, thing_re
 
 static const struct wl_interface shell_interface = {"wl_webos_shell", 2, 0, NULL, 0, NULL};
 
+// A seat and its pointer, as Wayland has them: a seat's first request makes its pointer.
+static const struct wl_message seat_requests[] = {{"get_pointer", "n", NULL}};
+static const struct wl_interface seat_interface = {"wl_seat", 5, 1, seat_requests, 0, NULL};
+static const struct wl_interface pointer_interface = {"wl_pointer", 5, 0, NULL, 0, NULL};
+
 // What the app heard from the compositor.
 static struct {
   int offers;
@@ -145,6 +150,27 @@ int main(int argc, char **argv) {
   CHECK("a listener on anything else is set as it is",
         wl_proxy_add_listener(thing, plain_listener, &mine) == 0 && ((struct fake_proxy *)thing)->listener == plain_listener &&
             ((struct fake_proxy *)thing)->data == &mine);
+
+  // The Magic Remote: the embedder makes a pointer on every seat and listens to the first.
+  struct wl_proxy *seat_a = fake_proxy(&seat_interface);
+  struct wl_proxy *seat_b = fake_proxy(&seat_interface);
+  struct wl_proxy *pointer_a = wl_proxy_marshal_flags(seat_a, 0, &pointer_interface, 5, 0, NULL);
+  struct wl_proxy *pointer_b = wl_proxy_marshal_flags(seat_b, 0, &pointer_interface, 5, 0, NULL);
+  CHECK("a pointer is made on each seat", pointer_a != NULL && pointer_b != NULL && fake_last.proxy == seat_b);
+  CHECK("  and nobody listens to the second one yet", ((struct fake_proxy *)pointer_b)->listener == NULL);
+  int window = 3;
+  CHECK("the embedder listens to its first pointer", wl_proxy_add_listener(pointer_a, plain_listener, &window) == 0 &&
+                                                         ((struct fake_proxy *)pointer_a)->listener == plain_listener);
+  CHECK("  and the other seat's pointer is given the same listener and data",
+        ((struct fake_proxy *)pointer_b)->listener == plain_listener && ((struct fake_proxy *)pointer_b)->data == &window);
+  struct wl_proxy *seat_c = fake_proxy(&seat_interface);
+  struct wl_proxy *pointer_c = wl_proxy_marshal_flags(seat_c, 0, &pointer_interface, 5, 0, NULL);
+  CHECK("  as is a pointer made after that", pointer_c != NULL && ((struct fake_proxy *)pointer_c)->listener == plain_listener &&
+                                             ((struct fake_proxy *)pointer_c)->data == &window);
+  CHECK("  and the embedder listening to one of them itself is told yes",
+        wl_proxy_add_listener(pointer_b, plain_listener, &window) == 0 && ((struct fake_proxy *)pointer_b)->listener == plain_listener);
+  CHECK("  while a pointer listened to twice by the embedder is still refused the second time",
+        wl_proxy_add_listener(pointer_a, plain_listener, &window) == -1);
 
   if (failed) {
     printf("     some of it is WRONG\n");

@@ -16,6 +16,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'relay_log.dart';
+
 class HeaderRelay {
   HeaderRelay._();
   static final instance = HeaderRelay._();
@@ -46,6 +48,7 @@ class HeaderRelay {
   Future<String> wrap(String url, Map<String, String> headers) async {
     final s = await _start();
     final uri = Uri.parse(url);
+    RelayLog.instance.start();
     final token = '${++_next}';
     final target = _latest = _targets[token] = _Target(uri, Map.of(headers));
     // (what was opened long ago is dropped: a player opens a handful of links, not hundreds)
@@ -116,8 +119,12 @@ class HeaderRelay {
 
   Future<void> _handle(HttpRequest req) async {
     final res = req.response;
+    final log = RelayLog.instance;
+    log.files++;
+    String host = '';
     try {
       final found = _addressOf(req.uri);
+      host = found?.uri.host ?? '';
       if (found == null || (req.method != 'GET' && req.method != 'HEAD')) {
         res.statusCode = found == null ? HttpStatus.notFound : HttpStatus.methodNotAllowed;
         await res.close();
@@ -140,6 +147,7 @@ class HeaderRelay {
         }
         target.base = at;
       }
+      if (up.statusCode >= 400) log.trouble('file', 'HTTP ${up.statusCode}', host: host);
       res.statusCode = up.statusCode;
       up.headers.forEach((name, values) {
         if (_back.contains(name.toLowerCase())) res.headers.set(name, values.join(', '));
@@ -153,8 +161,9 @@ class HeaderRelay {
       }
       await res.addStream(up);
       await res.close();
-    } catch (_) {
+    } catch (e) {
       // the TV stopped reading (a seek asks again from elsewhere), or the address failed
+      if (e is! HttpException || !e.message.contains('Connection closed')) log.trouble('file', e.runtimeType.toString(), host: host);
       try {
         res.statusCode = HttpStatus.badGateway;
       } catch (_) {}

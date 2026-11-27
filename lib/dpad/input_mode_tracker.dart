@@ -2,10 +2,12 @@
 // compared; anything changed for VyseTV is marked "VyseTV".
 import 'dart:io';
 
+import 'package:flutter/gestures.dart' show PointerScrollEvent; // VyseTV
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/platform/platform_detector.dart';
+import '../core/platform/webos.dart'; // VyseTV
 import 'dpad_navigator.dart';
 import 'focus_navigation_intent.dart';
 
@@ -126,6 +128,7 @@ class _InputModeTrackerState extends State<InputModeTracker> {
   }
 
   void _setMode(InputMode mode) {
+    if (mode == InputMode.keyboard) _pointerTravel = 0; // VyseTV: see _magicRemoteMoved
     if (_mode != mode) {
       setState(() => _mode = mode);
     }
@@ -144,8 +147,37 @@ class _InputModeTrackerState extends State<InputModeTracker> {
     }
   }
 
+  // VyseTV: how far an LG TV's Magic Remote has moved its pointer since the remote's keys were
+  // last in charge (logical pixels).
+  double _pointerTravel = 0;
+
+  /// VyseTV: past this, a Magic Remote's pointer is being pointed with, not just woken up.
+  static const double magicRemoteTakesOver = 80;
+
+  void _magicRemoteMoved(PointerEvent event) {
+    if (_mode == InputMode.pointer) return;
+    _pointerTravel += event.delta.distance;
+    if (_pointerTravel > magicRemoteTakesOver) _setMode(InputMode.pointer);
+  }
+
   @override
   Widget build(BuildContext context) {
+    // VyseTV: an LG TV's Magic Remote is a pointer as well as a remote. Pointed with for real (a
+    // long move, a click, the wheel) it has the app as a mouse has a desktop: what is under it
+    // lights up and the ring goes. An arrow key hands the app back to the remote's keys.
+    // Picking the remote up, which wakes its pointer with a small move, does neither.
+    if (WebOS.isTv) {
+      return Listener(
+        onPointerDown: (_) => _setMode(InputMode.pointer),
+        onPointerHover: _magicRemoteMoved,
+        onPointerMove: _magicRemoteMoved,
+        onPointerSignal: (event) {
+          if (event is PointerScrollEvent) _setMode(InputMode.pointer);
+        },
+        behavior: HitTestBehavior.translucent,
+        child: _InputModeProvider(mode: _mode, child: widget.child),
+      );
+    }
     // Non-desktop TVs keep keyboard mode across synthetic pointer events, but
     // their controls remain pointer-reachable for engine-generated taps.
     if (PlatformDetector.isTV() && !PlatformDetector.isDesktopOS()) {

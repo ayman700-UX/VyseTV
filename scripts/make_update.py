@@ -96,7 +96,16 @@ def release_server():
 # with it. Unsigned: each tool checks the file it fetches against the hash given here.
 TVOS_BUNDLE = 'com.vyse.vyseTv'  # tool/tvos/make_project.py
 WEBOS_ID = 'com.vyse.vysetv'  # webos/meta/appinfo.json
-ICON = 'https://updates.vysetv.cc/icon.png'
+
+
+def icon_url():
+    """The icon the TV lists show: beside latest.json on the update host, whose address is read
+    from this PC (release-server.json), like everything else about the server."""
+    try:
+        with open(SERVER_FILE, encoding='utf-8-sig') as f:
+            return json.load(f)['public_url'].rsplit('/', 1)[0] + '/icon.png'
+    except (OSError, ValueError, KeyError):
+        return 'https://vysetv.cc/icon.png'
 
 
 def altstore_source(version, date, notes, f, page):
@@ -110,7 +119,7 @@ def altstore_source(version, date, notes, f, page):
             'bundleIdentifier': TVOS_BUNDLE,
             'developerName': 'VyseTV',
             'localizedDescription': 'VyseTV for Apple TV.',
-            'iconURL': ICON,
+            'iconURL': icon_url(),
             'versions': [{
                 'version': version,
                 'buildVersion': version,
@@ -132,7 +141,7 @@ def webosbrew_repo(version, notes, f, page, older):
         'type': 'native',
         'title': 'VyseTV',
         'appDescription': notes or f'VyseTV {version}',
-        'iconUri': ICON,
+        'iconUri': icon_url(),
         'sourceUrl': page or 'https://vysetv.cc',
         'rootRequired': False,
         'ipkUrl': f['urls'][0],
@@ -142,7 +151,7 @@ def webosbrew_repo(version, notes, f, page, older):
     return {'packages': [{
         'id': WEBOS_ID,
         'title': 'VyseTV',
-        'iconUri': ICON,
+        'iconUri': icon_url(),
         'shortDescription': 'VyseTV for webOS 4 to 25' if older else 'VyseTV for webOS 26',
         'manifest': manifest,
     }]}

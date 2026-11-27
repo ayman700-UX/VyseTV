@@ -61,9 +61,25 @@ connected (its DUID is filled in), and sign the package again with it:
   track, subtitles inside the video (text and pictures) and from files, the subtitle delay,
   seeking, speed, the end of a film, faults, where the picture goes, and the app going to the
   background and back.
-- Nothing has run on a Samsung TV yet. Samsung's player plugin does not run on the TV emulator,
-  so there is no video without a real TV. Scraper plugins and torrents are built for the TV and
-  never tried on one: the engine inside a C# app's process is the least certain part.
+- One tester's 2025 set on Tizen 8 (27 November 2026, the Tizen 6.5 package): it installs and
+  starts every time, the remote works (slow at times), and video plays. Three things went wrong,
+  each changed since and not yet tried there:
+  - After fast-forwarding, the subtitles went out of step, and "Playback stopped (Not supported
+    media format)" stayed on screen over a film that played on. The TV's player reports faults
+    it carries on from, and any of them ended the film here. Now a fault ends the film only if
+    the TV's player has really stopped, and the subtitles follow the TV's own position rather
+    than its playing and loading events.
+  - VyseTV's own servers' links stopped with a line of the TV's media framework
+    (`gstbasesrc.c … gst_base_src_loop`). Not explained yet. The relay on the TV now names each
+    piece of a stream by what it is (`.ts`, `.m4s`, `.vtt`) and sends it with that type, the
+    fault is shown in words, and the report card says what the TV's player asked of the relay
+    and what the real address answered.
+  - AIOStreams' own messages (its "[❌]" entries when a debrid service fails) showed as sources
+    that open in the browser, and the browser closed again. They are shown as messages now, and
+    on a TV a web link is a QR code to open on a phone.
+- Scraper plugins and torrents are built for the TV and not reported on yet: the engine inside a
+  C# app's process is the least certain part. Samsung's player plugin does not run on the TV
+  emulator, so there is no video without a real TV.
 
 ## The TV's own libraries
 

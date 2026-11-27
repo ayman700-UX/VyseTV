@@ -62,6 +62,13 @@ abstract final class PlaybackFailure {
   static String? droppedPart({required bool error, required String prefix, required String text}) {
     if (!error) return null;
     final line = text.trim();
+    // A TV's own player (a Samsung's) playing on without one half, in the app's words for its
+    // fault (PlayerTizen.errorNote), under a prefix of its own.
+    if (prefix == 'tv-part') {
+      if (line.startsWith("The TV can't play this sound")) return 'audio';
+      if (line.startsWith("The TV can't play this picture")) return 'video';
+      return null;
+    }
     if (_soundLines.contains(line)) return 'audio';
     if (_pictureLines.contains(line)) return 'video';
     // (on the picture's chain mpv tries software decoding next, and says so itself if that fails)

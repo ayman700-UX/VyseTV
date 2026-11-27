@@ -98,6 +98,8 @@ const autofocus = <Reviewed>[
       'The sign-in sheet opens with the caret in its first box (the code, or the new password), as a form should. Arrows leave the box.'),
   Reviewed('lib/widgets/dialogs/debrid_consent.dart', "TextButton(autofocus: true, onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),", 1,
       'The safe answer is the one Enter gives.'),
+  Reviewed('lib/screens/shell/shell.dart', "TextButton(autofocus: true, onPressed: () => Navigator.pop(ctx, false), child: const Text('Stay')),", 1,
+      'Leave VyseTV? (an LG or a Samsung TV, Back at Home): the safe answer is the one Enter gives.'),
   Reviewed('lib/screens/player/player_chrome.dart', 'autofocus: true,', 1,
       'Play: where a D-pad lands when the controls of the player come up. The picture holds focus until then, so it takes nothing by itself.'),
   Reviewed('lib/screens/player/player_page.dart', 'autofocus: true, // with a D-pad, the controls start here when they come up', 1,

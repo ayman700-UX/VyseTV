@@ -10,6 +10,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/layout.dart';
 import '../../core/nav.dart' show openStremioLink;
 import '../../core/theme.dart';
+import '../../core/platform/apple_tv.dart' show AppleTv;
+import '../../core/platform/platform_detector.dart' show PlatformDetector;
+import '../../core/platform/tizen_tv.dart' show LinuxTv;
 import '../../core/lean.dart';
 import '../../data/sources/addons.dart';
 import '../../data/sources/debrid/debrid.dart' show Debrid;
@@ -23,6 +26,7 @@ import '../../data/sources/torrents.dart';
 import '../../dpad/dpad_traversal.dart';
 import '../../widgets/common.dart';
 import '../../widgets/dialogs/debrid_consent.dart';
+import '../../widgets/dialogs/link_qr.dart';
 import '../../widgets/dialogs/p2p_consent.dart';
 import '../../data/party/rooms.dart' show Rooms;
 import '../../data/party/watch_party.dart';
@@ -377,6 +381,7 @@ class _SourcesPageState extends State<SourcesPage> {
     final t = _target;
     if (t == null) return;
     HapticFeedback.selectionClick();
+    if (s.notice) return _showNotice(s);
     if (!s.playable) return _openLink(s.external!);
     // P2P off: ask first, and start nothing unless allowed (in your room, everyone there too)
     final party = Rooms.mine.value?.iOwn == true;
@@ -414,14 +419,39 @@ class _SourcesPageState extends State<SourcesPage> {
   }
 
   /// A source that is a link: a Stremio link opens its page in VyseTV, anything else (a web page,
-  /// a YouTube video) where it lives.
+  /// a YouTube video) where it lives. On a TV a page is a QR code to open on a phone: an LG's or
+  /// a Samsung's browser opens and shuts again, an Apple TV has none, and many Android TVs have
+  /// none either (YouTube still goes to its app on an Android TV).
   Future<void> _openLink(String link) async {
     if (await openStremioLink(context, link)) return;
-    final ok = await launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication).catchError((Object _) => false);
-    if (!ok && mounted) {
-      showToast(context, const Text("Couldn't open the link", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)), icon: Icons.error_outline_rounded);
+    final tv = PlatformDetector.isTV() || LinuxTv.isTv || AppleTv.isTv;
+    final youTube = link.contains('youtube.com/') || link.contains('youtu.be/');
+    if (tv && (LinuxTv.isTv || AppleTv.isTv || !youTube)) {
+      if (mounted) await showLinkQr(context, link);
+      return;
     }
+    final ok = await launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication).catchError((Object _) => false);
+    if (ok || !mounted) return;
+    if (tv) return showLinkQr(context, link);
+    showToast(context, const Text("Couldn't open the link", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)), icon: Icons.error_outline_rounded);
   }
+
+  /// A message an addon lists among its sources (AddonStream.notice), in full.
+  Future<void> _showNotice(AddonStream s) => showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: VyseColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text('${s.addon.name} says', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Text(s.text.isEmpty ? 'Nothing more than that.' : s.text, style: const TextStyle(color: VyseColors.textDim, height: 1.5)),
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+    ),
+  );
 
   /// Back: closes the overlay (the video keeps playing), or leaves the page.
   void _close() => widget.overlay ? widget.onClose?.call() : Navigator.of(context).maybePop();
@@ -1182,20 +1212,26 @@ class _ClearButton extends StatelessWidget {
 
 /// One source: its addon's logo, the description as the addon wrote it, and the template's badges
 /// underneath.
-/// Where a source that is a link goes: VyseTV (a Stremio link), YouTube, or the browser.
+/// Where a source that is a link goes: VyseTV (a Stremio link), YouTube, the browser (on a TV, a
+/// phone), or nowhere: a message from the addon.
 class _Opens extends StatelessWidget {
-  const _Opens({required this.link});
+  const _Opens({required this.link, this.notice = false});
   final String link;
+  final bool notice;
 
   @override
   Widget build(BuildContext context) {
-    final where = StremioLink.parse(link) != null
+    final tv = PlatformDetector.isTV() || LinuxTv.isTv || AppleTv.isTv;
+    final youTube = link.contains('youtube.com/') || link.contains('youtu.be/');
+    final where = notice
+        ? 'A message from the addon, not a source'
+        : StremioLink.parse(link) != null
         ? 'Opens in VyseTV'
-        : (link.contains('youtube.com/') || link.contains('youtu.be/') ? 'Opens on YouTube' : 'Opens in your browser');
+        : (youTube && !LinuxTv.isTv && !AppleTv.isTv ? 'Opens on YouTube' : (tv ? 'Opens on your phone (QR code)' : 'Opens in your browser'));
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.open_in_new_rounded, size: 14, color: VyseColors.accent),
+        Icon(notice ? Icons.info_outline_rounded : Icons.open_in_new_rounded, size: 14, color: VyseColors.accent),
         const SizedBox(width: 6),
         Flexible(
           child: Text(where, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: VyseColors.accent)),
@@ -1259,7 +1295,7 @@ class _SourceRow extends StatelessWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   if (description.isNotEmpty) Text(description, maxLines: 7, overflow: TextOverflow.ellipsis, style: _descStyle),
-                                  if (!s.playable) ...[SizedBox(height: description.isEmpty ? 0 : 8), _Opens(link: s.external!)],
+                                  if (!s.playable) ...[SizedBox(height: description.isEmpty ? 0 : 8), _Opens(link: s.external!, notice: s.notice)],
                                 ],
                               ),
                             ),
@@ -1280,7 +1316,7 @@ class _SourceRow extends StatelessWidget {
                             children: [
                               if (playing) ...[_now, const SizedBox(height: 6)],
                               if (description.isNotEmpty) Text(description, maxLines: 7, overflow: TextOverflow.ellipsis, style: _descStyle),
-                              if (!s.playable) ...[SizedBox(height: description.isEmpty ? 0 : 8), _Opens(link: s.external!)],
+                              if (!s.playable) ...[SizedBox(height: description.isEmpty ? 0 : 8), _Opens(link: s.external!, notice: s.notice)],
                               if (badges.isNotEmpty) ...[SizedBox(height: description.isEmpty ? 0 : 12), BadgeRow(badges: badges)],
                             ],
                           ),
