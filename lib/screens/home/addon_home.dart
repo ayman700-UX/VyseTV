@@ -33,8 +33,9 @@ abstract final class AddonHome {
   /// [a]'s catalogs that are rows on Home, and the rest, of which the first two rows are cards (a
   /// catalog that needs a genre picked is a card: it opens on its first genre).
   static (List<CatalogRef>, List<CatalogRef>) split(Addon a) {
-    final board = [for (final c in a.catalogs) if (c.board) CatalogRef(a, c)];
-    final more = [for (final c in a.catalogs) if (!c.board && c.browsable) CatalogRef(a, c)];
+    // (those you turned off are left out, and the next ones take their place)
+    final board = [for (final c in a.catalogs) if (c.board && a.catalogOn(c)) CatalogRef(a, c)];
+    final more = [for (final c in a.catalogs) if (!c.board && c.browsable && a.catalogOn(c)) CatalogRef(a, c)];
     return (board.take(rows).toList(), [...board.skip(rows), ...more]);
   }
 

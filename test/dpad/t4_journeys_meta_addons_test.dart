@@ -149,6 +149,49 @@ void main() {
     await done(t);
   }, variant: screen);
 
+  // (the user, 2026-11-27: "For js plugins we can enable and disable sliders from the home page,
+  // make the same happen for stremio addons ... working for remote control")
+  testWidgets("Settings > Addons: a Stremio addon's Rows on Home; the remote turns a catalog off and the next one takes its row", (t) async {
+    await start(t, addons: [lantern]);
+    await Bed.pumpShell(t);
+    await Bed.dpadMode(t);
+    await Bed.push(t, const ProfilePage(addons: true));
+    Addon now() => Addons.list.value.firstWhere((a) => a.id == 'test.lantern');
+    List<String> rows() => [for (final r in AddonHome.split(now()).$1) '${r.catalog.type}/${r.catalog.id}'];
+    expect(rows(), ['movie/top', 'series/top', 'movie/list0', 'movie/list1', 'movie/list2'], reason: 'its first five are rows');
+
+    await Bed.focus(t, find.descendant(of: find.byTooltip('Rows on Home'), matching: find.byType(Pressable)).first);
+    await Bed.ok(t);
+    await Bed.settle(t);
+    expect(find.text('Rows on Home · Lantern'), findsOneWidget);
+    expect(find.text('Last videos · Series'), findsNothing, reason: 'a catalog that needs what you follow is never listed');
+    expect(Bed.focused(), contains('Popular'), reason: 'the remote starts on the first catalog');
+    await Bed.picture(t, 'meta_addons/rows_on_home');
+
+    await Bed.ok(t);
+    await Bed.settle(t);
+    expect(now().catalogsOff, ['movie/top']);
+    expect(rows(), ['series/top', 'movie/list0', 'movie/list1', 'movie/list2', 'movie/list3'], reason: 'the next one takes its row');
+    expect(MetaAddons.catalogs.where((r) => r.catalog.type == 'movie' && r.catalog.id == 'top'), isEmpty, reason: 'nor is it on Discover');
+    expect(find.text('Off'), findsOneWidget);
+
+    await Bed.down(t);
+    await Bed.ok(t);
+    await Bed.settle(t);
+    expect(now().catalogsOff, ['movie/top', 'series/top'], reason: 'Down to the next catalog, OK turns it off too');
+    await Bed.up(t);
+    await Bed.ok(t);
+    await Bed.settle(t);
+    expect(now().catalogsOff, ['series/top'], reason: 'and OK again turns it back on');
+    expect(rows().first, 'movie/top');
+
+    await Bed.back(t);
+    await Bed.settle(t);
+    expect(find.text('Rows on Home · Lantern'), findsNothing, reason: 'Back closes it');
+    await Bed.back(t);
+    await done(t);
+  }, variant: OnScreens([Screens.tv]));
+
   testWidgets('Home with TMDB on: the addon\'s catalogs are rows above TMDB\'s; Down reaches one, OK opens a title\'s details from the addon', (t) async {
     await start(t, addons: [lantern]);
     final at = mark();

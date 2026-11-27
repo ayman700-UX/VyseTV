@@ -9,6 +9,7 @@ import '../../data/sources/plugins/plugin_catalogs.dart' show PluginCatalogs;
 import 'plugin_index_page.dart';
 import '../../core/nav.dart' show ShellRoute;
 import '../../data/catalog/meta_addons.dart' show MetaAddons;
+import '../home/addon_home.dart' show AddonHome;
 import '../../data/sources/film_sources/febbox.dart' show FebBoxUser;
 import '../../data/sources/film_sources/febbox_account.dart';
 import '../../data/sources/film_sources/film_sources.dart';
@@ -3206,6 +3207,126 @@ class _PluginBrowseRow extends StatelessWidget {
   }
 }
 
+/// A Stremio addon's catalogs, each on or off: those on are its rows on Home (the first five;
+/// the rest are cards under "More from …") and its lists on Discover. The same as a plugin
+/// repository's "Catalogs to browse", for the user, 2026-11-27: "make the same happen for stremio
+/// addons".
+Future<void> _showAddonCatalogs(BuildContext context, Addon a) => showDialog<void>(
+  context: context,
+  builder: (ctx) => AlertDialog(
+    backgroundColor: VyseColors.surface,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    title: Text('Rows on Home · ${a.name}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+    content: SizedBox(width: double.maxFinite, height: 420, child: _AddonCatalogList(addon: a)),
+    actions: [_SmallButton(label: 'Done', icon: Icons.check_rounded, primary: true, onTap: () => Navigator.pop(ctx))],
+  ),
+);
+
+class _AddonCatalogList extends StatefulWidget {
+  const _AddonCatalogList({required this.addon});
+  final Addon addon;
+
+  /// The catalogs of [a] that can be on Home or Discover (not those only a search answers).
+  static List<AddonCatalog> listed(Addon a) => [for (final c in a.catalogs) if (c.board || c.browsable) c];
+
+  @override
+  State<_AddonCatalogList> createState() => _AddonCatalogListState();
+}
+
+class _AddonCatalogListState extends State<_AddonCatalogList> {
+  late final Set<String> _off = {...widget.addon.catalogsOff};
+
+  void _flip(AddonCatalog c) {
+    final key = Addon.catalogKey(c);
+    setState(() => _off.contains(key) ? _off.remove(key) : _off.add(key));
+    Addons.setCatalogsOff(widget.addon, [..._off]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final all = _AddonCatalogList.listed(widget.addon);
+    // where each one that is on lands: the first rows on Home, then cards
+    var rows = 0;
+    String where(AddonCatalog c) {
+      if (_off.contains(Addon.catalogKey(c))) return 'Off';
+      if (c.board && rows < AddonHome.rows) {
+        rows++;
+        return 'A row on Home';
+      }
+      return 'A card under "More from ${widget.addon.name}", and on Discover';
+    }
+
+    final rowsOf = [for (final c in all.where((c) => c.board)) (c, where(c)), for (final c in all.where((c) => !c.board)) (c, where(c))];
+    final order = {for (final r in rowsOf) r.$1: r.$2};
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Turned off, a catalog leaves Home and Discover, and the next one takes its place. Search still asks it.',
+          style: TextStyle(fontSize: 13, color: VyseColors.textDim, height: 1.35),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: ListView(
+            children: [
+              for (final (i, c) in all.indexed)
+                _CatalogSwitchRow(
+                  name: MetaAddons.catalogTitle(c),
+                  what: order[c] ?? '',
+                  on: !_off.contains(Addon.catalogKey(c)),
+                  first: i == 0,
+                  onTap: () => _flip(c),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One catalog in [_AddonCatalogList]: its name, where it shows, and the switch. The whole row is
+/// the switch (one stop for a remote), as a plugin's in "Catalogs to browse".
+class _CatalogSwitchRow extends StatelessWidget {
+  const _CatalogSwitchRow({required this.name, required this.what, required this.on, required this.first, required this.onTap});
+  final String name;
+  final String what;
+  final bool on;
+  final bool first;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+    onTap: onTap,
+    autofocus: first,
+    builder: (context, hovered, _) => AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.fromLTRB(14, 11, 12, 11),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), color: Colors.white.withValues(alpha: hovered ? .08 : .04)),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+                if (what.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(what, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, color: VyseColors.textDim, height: 1.3)),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          // (the row is what a press or OK turns: this only shows it)
+          ExcludeFocus(child: IgnorePointer(child: _Switch(value: on, onChanged: (_) {}))),
+        ],
+      ),
+    ),
+  );
+}
+
 class _AddonRow extends StatelessWidget {
   const _AddonRow({required this.addon, required this.first, required this.last});
   final Addon addon;
@@ -3239,6 +3360,9 @@ class _AddonRow extends StatelessWidget {
         // which of its plugins' catalogs to browse, and what its plugins said (a TV has no log of
         // its own to read)
         if (a.plugins) _IconAction(icon: Icons.view_carousel_outlined, tooltip: 'Catalogs to browse', onTap: () => _showPluginCatalogs(context, a)),
+        // which of a Stremio addon's catalogs are rows on Home (as a plugin repository's, above)
+        if (!a.plugins && !a.builtIn && _AddonCatalogList.listed(a).isNotEmpty)
+          _IconAction(icon: Icons.view_carousel_outlined, tooltip: 'Rows on Home', onTap: () => _showAddonCatalogs(context, a)),
         if (a.plugins) _IconAction(icon: Icons.receipt_long_rounded, tooltip: 'Plugin log', onTap: () => _showPluginLog(context)),
         // a built-in addon is part of the app: it is turned off, not removed
         if (!a.builtIn) _IconAction(icon: Icons.delete_outline_rounded, tooltip: 'Remove', danger: true, onTap: () => Addons.remove(a)),

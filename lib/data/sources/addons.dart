@@ -146,6 +146,7 @@ class Addon {
     this.plugins = false,
     this.browse,
     this.comicsOff = const [],
+    this.catalogsOff = const [],
   });
 
   /// Where its manifest is: `https://…/manifest.json` (a plugin repository: its `repo.json`).
@@ -197,6 +198,17 @@ class Addon {
   /// section (data/manga/plugin_comics.dart), never on Home.
   final List<String> comicsOff;
 
+  /// Its catalogs you turned off (Settings > Addons, "Rows on Home"), by [catalogKey]: they leave
+  /// Home and Discover, and the next ones take their place. A plugin repository's are picked by
+  /// plugin instead ([browse]).
+  final List<String> catalogsOff;
+
+  /// How [catalogsOff] names a catalog.
+  static String catalogKey(AddonCatalog c) => '${c.type}/${c.id}';
+
+  /// [c] is on: on Home and Discover.
+  bool catalogOn(AddonCatalog c) => !catalogsOff.contains(catalogKey(c));
+
   /// It offers something to browse, or the details of titles.
   bool get metadata => catalogs.isNotEmpty || meta;
 
@@ -236,7 +248,7 @@ class Addon {
   /// Every built-in addon, in the order a fresh install lists them (after your own).
   static const builtIns = [tmdb, knaben];
 
-  Addon copyWith({bool? enabled}) => Addon(
+  Addon copyWith({bool? enabled, List<String>? catalogsOff}) => Addon(
     manifestUrl: manifestUrl,
     id: id,
     name: name,
@@ -260,6 +272,7 @@ class Addon {
     needsSetup: needsSetup,
     plugins: plugins,
     browse: browse,
+    catalogsOff: catalogsOff ?? this.catalogsOff,
     comicsOff: comicsOff,
   );
 
@@ -355,6 +368,7 @@ class Addon {
     if (plugins) 'pl': true,
     'pb': ?browse,
     if (comicsOff.isNotEmpty) 'co': comicsOff,
+    if (catalogsOff.isNotEmpty) 'cf': catalogsOff,
   };
 
   static Addon? fromJson(Map<String, dynamic> j) {
@@ -384,6 +398,7 @@ class Addon {
         plugins: j['pl'] == true,
         browse: j['pb'] is List ? [for (final x in j['pb'] as List) '$x'] : null,
         comicsOff: l('co'),
+        catalogsOff: l('cf'),
       );
     } catch (_) {
       return null;
@@ -935,7 +950,7 @@ class Addons {
           }(),
     ]);
     if (fresh.isEmpty) return;
-    _save([for (final a in list.value) fresh[a.manifestUrl]?.copyWith(enabled: a.enabled) ?? a]);
+    _save([for (final a in list.value) fresh[a.manifestUrl]?.copyWith(enabled: a.enabled, catalogsOff: a.catalogsOff) ?? a]);
   }
 
   static void _load() {
@@ -963,7 +978,7 @@ class Addons {
       final l = [...list.value];
       final i = l.indexWhere((x) => x.manifestUrl == old.manifestUrl);
       if (i < 0) return;
-      l[i] = fresh.copyWith(enabled: l[i].enabled);
+      l[i] = fresh.copyWith(enabled: l[i].enabled, catalogsOff: l[i].catalogsOff);
       _save(l);
     } catch (_) {}
   }
@@ -1090,6 +1105,15 @@ class Addons {
     }
     _save(l);
     return a;
+  }
+
+  /// Stremio addon [a]'s catalogs in [off] are turned off (Settings > Addons, "Rows on Home").
+  static void setCatalogsOff(Addon a, List<String> off) {
+    final l = [...list.value];
+    final i = l.indexWhere((x) => x.manifestUrl == a.manifestUrl);
+    if (i < 0) return;
+    l[i] = l[i].copyWith(catalogsOff: off);
+    _save(l);
   }
 
   /// Plugin repository [a]'s catalogs: those of the plugins in [on] (Settings > Addons), and of

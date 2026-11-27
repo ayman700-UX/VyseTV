@@ -378,6 +378,7 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
 
   void _forget() {
     _loaded = false;
+    _lastTickMs = null;
     _started = false;
     _ended = false;
     _lost = false;
@@ -675,8 +676,19 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
 
   // ── position ──
 
+  int? _lastTickMs; // the position the TV said last
+
   void _tick(int ms) {
     _lastTickAt = _wall.elapsedMilliseconds;
+    // Moving on by a little since it last said where it was: it plays, whatever it did or did not
+    // say about loading (the clock and the subtitles go with it, and the spinner goes). As on a
+    // Samsung, where a loading the TV never said was over left the subtitles behind.
+    final last = _lastTickMs;
+    _lastTickMs = ms;
+    if (last != null && ms > last && ms - last < 5000 && _wantPlay && !_ended) {
+      if (!_clock.isRunning) _clock.start();
+      if (state.buffering) handlePropertyChange('paused-for-cache', false);
+    }
     _clockMs = ms;
     if (_clock.isRunning) {
       _clock

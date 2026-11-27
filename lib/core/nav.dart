@@ -77,7 +77,7 @@ Future<bool> openStremioLink(BuildContext context, String link) async {
       return true;
     case StremioDiscover(:final manifestUrl, :final type, :final catalogId, :final genre):
       final url = Addons.normalize(manifestUrl);
-      final ref = MetaAddons.catalogs.where((r) => r.addon.manifestUrl == url && r.catalog.type == type && r.catalog.id == catalogId).firstOrNull;
+      final ref = MetaAddons.allCatalogs.where((r) => r.addon.manifestUrl == url && r.catalog.type == type && r.catalog.id == catalogId).firstOrNull;
       if (ref == null) return false;
       unawaited(openCatalog(context, ref, genre: genre));
       return true;

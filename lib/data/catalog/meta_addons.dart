@@ -298,7 +298,15 @@ abstract final class MetaAddons {
   // ── catalogs ──
 
   /// Every catalog of your metadata addons that are on, in your order.
+  /// Your catalogs to browse: those of your metadata addons you have not turned off.
   static List<CatalogRef> get catalogs => [
+    for (final a in Addons.catalogAddons)
+      for (final c in a.catalogs)
+        if (a.catalogOn(c)) CatalogRef(a, c),
+  ];
+
+  /// Every catalog of your metadata addons, those turned off too (a link to one still opens it).
+  static List<CatalogRef> get allCatalogs => [
     for (final a in Addons.catalogAddons)
       for (final c in a.catalogs) CatalogRef(a, c),
   ];

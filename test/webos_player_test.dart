@@ -367,6 +367,29 @@ void main() {
     expect(player.state.track.subtitle?.id, 'no');
   });
 
+  tvTest("a loading the TV never says is over: the position moving on is the clock, and the spinner goes", (t) async {
+    final dir = Directory.systemTemp.createTempSync('vyse_webos_stall');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final file = File('${dir.path}${Platform.pathSeparator}film.en.srt')
+      ..writeAsStringSync('1\n00:01:00,000 --> 00:01:00,800\nShort\n\n2\n00:01:00,800 --> 00:01:03,000\nNext\n');
+    final player = await opened(t);
+    await tv.says(t, {'loadCompleted': {}});
+    await tv.says(t, _film);
+    await tv.says(t, {'playing': {}});
+    await t.runAsync(() => player.addSubtitleFile(Uri.file(file.path).toString(), title: 'English', language: 'en'));
+    await t.pump();
+    // a seek: the TV says it is loading, and never that it is done
+    await tv.says(t, {'bufferingStart': {}});
+    expect(player.state.buffering, isTrue);
+    await tv.says(t, {'currentTime': 59500});
+    await tv.says(t, {'currentTime': 60100});
+    expect(player.state.buffering, isFalse, reason: 'it moves on: nothing is loading');
+    expect(player.currentSubText, 'Short');
+    // between two of its reports the app's own clock runs again: the next line on time
+    await t.pump(const Duration(milliseconds: 800));
+    expect(player.currentSubText, 'Next');
+  });
+
   tvTest('a subtitle file: its lines come up in time with the film', (t) async {
     final dir = Directory.systemTemp.createTempSync('vyse_webos_sub');
     addTearDown(() => dir.deleteSync(recursive: true));
