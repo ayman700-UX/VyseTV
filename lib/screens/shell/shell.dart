@@ -620,14 +620,21 @@ class _AppShellState extends State<AppShell> {
                 opacity: _railOpen ? 1 : 0,
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOut,
-                child: const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xF205070D), Color(0xB305070D), Color(0x0005070D)],
-                      stops: [0, .22, .5],
+                // (dark all the way across the open rail, then fading: it faded from the start,
+                // and a bright poster behind the labels drowned the ring on them, a Samsung
+                // tester, 2026-11-27)
+                child: LayoutBuilder(builder: (context, c) {
+                  final w = c.maxWidth <= 0 ? 1.0 : c.maxWidth;
+                  final rail = (Layout.railExpanded / w).clamp(.1, .6).toDouble();
+                  return DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: const [Color(0xF205070D), Color(0xE605070D), Color(0x0005070D)],
+                        stops: [0, rail, (rail + .25).clamp(rail, 1.0).toDouble()],
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                }),
               ),
             ),
           ),

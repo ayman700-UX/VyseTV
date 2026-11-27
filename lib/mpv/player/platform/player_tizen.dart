@@ -38,6 +38,7 @@ import 'package:video_player_avplay/video_player.dart' as avplay show AudioTrack
 import 'package:video_player_avplay/video_player_platform_interface.dart' as avplay;
 
 import '../../models.dart';
+import '../../../core/platform/tv_memory.dart';
 import '../../support/app_logger.dart';
 import '../../support/header_relay.dart';
 import '../../support/subtitle_cues.dart';
@@ -56,7 +57,10 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
   PlayerTizen._({required this.slot, required this.audioOnly})
     // (never used: this engine has no native side of its own, see [usesNativeChannels])
     : methodChannel = MethodChannel('vyse/tizen_media/$slot'),
-      eventChannel = EventChannel('vyse/tizen_media/$slot/events');
+      eventChannel = EventChannel('vyse/tizen_media/$slot/events') {
+    // (the TV's player shares the app's memory: see TvMemory)
+    if (!audioOnly) TvMemory.filmOpened();
+  }
 
   final int slot;
   final bool audioOnly;
@@ -1269,6 +1273,7 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
   @override
   Future<void> dispose({bool preserveDisplayMode = false}) async {
     if (disposed) return;
+    if (!audioOnly) TvMemory.filmClosed();
     _sources++;
     _lifecycle?.detach();
     _lifecycle = null;

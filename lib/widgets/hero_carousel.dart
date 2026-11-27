@@ -9,6 +9,7 @@ import '../core/nav.dart';
 import '../core/logs/perf.dart';
 import '../core/theme.dart';
 import '../core/lean.dart';
+import '../core/platform/tizen_tv.dart' show LinuxTv;
 import '../data/catalog/tmdb.dart';
 import '../screens/player/player_page.dart';
 
@@ -288,14 +289,16 @@ class _Backdrop extends StatelessWidget {
 int screenDecodeWidth(BuildContext context) {
   final mq = MediaQuery.of(context);
   final w = (mq.size.width * mq.devicePixelRatio).round().clamp(640, 3840);
-  // the weakest TV boxes: no wider than the file they are given ([backdropSize])
-  return Lean.weak ? math.min(w, 1280) : w;
+  // the weakest TV boxes, and LG and Samsung TVs: no wider than the file they are given ([backdropSize])
+  return Lean.weak || LinuxTv.isTv ? math.min(w, 1280) : w;
 }
 
 /// Which copy of a backdrop fills the screen: TMDB's original, or on the weakest TV boxes its
 /// 1280-wide one. An original can be 4K: megabytes to fetch, a long decode on a slow chip and
-/// 8 MB of texture to upload, for a picture that sits under a scrim.
-String get backdropSize => Lean.weak ? 'w1280' : 'original';
+/// 8 MB of texture to upload, for a picture that sits under a scrim. An LG or a Samsung TV too:
+/// their interface is 1920 wide at most, the TV's player shares the app's memory, and on a
+/// Samsung tester's set the hero's words stood there seconds before its picture (2026-11-27).
+String get backdropSize => Lean.weak || LinuxTv.isTv ? 'w1280' : 'original';
 
 /// Whether the hero's picture holds still: on a TV. Its slow push-in redrew the whole screen
 /// every frame for as long as Home was open, and a TV's graphics chip pays for that twice (the

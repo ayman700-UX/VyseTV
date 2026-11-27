@@ -495,7 +495,9 @@ void main() {
       expect(find.byType(SourcesPage), findsOneWidget);
       expect(find.text('Opens in VyseTV'), findsOneWidget, reason: "Shelfmark's link to the collection");
       expect(find.text('Opens on YouTube'), findsOneWidget);
-      expect(find.text('Opens in your browser'), findsOneWidget);
+      // (a web page on a TV is a QR code to open on a phone: its browser, where it has one, is no
+      // place to read a page)
+      expect(find.text(OnScreens.current == Screens.tv ? 'Opens on your phone (QR code)' : 'Opens in your browser'), findsOneWidget);
       // the file that plays comes before every link
       final rows = [for (final e in find.textContaining(RegExp('Made-up stream|Opens ')).evaluate()) (e.widget as Text).data ?? ''];
       expect(rows.first, contains('Made-up stream'));

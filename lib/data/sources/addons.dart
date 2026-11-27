@@ -751,7 +751,7 @@ class AddonStream {
 
   /// The languages it's in: its flags (🇯🇵 → Japanese), the badge template's language badges, and
   /// "Multi" when it says so.
-  late final List<String> languages = <String>{
+  List<String> get languages => <String>{
     for (final m in _flags.allMatches(text)) ?_flagLanguage(m[0]!),
     for (final b in Badges.languages(badges)) b.name,
     if (_has(r'\bmulti\b|dual ?audio')) 'Multi',
@@ -763,7 +763,9 @@ class AddonStream {
   late final String _badgeText = '$_raw ${[for (final m in _flags.allMatches(text)) ?_flagLanguage(m[0]!)].join(' ')}';
 
   /// The badges this stream earns from the badge template (4K, Remux, Dolby Vision, Atmos, EN…).
-  late final List<SourceBadge> badges = Badges.of(_badgeText);
+  /// Asked each time (Badges keeps the answers): a stream listed before the template had loaded
+  /// gets its badges once it has.
+  List<SourceBadge> get badges => Badges.of(_badgeText);
 
   late final int? seeders = RegExp(r'👤\s*(\d+)').firstMatch(text)?.let((m) => int.tryParse(m[1]!));
 
@@ -1163,7 +1165,7 @@ class Addons {
         .get(Uri.parse('${a.base}/stream/${t.type}/$id.json'), headers: {'User-Agent': _ua, 'Accept': 'application/json'})
         .timeout(const Duration(seconds: 30));
     if (r.statusCode != 200) throw StateError('HTTP ${r.statusCode}');
-    final j = json.decode(utf8.decode(r.bodyBytes));
+    final j = await decodeJsonBytes(r.bodyBytes);
     final list = (j is Map ? (j['streams'] as List?) ?? const [] : const []).whereType<Map<String, dynamic>>().toList();
     return (
       streams: [for (final s in list) ?AddonStream.parse(a, s)],

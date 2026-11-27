@@ -77,6 +77,18 @@ connected (its DUID is filled in), and sign the package again with it:
   - AIOStreams' own messages (its "[❌]" entries when a debrid service fails) showed as sources
     that open in the browser, and the browser closed again. They are shown as messages now, and
     on a TV a web link is a QR code to open on a phone.
+- The second round on the same set (27 November, later): a 4K film after a while of browsing
+  ended the app (the TV's out-of-memory killer); music looked songs up and never played them;
+  catalogues and lists were slow; season numbers sat over Play and Save, and "History" was cut
+  to "Historv"; the hero's picture came seconds after its words; an id under every Live TV
+  channel; two outlines on the playing channel; the keyboard over Manga's search. Changed since,
+  not yet tried there: the app is laid out at 960 by 540 points as on an Android TV
+  (`App.cs` sets the scale; Samsung's engine gave a TV 1.6, so 1200 by 675) and text at the
+  app's own size; while a film plays, the pictures nothing shows are let go (the TV's player
+  shares the app's memory: `lib/core/platform/tv_memory.dart`); the hero takes TMDB's 1280-wide
+  picture; big addon answers are read off the interface's thread; ids are left out of guide
+  lines; a focused text box goes to the top part of the page. Music is not explained yet: the
+  TV's player may not take the audio format the lookup chooses.
 - Scraper plugins and torrents are built for the TV and not reported on yet: the engine inside a
   C# app's process is the least certain part. Samsung's player plugin does not run on the TV
   emulator, so there is no video without a real TV.

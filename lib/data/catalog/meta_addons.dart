@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
@@ -216,7 +215,7 @@ abstract final class MetaAddons {
   static Future<Object?> _get(String url) async {
     final r = await netClient.get(Uri.parse(url), headers: {'User-Agent': _ua, 'Accept': 'application/json'}).timeout(const Duration(seconds: 20));
     if (r.statusCode != 200) throw StateError('HTTP ${r.statusCode}');
-    return json.decode(utf8.decode(r.bodyBytes));
+    return decodeJsonBytes(r.bodyBytes);
   }
 
   // ── titles ──

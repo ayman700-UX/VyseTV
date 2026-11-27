@@ -13,6 +13,7 @@ import 'package:vyse_tv/core/layout.dart' show isDesktopNative;
 import 'package:vyse_tv/core/lean.dart';
 import 'package:vyse_tv/core/platform/platform_detector.dart';
 import 'package:vyse_tv/core/platform/webos.dart';
+import 'package:vyse_tv/data/app_settings.dart';
 import 'package:vyse_tv/data/phone_edit/phone_settings.dart';
 import 'package:vyse_tv/data/playback/player_engine.dart';
 import 'package:vyse_tv/data/sources/torrents.dart';
@@ -122,6 +123,31 @@ void main() {
     await mouse.removePointer();
     await Bed.right(t);
     expect(InputModeTracker.isKeyboardMode(page()), isTrue, reason: "an arrow: the remote's keys again");
+  }, variant: tv);
+
+  // (an LG tester, 2026-11-27: he "can't edit streaming mode settings")
+  testWidgets('Settings > Playback: Streaming mode is reached with the remote and switches', (t) async {
+    final before = AppSettings.streamingMode.value;
+    addTearDown(() => AppSettings.streamingMode.value = before);
+    await openSettings(t, 'Playback');
+    await Bed.settle(t);
+    final row = find.ancestor(of: find.text('Streaming mode'), matching: find.byType(Row)).first;
+    bool onIt() {
+      final node = FocusManager.instance.primaryFocus;
+      return node != null && node.context != null && t.getRect(row).contains(node.rect.center);
+    }
+
+    await Bed.right(t);
+    for (var i = 0; i < 12 && !onIt(); i++) {
+      await Bed.down(t);
+    }
+    expect(onIt(), isTrue, reason: 'the arrows reach its switch');
+    await Bed.ok(t);
+    await Bed.settle(t);
+    expect(AppSettings.streamingMode.value, !before, reason: 'OK switches it');
+    await Bed.ok(t);
+    await Bed.settle(t);
+    expect(AppSettings.streamingMode.value, before, reason: 'and back');
   }, variant: tv);
 
   testWidgets('Back at Home asks before the app closes, and Back again stays', (t) async {

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
@@ -141,3 +143,12 @@ Future<List<InternetAddress>> _doh(String host) => _dohCache[host] ??= () async 
     plain.close();
   }
 }();
+
+/// JSON from an answer's bytes. A big one (an addon's catalogue, a long list of sources from
+/// AIOStreams) is read on another isolate, so the interface keeps moving while it is: on a TV
+/// it stood still for each (a Samsung tester with four big addons: "severe frame drops, D-pad
+/// lag").
+Future<Object?> decodeJsonBytes(Uint8List bytes) {
+  if (bytes.length < 96 * 1024) return Future.value(json.decode(utf8.decode(bytes)));
+  return Isolate.run(() => json.decode(utf8.decode(bytes)));
+}

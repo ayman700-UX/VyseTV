@@ -187,7 +187,11 @@ class _SourcesPageState extends State<SourcesPage> {
   Future<void> _ask() async {
     final AddonTarget t;
     try {
+      // (the badge template too, a few seconds at most: rows listed before it is in jump when
+      // their badges arrive)
+      final badges = Badges.ready.timeout(const Duration(seconds: 3), onTimeout: () {});
       t = await Addons.target(_m, season: _ep?.season, episode: _ep?.number, anime: widget.anime?.anime);
+      await badges;
     } catch (_) {
       if (!mounted) return;
       setState(() {

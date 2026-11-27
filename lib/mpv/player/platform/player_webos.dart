@@ -42,6 +42,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../../models.dart';
+import '../../../core/platform/tv_memory.dart';
 import '../../support/app_logger.dart';
 import '../../support/header_relay.dart';
 import '../../support/subtitle_cues.dart';
@@ -73,7 +74,10 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
 
   PlayerWebos._({required this.slot, required this.audioOnly})
     : methodChannel = MethodChannel('vyse/webos_media/$slot'),
-      eventChannel = EventChannel('vyse/webos_media/$slot/events');
+      eventChannel = EventChannel('vyse/webos_media/$slot/events') {
+    // (the TV's player shares the app's memory: see TvMemory)
+    if (!audioOnly) TvMemory.filmOpened();
+  }
 
   /// Which of the TV's player slots this is (the native side keeps one player per slot).
   final int slot;
@@ -1164,6 +1168,7 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
   @override
   Future<void> dispose({bool preserveDisplayMode = false}) async {
     if (disposed) return;
+    if (!audioOnly) TvMemory.filmClosed();
     _sources++;
     _stopClock();
     final id = _windowId;

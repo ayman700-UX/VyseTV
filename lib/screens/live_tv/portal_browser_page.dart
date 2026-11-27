@@ -19,6 +19,7 @@ import '../../data/live_tv/portal_names.dart';
 import '../../models/iptv/iptv_models.dart';
 import '../../services/iptv/iptv_controller.dart';
 import '../../dpad/dpad_root.dart' show backBindings;
+import '../../dpad/input_mode_tracker.dart';
 import '../../widgets/common.dart';
 import '../../widgets/voice_search.dart';
 import 'live_tv_widgets.dart';
@@ -1629,7 +1630,9 @@ class _ChannelRowState extends State<_ChannelRow> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(13),
           color: selected ? accent.withValues(alpha: .12) : Colors.white.withValues(alpha: hovered ? .05 : 0),
-          border: Border.all(color: selected ? accent.withValues(alpha: .65) : Colors.transparent),
+          // (with a remote the ring is the outline: the playing row's own border beside it read as two
+          // focus rings, a Samsung tester, 2026-11-27; its tint and play mark say it is playing)
+          border: Border.all(color: selected && !InputModeTracker.isKeyboardMode(context) ? accent.withValues(alpha: .65) : Colors.transparent),
         ),
         child: Row(children: [
           _Logo(url: s.icon, size: 44),
@@ -1699,7 +1702,9 @@ class _GuideLines extends StatelessWidget {
     }
     final t = DateTime.now();
     final nn = NowNext.of(list, t);
-    final now = nn.now, next = nn.next;
+    // (a programme whose title is an id is no guide at all: see looksLikeId)
+    final now = nn.now == null || looksLikeId(nn.now!.title) ? null : nn.now;
+    final next = nn.next == null || looksLikeId(nn.next!.title) ? null : nn.next;
     if (now == null) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         Text(

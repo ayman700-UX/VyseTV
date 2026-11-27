@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/format.dart' show looksLikeId;
 import '../../core/theme.dart';
 import '../../services/iptv/hardcoded_channels.dart';
 import '../../widgets/common.dart';
@@ -116,7 +117,7 @@ class ChannelTile extends StatelessWidget {
                       ),
                     ),
             ),
-          _HoverCaption(hovered: hovered, title: channel.name, meta: channel.category),
+          _HoverCaption(hovered: hovered, title: channel.name, meta: looksLikeId(channel.category) ? null : channel.category),
         ]),
       );
 }

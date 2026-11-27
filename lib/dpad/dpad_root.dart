@@ -35,6 +35,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../core/compat.dart' show tickersOn;
+import '../core/platform/tizen_tv.dart' show LinuxTv;
 import 'covered_route_focus_boundary.dart';
 import 'dpad_navigator.dart';
 import 'dpad_reveal.dart';
@@ -428,6 +429,17 @@ class _DpadRootState extends State<DpadRoot> with TickerProviderStateMixin {
     _watch();
     final node = FocusManager.instance.primaryFocus;
     TvTextInput.focused(node?.context?.findAncestorStateOfType<EditableTextState>() != null);
+    // An LG or a Samsung TV says nothing of its on-screen keyboard (no inset), which covers the
+    // lower half: a text box focused low on the page sat under it (a Samsung tester, Manga's
+    // search, 2026-11-27). It goes up to the top part of the page.
+    final box = node?.context;
+    if (LinuxTv.isTv && box != null && box.findAncestorStateOfType<EditableTextState>() != null) {
+      // (two frames on: the reveal has started its own scroll by then, and this one replaces it)
+      WidgetsBinding.instance.addPostFrameCallback((_) => WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!box.mounted || FocusManager.instance.primaryFocus != node) return;
+            unawaited(Scrollable.ensureVisible(box, alignment: .15, duration: const Duration(milliseconds: 180)).catchError((Object _) {}));
+          }));
+    }
     // Out of a menu that has closed (a choice was made, or Back): Flutter hands focus to whatever
     // was focused on the page before, which can be far from the menu; it goes back to the
     // control that opened the menu instead, so the page stays where it was.

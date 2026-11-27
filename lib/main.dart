@@ -222,9 +222,26 @@ class VyseApp extends StatelessWidget {
           theme: buildVyseTheme(),
           scrollBehavior: const VyseScrollBehavior(),
           home: home,
-          builder: (context, child) => MacFullScreenScope(child: withThemeAccent(DpadRoot(onBack: () => rootNavigatorKey.currentState?.maybePop(), child: child ?? const SizedBox.shrink()))),
+          builder: (context, child) => _TvTextSize(
+            child: MacFullScreenScope(child: withThemeAccent(DpadRoot(onBack: () => rootNavigatorKey.currentState?.maybePop(), child: child ?? const SizedBox.shrink()))),
+          ),
         ),
       );
+}
+
+/// On an LG or a Samsung TV, text at the app's own size. Samsung's engine passes the TV's font
+/// size setting in as a text scale of up to 2.5, and the TV's interface, made for its own menus,
+/// grew past the boxes it sits in (a tester's Tizen 8 set: "History" cut to "Historv", season
+/// numbers over the Play and Save buttons). An Android TV keeps its own scale, as before.
+class _TvTextSize extends StatelessWidget {
+  const _TvTextSize({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!LinuxTv.isTv) return child;
+    return MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling), child: child);
+  }
 }
 
 /// Keeps [macFullScreen] in step with the Mac window.

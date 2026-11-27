@@ -45,7 +45,18 @@ class Badges {
   static void start() {
     if (_started) return;
     _started = true;
-    unawaited(_init());
+    unawaited(_init().whenComplete(_say));
+  }
+
+  static final _ready = Completer<void>();
+
+  /// Done once the template is in (from this device's copy, or fetched), or it is known there
+  /// is none. The sources page waits on it (a few seconds at most) before it lists anything, so
+  /// rows don't jump when their badges arrive (a Samsung tester, 2026-11-27).
+  static Future<void> get ready => _started ? _ready.future : Future.value(); // (never started: a test)
+
+  static void _say() {
+    if (!_ready.isCompleted) _ready.complete();
   }
 
   static Future<void> _init() async {
@@ -124,9 +135,11 @@ class Badges {
 
   static void _apply(Map<String, dynamic> j) {
     final (gs, bs) = _parse(j);
+    _memo.clear();
     groups.value = gs;
     list.value = bs;
-    _memo.clear();
+    _memo.clear(); // (and anything a listener worked out in between)
+    _say();
   }
 
   static final _memo = <String, List<SourceBadge>>{};

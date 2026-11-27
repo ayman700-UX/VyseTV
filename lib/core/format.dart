@@ -29,3 +29,9 @@ String fmtThousands(int n) {
   }
   return b.toString();
 }
+
+/// Whether [text] is an id rather than words: hexadecimal digits (and dashes) with a number in
+/// them, like `e9ec1f9a6` or a UUID. Some IPTV portals put one where a programme's title or a
+/// channel's category goes (a Samsung tester saw `e9ec1f9a6` under every channel), and it is
+/// left out wherever such a line is shown.
+bool looksLikeId(String text) => RegExp(r'^(?=.*\d)[0-9a-f-]{6,64}$', caseSensitive: false).hasMatch(text.trim());
