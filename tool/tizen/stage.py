@@ -70,7 +70,7 @@ TIZEN_PLUGINS = {
 #                                video_player_avplay, which is in the repository's own pubspec
 
 # The app's own path packages (the pubspec names them by path).
-OWN_PACKAGES = ["torrserver_flutter", "screen_brightness_windows"]
+OWN_PACKAGES = ["torrserver_flutter", "screen_brightness_windows", "vyse_usenet"]
 
 # Samsung's player plugin as published, and VyseTV's native files over it (tool/tizen/avplay).
 AVPLAY_VERSION = "0.8.23"
@@ -243,6 +243,14 @@ def main() -> None:
         if name == "torrserver_flutter":
             # its Dart only: a Samsung TV runs no engine beside the app (lib/data/sources/torrents.dart)
             keep = lambda p: p.parts[0] == "lib" or p.as_posix() in {"pubspec.yaml", "LICENSE", "LICENSE-GPL3", "NOTICE.md"}
+        if name == "vyse_usenet":
+            # its Dart only: on a Samsung TV the engine is a library loaded into the app, which
+            # tool/tizen/native.sh puts in the package (not the Go source, nor the other platforms')
+            keep = lambda p: (
+                p.parts[0] == "lib"
+                or p.as_posix() in {"pubspec.yaml", "NOTICE.md", "README.md", "engine/LICENSE"}
+                or (len(p.parts) > 1 and p.parts[0] == "engine" and p.parts[1] == "licenses")
+            )
         n += mirror(REPO / "packages" / name, out / "packages" / name, keep=keep)
     n += avplay_package(out / "packages" / "video_player_avplay")
     for name in ("analysis_options.yaml", "LICENSE"):
