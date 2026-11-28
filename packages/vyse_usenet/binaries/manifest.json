@@ -7,13 +7,13 @@
     "vyse-usenet-android-arm.zip": "b87ef8fc76932fa6244afc3c6996e5971260171aa3ab3009474117c29bfcc861",
     "vyse-usenet-android-arm64.zip": "ae3582ffcdbfff9bea6e1dfcb1654ddf2d393ca536a0ae32a392b6304ad870f3",
     "vyse-usenet-darwin-universal.zip": "69a684a20256a7b3d0b9e2aae3c0e4bf45d5fe9312e47c7cbc826b4689f8348d",
-    "vyse-usenet-ios-arm64.xcframework.zip": "019246cf8d331a73d62266394a36ebd97dec2ce25bdbdd5eeee24f246bc08c66",
+    "vyse-usenet-ios-arm64.xcframework.zip": "f5ef3cf0612e167aab2a5ca080a1733daf96e86bd02c2ae423738b69c81ffa35",
     "vyse-usenet-linux-amd64.zip": "517f5c90e121cf9f122a354fce005383eae520e7430d2e5bf1a1dbd89605c9a0",
     "vyse-usenet-linux-arm64.zip": "6aa6b6be5cb03cbca9d7694f8e40061cde32f05131d7f8bd8b64d118f842a648",
     "vyse-usenet-tizen-arm.zip": "ec180acaa63d7fbea65f7225c4471f269c7957dd74a015e38bf71d56e4adcf1a",
-    "vyse-usenet-tvos-arm64.xcframework.zip": "54a07f2420f3fb413f37150e374d237c81c4ef3a940952b0292b99eb429d181a",
+    "vyse-usenet-tvos-arm64.xcframework.zip": "7ca7f134d9fd4bf7d0108d401e90aab7f2f935ec3e04874fd8d94ac55a1c4908",
     "vyse-usenet-webos-arm.zip": "7efb3db8b116643f643f6951ffe46a5691aa1395418a615c1741617bfac1e327",
     "vyse-usenet-windows-amd64.zip": "9821a4739a89db5742a2134933593295d483bc35363ef70f27429a86c2897936"
   },
-  "ios_tvos_rebuilt": "VyseUsenet-ios/tvos from run 46165308976 (GitHub snapshot 96303bd): the yEnc decoder merged into the library"
+  "ios_tvos_rebuilt": "VyseUsenet-ios/tvos from run 46173794184 (GitHub snapshot 4859844): the Usenet engine AND the torrent engine (TorrServer MatriX.151) in one Go program (packages/vyse_usenet/apple), so the app holds one Go runtime; the yEnc decoder merged into the library as before"
 }
