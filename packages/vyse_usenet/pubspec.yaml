@@ -1,0 +1,34 @@
+name: vyse_usenet
+description: VyseTV's Usenet engine (engine/, a Go program), shipped with the app on every platform VyseTV runs on, and the few native calls that start it.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  ffi: ^2.1.2
+
+flutter:
+  plugin:
+    platforms:
+      # the engine is a program the app starts; the plugin says where Android installed it
+      android:
+        package: com.vyse.usenet
+        pluginClass: VyseUsenetPlugin
+      # linked into the app (an iPhone app starts no program): started through the plugin
+      ios:
+        pluginClass: VyseUsenetPlugin
+      # a program next to the app; the build only has to ship it (no code of the plugin's own)
+      macos:
+        ffiPlugin: true
+      linux:
+        ffiPlugin: true
+      windows:
+        ffiPlugin: true
+      # LG webOS: only LG's tool reads this key (other Flutter tools pass it by)
+      webos:
+        ffiPlugin: true

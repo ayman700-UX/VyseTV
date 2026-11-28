@@ -122,6 +122,10 @@ class PlaybackReport {
   /// or 'video', [line] the engine's own words as it did.
   PlaybackReport withDropped(String part, String line) => _with({'dropped': {'part': part, 'line': scrub(line)}});
 
+  /// A Samsung TV's video went to the TV's basic media player because its streaming player
+  /// didn't start it ([why]).
+  PlaybackReport withTvBasicPlayer(String why) => _with({'tvBasic': scrub(why)});
+
   /// The player closed, [afterMs] after the open.
   PlaybackReport closed(int afterMs) => _with({'closedAfterMs': afterMs});
 
@@ -192,6 +196,7 @@ class PlaybackReport {
   String get engineLine {
     // (a Media3 player that has given one video to mpv plays the ones after it on mpv too)
     if (_s('engine') == 'mpv-kept') return 'mpv, since Media3 gave an earlier video up';
+    if (onTv && _s('tvBasic').isNotEmpty) return "The TV's basic player (${_s('tvBasic')})";
     if (onTv) return "The TV's own player";
     if (!onMedia3) return 'mpv';
     if (!handedOver) return 'Media3';

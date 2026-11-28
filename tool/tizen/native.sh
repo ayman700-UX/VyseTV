@@ -10,6 +10,9 @@
 #    flutter-tizen builds plugins' C++.
 #  * libtorrserver.so: the torrent engine, inside the app's process
 #    (packages/torrserver_flutter/tool/go-shim/build-tizen-so.sh).
+#  * libvyse_usenet.so: the Usenet engine, inside the app's process, as built by the
+#    usenet-engine workflow (packages/vyse_usenet/binaries/vyse-usenet-tizen-arm.zip, checked
+#    against binaries/manifest.json).
 #
 # Both are built for 32-bit ARM against Tizen 6.0, which every newer TV runs too.
 #
@@ -70,6 +73,13 @@ cp "$proj/Release/libquickjs_c_bridge_plugin.so" "$OUT/"
 echo "== the torrent engine"
 bash "$REPO/packages/torrserver_flutter/tool/go-shim/build-tizen-so.sh" "$OUT"
 
+echo "== the Usenet engine"
+USENET_ZIP="$REPO/packages/vyse_usenet/binaries/vyse-usenet-tizen-arm.zip"
+want="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['sha256']['vyse-usenet-tizen-arm.zip'])" "$REPO/packages/vyse_usenet/binaries/manifest.json")"
+got="$(sha256sum "$USENET_ZIP" | cut -d' ' -f1)"
+[ "$got" = "$want" ] || { echo "vyse-usenet-tizen-arm.zip is not the build manifest.json names ($got)"; exit 1; }
+unzip -o -q "$USENET_ZIP" libvyse_usenet.so -d "$OUT"
+
 echo "== what was built"
 for lib in "$OUT"/*.so; do
   file "$lib"
@@ -85,5 +95,9 @@ done
 torr_syms="$(readelf --dyn-syms -W "$OUT/libtorrserver.so" | grep -v ' UND ')"
 for sym in TorrServerStart TorrServerStop TorrServerIsRunning TorrServerFree; do
   grep -qw "$sym" <<<"$torr_syms" || { echo "libtorrserver.so has no $sym"; exit 1; }
+done
+usenet_syms="$(readelf --dyn-syms -W "$OUT/libvyse_usenet.so" | grep -v ' UND ')"
+for sym in VyseUsenetStart VyseUsenetStop VyseUsenetError; do
+  grep -qw "$sym" <<<"$usenet_syms" || { echo "libvyse_usenet.so has no $sym"; exit 1; }
 done
 echo "native libraries ready in $OUT"

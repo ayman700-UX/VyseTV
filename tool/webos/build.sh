@@ -89,12 +89,15 @@ IPK="$(ls -t "$STAGE"/build/webos/*/"$MODE"/ipk/*.ipk 2>/dev/null | head -n 1 ||
 # the package file by file, which drops every "this is a program" mark, and then puts the mark
 # back on the app's main program only. So the engine is marked here, in the folder the tool
 # packed from, and the package is made again the same way the tool made it.
+# The Usenet engine (packages/vyse_usenet) is a program too, and is marked the same way.
 IPK_DIR="$(dirname "$IPK")"
 ENGINE="$(find "$IPK_DIR/data" -type f -path '*/lib/torrserver-linux-arm7' 2>/dev/null | head -n 1 || true)"
-if [ -n "$ENGINE" ] && [ ! -x "$ENGINE" ]; then
-  echo "== 2b. the torrent engine marked as a program, and the package made again"
-  chmod 755 "$ENGINE"
-  APP_DIR="$(dirname "$(dirname "$ENGINE")")"
+USENET="$(find "$IPK_DIR/data" -type f -path '*/lib/vyse-usenet' 2>/dev/null | head -n 1 || true)"
+if { [ -n "$ENGINE" ] && [ ! -x "$ENGINE" ]; } || { [ -n "$USENET" ] && [ ! -x "$USENET" ]; }; then
+  echo "== 2b. the torrent and Usenet engines marked as programs, and the package made again"
+  [ -n "$ENGINE" ] && chmod 755 "$ENGINE"
+  [ -n "$USENET" ] && chmod 755 "$USENET"
+  APP_DIR="$(dirname "$(dirname "${ENGINE:-$USENET}")")"
   rm -f "$IPK_DIR"/*.ipk
   (cd "$IPK_DIR" && ares-package --no-minify "$APP_DIR" -o "$IPK_DIR")
   IPK="$(ls -t "$IPK_DIR"/*.ipk 2>/dev/null | head -n 1 || true)"
@@ -117,12 +120,14 @@ want "LG's Flutter engine"                                 '/lib/libflutter_engi
 want "the player's native side (libvyse_webos_plugin.so)"  '/lib/libvyse_webos_plugin\.so$'
 want "the JavaScript engine for scraper plugins"           '/lib/libquickjs_c_bridge_plugin\.so$'
 want "the torrent engine"                                  '/lib/torrserver-linux-arm7$'
+want "the Usenet engine"                                   '/lib/vyse-usenet$'
 if [ "$VOICE" = 1 ]; then
   want "the party's voice (libvyse_voice.so)"              '/lib/libvyse_voice\.so$'
 else
   echo "   none     the party's voice (it did not build: see step 0)"
 fi
 want "the torrent engine, marked as a program"             '^-rwx[r-]-x[r-]-x .*/lib/torrserver-linux-arm7$'
+want "the Usenet engine, marked as a program"              '^-rwx[r-]-x[r-]-x .*/lib/vyse-usenet$'
 want "the app's description for the TV (appinfo.json)"     '/appinfo\.json$'
 echo "   its programs and libraries:"
 printf '%s\n' "$LIST" | grep -E '/lib/[^/]+$|/appinfo\.json$|^-rwx' | awk '{print "     " $1 "  " $3 "  " $NF}' | sort -u -k3 | head -n 60
@@ -145,6 +150,7 @@ want "its own runtime (glibc, the C++ library)"            '/runtime/libc\.so\.6
 want "the stand-ins for what an older TV lacks"            '/lib/libvyse_sdevent\.so$'
 want "the app's program, marked as one"                    '^-rwx[r-]-x[r-]-x .*/vysetv$'
 want "the torrent engine, marked as a program"             '^-rwx[r-]-x[r-]-x .*/lib/torrserver-linux-arm7$'
+want "the Usenet engine, marked as a program"              '^-rwx[r-]-x[r-]-x .*/lib/vyse-usenet$'
 want "the app's own code (libapp.so)"                      '/lib/libapp\.so$'
 [ "$BAD" = 0 ] || { echo "The package for older webOS is not whole: see above." >&2; exit 1; }
 echo

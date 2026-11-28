@@ -51,6 +51,10 @@ def main() -> None:
     # Samsung's player plugin and the TV player libraries it carries for this Tizen version
     has(r"video_player_avplay|video_player_tizen_plugin", "Samsung's player plugin")
     has(r"libplusplayer", "Samsung's player libraries")
+    # VyseTV's build of that plugin (tool/tizen/avplay): its library knows the basic-player option
+    plugin_libs = [n for n in names if n.endswith(".so") and "video_player_avplay" in n]
+    if plugin_libs and not any(b"vyseBasicPlayer" in z.read(n) for n in plugin_libs):
+        wrong.append("Samsung's player plugin is the published one, not VyseTV's build of it (tool/tizen/avplay)")
     has(r"flutter_assets/AssetManifest", "the app's assets")
     # the TV's own libraries (tool/tizen/native.sh): scraper plugins and torrents need them
     has(r"^lib/libquickjs_c_bridge_plugin\.so$", "the JavaScript engine (libquickjs_c_bridge_plugin.so)", least=500_000)

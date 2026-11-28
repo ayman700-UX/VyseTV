@@ -8,3 +8,7 @@
 #import "LocalAudioTrack.h"
 #import "AudioProcessingAdapter.h"
 #import "AudioManager.h"
+
+// The Usenet engine linked into the app (VyseUsenet-tvos.xcframework): its C entry points,
+// called by packages/vyse_usenet/ios/Classes/VyseUsenetPlugin.swift
+#import "../../packages/vyse_usenet/ios/Classes/VyseUsenetEngine.h"

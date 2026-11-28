@@ -200,6 +200,25 @@ class AppSettings {
   static final torrentTrackers = Setting<String>('play.trackers', '');
   static final publicTrackers = Setting<bool>('play.publicTrackers', true);
 
+  // Usenet (Settings > Usenet > Playback and engine): this device's engine, never synced. Your
+  // providers, indexers and search filters are in the keychain (lib/data/usenet/usenet_sources.dart).
+  static final usenetAllowPrivate = Setting<bool>('device.usenet.allowPrivateNetwork', false);
+  static final usenetSearchUserAgent = Setting<String>('device.usenet.searchUserAgent', '');
+  static final usenetDownloadUserAgent = Setting<String>('device.usenet.downloadUserAgent', '');
+  static final usenetFallback = Setting<bool>('device.usenet.fallback', false);
+  static final usenetFallbackMax = Setting<int>('device.usenet.fallbackMax', 5);
+  static final usenetHoleFilling = Setting<bool>('device.usenet.holeFilling', false);
+  static final usenetMaxMissing = Setting<int>('device.usenet.maxMissing', 5);
+  static final usenetMaxConsecutiveMissing = Setting<int>('device.usenet.maxConsecutiveMissing', 2);
+  static final usenetPrefetch = Setting<bool>('device.usenet.prefetch', false);
+  static final usenetCacheNzb = Setting<bool>('device.usenet.cacheNzb', true);
+  static final usenetFastMkv = Setting<bool>('device.usenet.fastMkv', true);
+  static final usenetFastNzb = Setting<bool>('device.usenet.fastNzb', true);
+  static final usenetPrewarm = Setting<bool>('device.usenet.prewarm', false);
+  static final usenetProfile = Setting<String>('device.usenet.profile', 'balanced');
+  static final usenetReadAhead = Setting<int>('device.usenet.readAhead', 0);
+  static final usenetMaxConnections = Setting<int>('device.usenet.maxConnections', 0);
+
   static List<Setting<Object?>> get _all => [
         displayName, avatarUrl, avatarLabel, themeId, navOrder, navOff,
         addons, streamingMode, autoNext, autoplayBest, autoplayOrder, autoplayRest, autoSubtitles, seekSeconds, skipButtonsOff, p2pStreaming, sourceOrder, sourcesOff, trackAniList, trackRewatches, simklScrobble, simklList, simklHistory,
@@ -210,6 +229,8 @@ class AppSettings {
         audioDelayMs, audioPassthrough, audioChannels, hdrOutput, matchRefreshRate, playerEngine, mpvHandOver, videoDecoding, leanMotion, pictureShape, playSideways, volumeLevelling,
         upscaler, ambientLight, partyLibrary, musicAutoplay, debridProvider, debridOn, updateAuto, updateSkipped, addonsRefreshed,
         torrentMemory, torrentPreload, torrentConnections, torrentUpload, torrentTrackers, publicTrackers, myListGrid, myListSort, partyMembers, partySounds, partyMuted, animeAdult, animeAudio,
+        usenetAllowPrivate, usenetSearchUserAgent, usenetDownloadUserAgent, usenetFallback, usenetFallbackMax, usenetHoleFilling, usenetMaxMissing,
+        usenetMaxConsecutiveMissing, usenetPrefetch, usenetCacheNzb, usenetFastMkv, usenetFastNzb, usenetPrewarm, usenetProfile, usenetReadAhead, usenetMaxConnections,
       ];
 
   static Future<void> initialize() async {

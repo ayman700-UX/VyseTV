@@ -9,13 +9,13 @@ It is a Go program run beside the app, the way the torrent engine (TorrServer) i
 
 | Platform | How it runs | File (in `binaries/`) |
 | --- | --- | --- |
-| Android, Android TV | a program the app starts from its native library folder | `android-<abi>/libvyse_usenet.so` |
-| Windows | a program next to the app | `windows-amd64/vyse-usenet.exe` |
-| Linux | a program inside the AppImage | `linux-<arch>/vyse-usenet` |
-| macOS | a program inside the app bundle (Intel and Apple silicon) | `darwin-universal/vyse-usenet` |
-| LG TVs (webOS) | a program in the package, linked statically | `webos-arm/vyse-usenet` |
-| Samsung TVs (Tizen) | a library loaded into the app's process | `tizen-arm/libvyse_usenet.so` |
-| iPhone/iPad, Apple TV | a library linked into the app | `ios-arm64/VyseUsenet-ios.xcframework.zip`, `tvos-arm64/VyseUsenet-tvos.xcframework.zip` |
+| Android, Android TV | a program the app starts from its native library folder | `vyse-usenet-android-{arm64,arm,amd64}.zip` (`libvyse_usenet.so`) |
+| Windows | a program next to the app | `vyse-usenet-windows-amd64.zip` (`vyse-usenet.exe`) |
+| Linux | a program inside the AppImage | `vyse-usenet-linux-{amd64,arm64}.zip` |
+| macOS | a program inside the app bundle (Intel and Apple silicon) | `vyse-usenet-darwin-universal.zip` |
+| LG TVs (webOS) | a program in the package, linked statically | `vyse-usenet-webos-arm.zip` |
+| Samsung TVs (Tizen) | a library loaded into the app's process | `vyse-usenet-tizen-arm.zip` (`libvyse_usenet.so`) |
+| iPhone/iPad, Apple TV | a library linked into the app | `vyse-usenet-ios-arm64.xcframework.zip`, `vyse-usenet-tvos-arm64.xcframework.zip` |
 
 ## Talking to it
 
@@ -41,6 +41,6 @@ fields.
 
 The GitHub workflow `.github/workflows/usenet-engine.yml` builds every target and runs the
 engine's tests (`go test ./...` in `engine/`); a push whose message has `[usenet-engine]`
-starts it. Its results are committed to `binaries/`.
+starts it. Its results are committed to `binaries/`, with `binaries/manifest.json` naming the run and each file's SHA-256.
 
 `NOTICE.md` has the licence and the open-source code the engine is built from.

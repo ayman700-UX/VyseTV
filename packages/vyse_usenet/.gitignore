@@ -4,3 +4,7 @@ engine/third_party/rapidyenc/librapidyenc_android_*.a
 engine/third_party/rapidyenc/librapidyenc_ios_arm64.a
 engine/third_party/rapidyenc/librapidyenc_linux_arm.a
 dist/
+# unpacked from binaries/ when the app is built
+android/src/main/jniLibs/
+macos/bin/
+ios/VyseUsenet-ios.xcframework/

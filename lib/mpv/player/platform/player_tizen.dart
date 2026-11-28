@@ -30,6 +30,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -121,6 +122,51 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
   // how many times for this film (a link that is really gone ends it the third time).
   int _faultReopens = 0;
   bool _reopening = false; // [open] called by [_openAgain], for the film already open
+
+  // ── which of the TV's two players ──
+  // A web address goes to the TV's streaming player (Samsung's PlusPlayer). On some TVs it
+  // never says it is ready, or can't prepare at all with the certificate the app was signed
+  // with (a Tizen 6.5 tester, 2026-11-28: every video stayed on its spinner, no sound, no
+  // error). The TV's basic media player is the way round: a video the streaming player hasn't
+  // started in [readyWait], or says it can't prepare, opens again on the basic one where it
+  // was; a TV where that saved two videos in a row starts on the basic one from then on.
+  static const readyWait = Duration(seconds: 20);
+
+  /// How long the player has to say a video is ready: [readyWait] for the streaming player
+  /// on a web link; longer for one on this device (a torrent the engine is still finding peers
+  /// for), and for the basic player, which is the last try.
+  Duration get _readyWaitNow {
+    if (_basicNow) return const Duration(seconds: 60);
+    final host = Uri.tryParse(_media?.uri ?? '')?.host ?? '';
+    return host == '127.0.0.1' || host == 'localhost' ? const Duration(seconds: 45) : readyWait;
+  }
+  static const _basicKey = 'device.tv.basicPlayer'; // the basic player first on this TV
+  static const _rescuesKey = 'device.tv.basicRescues'; // videos in a row it saved
+  static bool? _basicFirst;
+  static int _rescues = 0;
+  bool _basicNow = false; // this video is on the basic player
+  bool _triedBasic = false; // this video went to the basic player after the streaming one
+  Timer? _readyTimer;
+
+  static Future<void>? _loadingPlayers;
+  static Future<void> _loadPlayers() => _loadingPlayers ??= () async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _basicFirst ??= prefs.getBool(_basicKey) ?? false;
+      _rescues = prefs.getInt(_rescuesKey) ?? _rescues;
+    } catch (_) {}
+  }();
+
+  /// Whether what plays now is on the TV's basic player.
+  bool get onBasicPlayer => _basicNow;
+
+  /// Tests: forget what this TV remembered about its players.
+  @visibleForTesting
+  static void debugResetPlayers({bool? basicFirst}) {
+    _basicFirst = basicFirst;
+    _rescues = 0;
+    _loadingPlayers = basicFirst == null ? null : Future.value();
+  }
   // The sound track to put back on once the film opened again plays: (track id, language).
   (int, String)? _wantSound;
   int? _activeSoundId; // the sound track the TV says it plays (it may be one it does not list)
@@ -165,6 +211,8 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     if (initialized) return;
     try {
       await (_tvReady ??= _tv.init());
+      // (what this TV remembered of its players: read beside, never holding the player up)
+      if (_basicFirst == null) unawaited(_loadPlayers());
       if (disposed) throw StateError('Player was disposed during initialization');
       initialized = true;
       _lifecycle ??= _Lifecycle(this)..attach();
@@ -191,6 +239,8 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     if (!_reopening) {
       _faultReopens = 0;
       _wantSound = null;
+      _triedBasic = false;
+      _basicNow = _basicFirst ?? false;
     }
     final startPosition = media.start ?? timelineOffset;
     final previousState = state;
@@ -225,7 +275,7 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
       handlePropertyChange('paused-for-cache', true);
       _startMs = isLive ? 0 : sourceStart.inMilliseconds;
       _clockMs = _startMs;
-      final id = await _tv.create(dataSource(address, streaming: told));
+      final id = await _tv.create(dataSource(address, streaming: told, basic: _basicNow));
       if (id == null || id < 0) throw PlatformException(code: 'CREATE', message: "The TV's player did not take the video");
       if (disposed || source != _sources) {
         unawaited(_quiet(() => _tv.dispose(id)));
@@ -234,6 +284,10 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
       _id = id;
       _events = _tv.videoEventsFor(id).listen((e) => _onEvent(source, e), onError: (Object e) => _onError(source, e));
       unawaited(_placePicture());
+      // (never a spinner for ever: a player that hasn't said it is ready by then gives way)
+      _readyTimer?.cancel();
+      final wait = _readyWaitNow;
+      _readyTimer = Timer(wait, () => _notReady(source, wait));
     } catch (_) {
       if (!disposed && source == _sources) {
         configureTimeline(duration: previousTimelineDuration, offset: previousTimelineOffset);
@@ -252,10 +306,14 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
   /// reads it as a 64-bit number, and a number that small is sent as 32 bits), so the start is
   /// a seek before the first play ([_onLoaded]).
   @visibleForTesting
-  static avplay.DataSource dataSource(String address, {Map<avplay.StreamingPropertyType, String> streaming = const {}}) {
+  ///
+  /// [basic]: a web address goes to the TV's basic media player rather than its streaming one
+  /// (our build of the plugin, tool/tizen/avplay, takes `vyseBasicPlayer`).
+  static avplay.DataSource dataSource(String address, {Map<avplay.StreamingPropertyType, String> streaming = const {}, bool basic = false}) {
     final path = (Uri.tryParse(address)?.path ?? address).toLowerCase();
     final web = address.startsWith('http://') || address.startsWith('https://');
     return avplay.DataSource(
+      playerOptions: web && basic ? const {'vyseBasicPlayer': true} : null,
       // (a file on this device goes to the TV's other player, which takes no headers)
       sourceType: web ? avplay.DataSourceType.network : avplay.DataSourceType.file,
       uri: address,
@@ -328,6 +386,8 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     final events = _events;
     _events = null;
     _loaded = false;
+    _readyTimer?.cancel();
+    _readyTimer = null;
     _stopClock();
     // (not waited for: nothing comes of it, and its own future may never be one to wait on)
     unawaited(events?.cancel());
@@ -369,6 +429,9 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     final id = _id;
     if (_loaded || id == null) return;
     _loaded = true;
+    _readyTimer?.cancel();
+    _readyTimer = null;
+    unawaited(_rememberPlayer());
     final range = e.duration;
     _durationMs = _live || range == null ? 0 : range.end.inMilliseconds;
     if (_durationMs > 0) handlePropertyChange('duration', _durationMs / 1000);
@@ -587,6 +650,65 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
   /// as such; once the film is open, it ends only if the TV's player has really stopped; before
   /// that, it did not play.
   void _onError(int source, Object error) {
+    final message = error is PlatformException ? (error.message ?? '') : error.toString();
+    // (a half of the video the TV plays on without, said as it prepares, is no failure to start)
+    if (!disposed && source == _sources && !_loaded && !_basicNow && _web && partGone(message) == null) {
+      final code = error is PlatformException ? error.code : '';
+      appLogger.w('[Tizen] the streaming player did not start the video: $code $message');
+      unawaited(_toBasic(source, code == 'PrepareFailed' ? "The TV's streaming player could not prepare it" : "The TV's streaming player failed: ${errorNote(message)}"));
+      return;
+    }
+    _onErrorNow(source, error);
+  }
+
+  /// Whether what is open is a web address (the only kind the streaming player takes).
+  bool get _web {
+    final u = _media?.uri ?? '';
+    return u.startsWith('http://') || u.startsWith('https://');
+  }
+
+  /// [wait] after the open, the player still hasn't said the video is ready.
+  void _notReady(int source, Duration wait) {
+    if (disposed || source != _sources || _loaded) return;
+    appLogger.w('[Tizen] not ready after ${wait.inSeconds} s (${_basicNow ? 'basic' : 'streaming'} player)');
+    if (!_basicNow && _web) {
+      unawaited(_toBasic(source, "The TV's streaming player didn't start it in ${wait.inSeconds} s"));
+      return;
+    }
+    _end(source, _triedBasic ? "The TV's player didn't start this video (neither of its two players did)" : "The TV's player didn't start this video in ${wait.inSeconds} s");
+  }
+
+  /// Opens the video again on the TV's basic media player, where it was.
+  Future<void> _toBasic(int source, String why) async {
+    if (disposed || source != _sources || _loaded || _basicNow) return;
+    _readyTimer?.cancel();
+    _triedBasic = true;
+    _basicNow = true;
+    logController.add(PlayerLog(level: PlayerLogLevel.warn, prefix: 'tv-basic', text: why));
+    if (!await _openAgain() && !disposed) _end(_sources, why);
+  }
+
+  /// A video started: on the basic player after the streaming one gave up, that counts towards
+  /// starting on the basic player from now on (two in a row); on the streaming player, the
+  /// count starts again.
+  Future<void> _rememberPlayer() async {
+    final before = (_basicFirst, _rescues);
+    if (_triedBasic) {
+      _rescues++;
+      if (_rescues >= 2) _basicFirst = true;
+      appLogger.i('[Tizen] the basic player started what the streaming one did not ($_rescues in a row)');
+    } else if (!_basicNow) {
+      _rescues = 0;
+    }
+    if ((_basicFirst, _rescues) == before) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_basicKey, _basicFirst ?? false);
+      await prefs.setInt(_rescuesKey, _rescues);
+    } catch (_) {}
+  }
+
+  void _onErrorNow(int source, Object error) {
     if (disposed || source != _sources) return;
     final code = error is PlatformException ? error.code : '';
     final message = error is PlatformException ? (error.message ?? '') : error.toString();

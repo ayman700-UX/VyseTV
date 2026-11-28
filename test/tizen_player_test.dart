@@ -10,6 +10,7 @@ import 'package:clock/clock.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show AppLifecycleState, Size;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player_avplay/video_player.dart' show AudioTrack, TextTrack, Track, TrackType, VideoTrack;
 import 'package:video_player_avplay/video_player_platform_interface.dart';
 import 'package:vyse_tv/core/platform/tizen_tv.dart';
@@ -154,6 +155,8 @@ void main() {
     tv = _Tv();
     PlayerTizen.debugTv = tv;
     PlayerTizen.debugForgetTv();
+    SharedPreferences.setMockInitialValues({});
+    PlayerTizen.debugResetPlayers(basicFirst: false);
     TizenTv.debugIs = true;
   });
 
@@ -442,7 +445,13 @@ void main() {
     final player = await opened(t);
     final errors = <m.PlayerError>[];
     player.streams.error.listen(errors.add);
+    // (before the video was ready, the streaming player gives way to the basic one first)
     tv.events[0]!.addError(PlatformException(code: 'PlusPlayer error', message: 'Error: Not supported file'));
+    for (var i = 0; i < 6; i++) {
+      await t.pump();
+    }
+    expect(tv.calls, contains('create 1'));
+    tv.events[1]!.addError(PlatformException(code: 'MediaPlayer error', message: 'Error: Not supported file'));
     for (var i = 0; i < 4; i++) {
       await t.pump();
     }
@@ -708,5 +717,105 @@ void main() {
     ]), 'One\nTwo & three');
     expect(PlayerTizen.codecOf('audio/mpeg'), 'mpeg');
     expect(PlayerTizen.codecOf('video/x-h264'), 'h264');
+  });
+
+  group("the TV's two players", () {
+    bool basic(DataSource d) => d.playerOptions?['vyseBasicPlayer'] == true;
+
+    tvTest("a video the streaming player never says is ready opens again on the basic player, where it was", (t) async {
+      final player = await opened(t, start: const Duration(minutes: 7));
+      final logs = <m.PlayerLog>[];
+      player.streams.log.listen(logs.add);
+      expect(basic(tv.sources.single), isFalse);
+      await t.pump(PlayerTizen.readyWait - const Duration(seconds: 1));
+      expect(tv.sources, hasLength(1), reason: 'not before its time');
+      await t.pump(const Duration(seconds: 2));
+      for (var i = 0; i < 6; i++) {
+        await t.pump();
+      }
+      expect(tv.calls, containsAllInOrder(['dispose 0', 'create 1']));
+      expect(basic(tv.sources[1]), isTrue);
+      expect(logs.where((l) => l.prefix == 'tv-basic').single.text, "The TV's streaming player didn't start it in 20 s");
+      await say(t, _loaded(), id: 1);
+      expect(tv.calls, containsAllInOrder(['seek 1 420000', 'play 1']), reason: 'where it was to start');
+      expect(player.onBasicPlayer, isTrue);
+    });
+
+    tvTest('a streaming player that says it cannot prepare gives way at once', (t) async {
+      await opened(t);
+      tv.events[0]!.addError(PlatformException(code: 'PrepareFailed', message: "The TV's player could not prepare the video."));
+      for (var i = 0; i < 6; i++) {
+        await t.pump();
+      }
+      expect(basic(tv.sources.last), isTrue);
+      await say(t, _loaded(), id: 1);
+      expect(tv.calls, contains('play 1'));
+    });
+
+    tvTest('neither player starting it ends it, with the reason', (t) async {
+      final player = await opened(t);
+      final errors = <m.PlayerError>[];
+      player.streams.error.listen(errors.add);
+      await t.pump(PlayerTizen.readyWait + const Duration(seconds: 1));
+      for (var i = 0; i < 6; i++) {
+        await t.pump();
+      }
+      expect(basic(tv.sources.last), isTrue);
+      await t.pump(const Duration(seconds: 61));
+      for (var i = 0; i < 4; i++) {
+        await t.pump();
+      }
+      expect(errors.single.message, "The TV's player didn't start this video (neither of its two players did)");
+    });
+
+    tvTest('a torrent on this device gets longer before the basic player is tried', (t) async {
+      await opened(t, uri: 'http://127.0.0.1:8090/stream/film.mkv');
+      await t.pump(const Duration(seconds: 30));
+      expect(tv.sources, hasLength(1));
+      await t.pump(const Duration(seconds: 16));
+      for (var i = 0; i < 6; i++) {
+        await t.pump();
+      }
+      expect(basic(tv.sources.last), isTrue);
+    });
+
+    tvTest('two videos in a row saved by the basic player: this TV starts on it from then on', (t) async {
+      for (var n = 0; n < 2; n++) {
+        await opened(t);
+        final id = tv.sources.length - 1;
+        await t.pump(PlayerTizen.readyWait + const Duration(seconds: 1));
+        for (var i = 0; i < 6; i++) {
+          await t.pump();
+        }
+        await say(t, _loaded(), id: id + 1);
+      }
+      await opened(t);
+      expect(basic(tv.sources.last), isTrue, reason: 'the third video goes straight to the basic player');
+    });
+
+    tvTest('a video the streaming player plays starts the count again', (t) async {
+      await opened(t);
+      await t.pump(PlayerTizen.readyWait + const Duration(seconds: 1));
+      for (var i = 0; i < 6; i++) {
+        await t.pump();
+      }
+      await say(t, _loaded(), id: 1);
+      await opened(t);
+      await say(t, _loaded(), id: 2);
+      await opened(t);
+      await t.pump(PlayerTizen.readyWait + const Duration(seconds: 1));
+      for (var i = 0; i < 6; i++) {
+        await t.pump();
+      }
+      await say(t, _loaded(), id: 4);
+      await opened(t);
+      expect(basic(tv.sources.last), isFalse, reason: 'one rescue since the streaming player last played');
+    });
+
+    test('a file on this device never asks for the basic player (it is the only one there)', () {
+      expect(PlayerTizen.dataSource('/opt/usr/home/film.mkv', basic: true).playerOptions, isNull);
+      expect(PlayerTizen.dataSource('https://cdn.example/film.mkv', basic: true).playerOptions, {'vyseBasicPlayer': true});
+      expect(PlayerTizen.dataSource('https://cdn.example/film.mkv').playerOptions, isNull);
+    });
   });
 }

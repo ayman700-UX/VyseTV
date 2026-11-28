@@ -10,6 +10,11 @@ repository's pubspec.yaml and pubspec.lock are never touched.
 
 What the copy is: the app's lib/ and assets/ as they are, the Tizen project (tizen/), the
 app's own path packages, and the repository's pubspec.yaml with the Tizen sides added.
+
+Samsung's player plugin (video_player_avplay) goes in as a path package of the copy: its
+release from pub.dev, checked by its SHA-256, with VyseTV's changed native files laid over it
+(tool/tizen/avplay: a player that never says it is ready, or fails to prepare, no longer
+leaves a video on its spinner; and the TV's basic player can be asked for).
 Nothing in lib/ is changed for Tizen: what differs there is asked at run time
 (lib/core/platform/tizen_tv.dart), with the build's --dart-define=VYSE_TIZEN=true.
 
@@ -29,10 +34,13 @@ TVs each one is for).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import shutil
 import sys
+import tarfile
+import urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -64,6 +72,11 @@ TIZEN_PLUGINS = {
 # The app's own path packages (the pubspec names them by path).
 OWN_PACKAGES = ["torrserver_flutter", "screen_brightness_windows"]
 
+# Samsung's player plugin as published, and VyseTV's native files over it (tool/tizen/avplay).
+AVPLAY_VERSION = "0.8.23"
+AVPLAY_SHA256 = "4854c8cda0af405ac96f9ba177334e58fde7e50019a87b6cbb7b3e343e49dd27"
+AVPLAY_URL = f"https://pub.dev/api/archives/video_player_avplay-{AVPLAY_VERSION}.tar.gz"
+
 
 def tizen_pubspec(text: str) -> str:
     """The repository's pubspec.yaml, with the Tizen sides of the plugins added."""
@@ -78,7 +91,56 @@ def tizen_pubspec(text: str) -> str:
     # nothing to make launcher icons for (the TV's is tizen/shared/res/ic_launcher.png)
     text = re.sub(r"(?ms)^flutter_launcher_icons:\n.*?(?=^\S)", "", text, count=1)
     text = re.sub(r"(?m)^  flutter_launcher_icons: .*\n", "", text, count=1)
+    # Samsung's player plugin: the copy's own, with VyseTV's changes (avplay_package)
+    pinned = f"  video_player_avplay: {AVPLAY_VERSION}\n"
+    if pinned not in text:
+        raise SystemExit(f"pubspec.yaml: video_player_avplay is not pinned at {AVPLAY_VERSION} (tool/tizen/stage.py patches that release)")
+    text = text.replace(pinned, "  video_player_avplay:\n    path: packages/video_player_avplay\n", 1)
     return text
+
+
+def avplay_archive() -> Path:
+    """video_player_avplay's release archive, downloaded once into build/ and checked."""
+    cached = REPO / "build" / "tizen_stage" / "_downloads" / f"video_player_avplay-{AVPLAY_VERSION}.tar.gz"
+    if not cached.exists() or hashlib.sha256(cached.read_bytes()).hexdigest() != AVPLAY_SHA256:
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        with urllib.request.urlopen(AVPLAY_URL, timeout=120) as r:
+            data = r.read()
+        if hashlib.sha256(data).hexdigest() != AVPLAY_SHA256:
+            raise SystemExit(f"{AVPLAY_URL}: not the archive expected (SHA-256 differs)")
+        cached.write_bytes(data)
+    return cached
+
+
+def avplay_package(dest: Path) -> int:
+    """Lays out Samsung's player plugin at [dest]: the release, then VyseTV's files over it."""
+    marker = dest / ".vyse-avplay"
+    patch = REPO / "tool" / "tizen" / "avplay"
+    stamp = AVPLAY_SHA256 + "".join(
+        hashlib.sha256(f.read_bytes()).hexdigest() for f in sorted(patch.rglob("*")) if f.is_file()
+    )
+    if marker.exists() and marker.read_text(encoding="utf-8") == stamp:
+        return 0
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True)
+    with tarfile.open(avplay_archive(), "r:gz") as tar:
+        for m in tar.getmembers():
+            name = Path(m.name)
+            if name.is_absolute() or ".." in name.parts:
+                raise SystemExit(f"video_player_avplay archive: unexpected path {m.name}")
+            if name.parts and name.parts[0] == "example":
+                continue
+        tar.extractall(dest, members=[m for m in tar.getmembers() if not m.name.startswith("example")])
+    n = 0
+    for f in sorted((patch / "src").glob("*")):
+        target = dest / "tizen" / "src" / f.name
+        if not target.exists():
+            raise SystemExit(f"tool/tizen/avplay/src/{f.name}: the plugin has no such file to replace")
+        shutil.copy2(f, target)
+        n += 1
+    marker.write_text(stamp, encoding="utf-8")
+    return n
 
 
 def app_version(pubspec_text: str) -> str:
@@ -182,6 +244,7 @@ def main() -> None:
             # its Dart only: a Samsung TV runs no engine beside the app (lib/data/sources/torrents.dart)
             keep = lambda p: p.parts[0] == "lib" or p.as_posix() in {"pubspec.yaml", "LICENSE", "LICENSE-GPL3", "NOTICE.md"}
         n += mirror(REPO / "packages" / name, out / "packages" / name, keep=keep)
+    n += avplay_package(out / "packages" / "video_player_avplay")
     for name in ("analysis_options.yaml", "LICENSE"):
         if (REPO / name).exists():
             shutil.copy2(REPO / name, out / name)

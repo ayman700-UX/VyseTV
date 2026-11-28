@@ -1,0 +1,152 @@
+// Copyright 2022 Samsung Electronics Co., Ltd. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+// Changed for VyseTV (tool/tizen/avplay/README.md): see the lines marked "VyseTV".
+
+#ifndef FLUTTER_PLUGIN_VIDEO_PLAYER_H_
+#define FLUTTER_PLUGIN_VIDEO_PLAYER_H_
+
+#include <flutter/encodable_value.h>
+#include <flutter/event_channel.h>
+#include <flutter_tizen.h>
+#include <glib.h>
+
+#include <atomic>
+
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <string>
+#include <utility>
+
+#include "messages.h"
+
+namespace video_player_avplay_tizen {
+
+class VideoPlayer {
+ public:
+  using SeekCompletedCallback = std::function<void()>;
+
+  explicit VideoPlayer(flutter::BinaryMessenger *messenger,
+                       FlutterDesktopViewRef flutter_view);
+  VideoPlayer(const VideoPlayer &) = delete;
+  VideoPlayer &operator=(const VideoPlayer &) = delete;
+  virtual ~VideoPlayer();
+
+  virtual int64_t Create(const std::string &uri,
+                         const CreateMessage &create_message) = 0;
+  virtual void Dispose() = 0;
+
+  virtual void SetDisplayRoi(int32_t x, int32_t y, int32_t width,
+                             int32_t height) = 0;
+  virtual bool Play() = 0;
+  virtual bool Deactivate() { return false; };
+  virtual bool Activate() { return false; };
+  virtual bool Pause() = 0;
+  virtual bool SetLooping(bool is_looping) = 0;
+  virtual bool SetVolume(double volume) = 0;
+  virtual bool SetPlaybackSpeed(double speed) = 0;
+  virtual bool SeekTo(int64_t position, SeekCompletedCallback callback) = 0;
+  virtual int64_t GetPosition() = 0;
+  virtual std::pair<int64_t, int64_t> GetDuration() = 0;
+  virtual bool IsReady() = 0;
+  virtual flutter::EncodableList GetTrackInfo(std::string track_type) = 0;
+  virtual bool SetTrackSelection(int32_t track_id, std::string track_type) = 0;
+  virtual std::string GetStreamingProperty(
+      const std::string &streaming_property_type) {
+    return "";
+  };
+  virtual bool SetBufferConfig(const std::string &key, int64_t value) {
+    return false;
+  };
+  virtual void SetStreamingProperty(const std::string &type,
+                                    const std::string &value){};
+  virtual bool SetDisplayRotate(int64_t rotation) = 0;
+  virtual bool SetDisplayMode(int64_t display_mode) = 0;
+  virtual bool Suspend() = 0;
+  virtual bool Restore(const CreateMessage *restore_message,
+                       int64_t resume_time) = 0;
+  virtual bool SetData(const flutter::EncodableMap &data) { return false; }
+  virtual flutter::EncodableMap GetData(const flutter::EncodableList &data) {
+    return flutter::EncodableMap{};
+  }
+  virtual bool UpdateDashToken(const std::string &dashToken) { return false; };
+  virtual flutter::EncodableList GetActiveTrackInfo() {
+    return flutter::EncodableList{};
+  }
+
+ protected:
+  virtual void GetVideoSize(int32_t *width, int32_t *height) = 0;
+  void *GetWindowHandle();
+  int64_t SetUpEventChannel();
+  void ClearUpEventChannel();
+  void SendInitialized();
+  void SendBufferingStart();
+  void SendBufferingUpdate(int32_t value);
+  void SendBufferingEnd();
+  void SendSeekCompleted();
+  void SendSubtitleUpdate(
+      int32_t duration, flutter::EncodableList texts_info,
+      flutter::EncodableMap picture_info = flutter::EncodableMap{});
+  void SendPlayCompleted();
+  void SendIsPlayingState(bool is_playing);
+  void SendRestored();
+  void SendADFromDash(flutter::EncodableMap ad_info);
+  void SendManifestInfo(std::string manifest_info);
+  void SendError(const std::string &error_code,
+                 const std::string &error_message);
+
+  std::mutex queue_mutex_;
+  flutter::BinaryMessenger *binary_messenger_;
+  bool is_initialized_ = false;
+  FlutterDesktopViewRef flutter_view_;
+  bool is_restored_ = false;
+
+  // VyseTV: the player said its preparation failed (set from the player's own thread).
+  std::atomic<bool> prepare_failed_{false};
+
+ private:
+  void ExecuteSinkEvents();
+  void RequestEventDispatch();
+  void PushEvent(flutter::EncodableValue encodable_value);
+
+  std::queue<flutter::EncodableValue> encodable_event_queue_;
+  std::queue<std::pair<std::string, std::string>> error_event_queue_;
+  std::unique_ptr<flutter::EventChannel<flutter::EncodableValue>>
+      event_channel_;
+  std::unique_ptr<flutter::EventSink<flutter::EncodableValue>> event_sink_;
+  guint sink_event_source_ = 0;
+
+  // VyseTV: after a video is opened, the player is looked at every 400 ms for 20 s. Some TVs
+  // (Tizen 6) reach READY without ever calling back that preparation is done, and an error
+  // from before the app listened was lost: the app then waited for ever.
+  void StartReadyWatch();
+  void StopReadyWatch();
+  static gboolean OnReadyWatch(gpointer data);
+  guint ready_watch_source_ = 0;
+  int ready_watch_ticks_ = 0;
+  int ready_seen_ticks_ = 0;
+  bool prepare_error_sent_ = false;
+};
+
+}  // namespace video_player_avplay_tizen
+
+namespace flutter_common {
+
+template <typename T>
+inline const T GetValue(const flutter::EncodableMap *map,
+                        const std::string &key, T &&default_value) {
+  if (map == nullptr || map->empty()) {
+    return std::move(default_value);
+  }
+
+  auto it = map->find(flutter::EncodableValue(key));
+  if (it != map->end() && std::holds_alternative<T>(it->second)) {
+    return std::get<T>(it->second);
+  }
+  return std::move(default_value);
+}
+
+}  // namespace flutter_common
+
+#endif  // FLUTTER_PLUGIN_VIDEO_PLAYER_H_

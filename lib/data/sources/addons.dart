@@ -10,6 +10,7 @@ import '../app_settings.dart';
 import 'badges.dart';
 import 'film_sources/common.dart' show getTmdbMetadata, fetchText, HttpError;
 import 'knaben.dart';
+import '../usenet/usenet_engine.dart' show UsenetEngine;
 import 'plugins/js_plugins.dart';
 import 'plugins/plugin_catalogs.dart';
 import '../net.dart';
@@ -245,8 +246,20 @@ class Addon {
     metaTypes: ['movie', 'series'],
   );
 
+  /// VyseTV's own Usenet source: your Newznab indexers searched from this device, and what they
+  /// find played straight from your Usenet providers through the Usenet engine
+  /// (lib/data/usenet). Set up in Settings > Usenet; off until you turn it on there.
+  static const usenet = Addon(
+    manifestUrl: 'builtin:usenet',
+    id: 'vyse.usenet',
+    name: 'Usenet',
+    description: 'Built in. Searches your own Newznab indexers and plays what they find from your own Usenet providers, straight from this device. Set it up in Settings > Usenet.',
+    streams: true,
+    streamTypes: ['movie', 'series'],
+  );
+
   /// Every built-in addon, in the order a fresh install lists them (after your own).
-  static const builtIns = [tmdb, knaben];
+  static const builtIns = [tmdb, knaben, usenet];
 
   Addon copyWith({bool? enabled, List<String>? catalogsOff}) => Addon(
     manifestUrl: manifestUrl,
@@ -548,8 +561,29 @@ class AddonStream {
     this.subtitles = const [],
     this.hls,
     this.plugin,
+    this.nzbUrl,
+    this.usenetServers = const [],
+    this.fileMustInclude,
+    this.usenetRelease,
   });
   final Addon addon;
+
+  /// A release on Usenet: its NZB, which the Usenet engine opens (lib/data/usenet). From an
+  /// addon (Stremio's `nzbUrl`) or from your own indexers (the built-in Usenet source).
+  final String? nzbUrl;
+  bool get usenet => nzbUrl != null;
+
+  /// The Usenet servers an addon names for its NZB (Stremio's `servers`, `nntps://user:pass@host`
+  /// addresses); empty: your own providers (Settings > Usenet).
+  final List<String> usenetServers;
+
+  /// Which file of the release to play, by a pattern the addon gives (Stremio's
+  /// `fileMustInclude`); [fileIdx] names it by its place instead.
+  final String? fileMustInclude;
+
+  /// What your indexers said of a release the built-in Usenet source found: the indexer, the
+  /// release's name, size, age, and how it went before (lib/data/usenet/usenet_release.dart).
+  final Object? usenetRelease;
 
   /// An HLS playlist, said by its source (a plugin's link need not end in .m3u8); null: by its link.
   final bool? hls;
@@ -564,7 +598,7 @@ class AddonStream {
 
   /// Which stream this is in a watch party: a plugin's link by its plugin and place (each device
   /// finds its own link), a torrent by its file, anything else by its link.
-  String get partyKey => plugin?.key ?? (torrent ? '$infoHash:$fileIdx' : url);
+  String get partyKey => plugin?.key ?? (torrent ? '$infoHash:$fileIdx' : (usenet ? '$nzbUrl#${fileIdx ?? ''}' : url));
 
   /// Not a video VyseTV plays but a link that opens elsewhere: a web page (`externalUrl`), a
   /// YouTube video (`ytId`, opened on YouTube), or a Stremio link (`stremio:///detail/…`, opened
@@ -589,13 +623,17 @@ class AddonStream {
     final url = '${j['url'] ?? ''}';
     final hash = '${j['infoHash'] ?? ''}';
     final isTorrent = !url.startsWith('http') && RegExp(r'^[0-9a-fA-F]{40}$').hasMatch(hash);
+    // a release on Usenet: its NZB, played through the Usenet engine where it runs
+    final nzb = '${j['nzbUrl'] ?? ''}'.trim();
+    final isNzb = !url.startsWith('http') && !isTorrent && (nzb.startsWith('https://') || nzb.startsWith('http://')) && UsenetEngine.supported;
     final yt = '${j['ytId'] ?? ''}'.trim(), page = '${j['externalUrl'] ?? ''}'.trim();
-    final external = url.startsWith('http') || isTorrent
+    final external = url.startsWith('http') || isTorrent || isNzb
         ? null
         : (yt.isNotEmpty ? 'https://www.youtube.com/watch?v=${Uri.encodeComponent(yt)}' : (page.startsWith('http') || page.startsWith('stremio:') ? page : null));
-    // links play directly; torrents through our engine where it runs; a page or YouTube video
-    // opens where it lives; anything else (archives, Usenet) needs Stremio's own server
-    if (!url.startsWith('http') && !(isTorrent && Torrents.supported) && external == null) return null;
+    // links play directly; torrents and Usenet releases through our engines where they run; a
+    // page or YouTube video opens where it lives; anything else (archives) needs Stremio's own
+    // server
+    if (!url.startsWith('http') && !(isTorrent && Torrents.supported) && !isNzb && external == null) return null;
     final hints = j['behaviorHints'] is Map ? j['behaviorHints'] as Map : const {};
     final proxy = hints['proxyHeaders'] is Map ? hints['proxyHeaders'] as Map : const {};
     final request = proxy['request'] is Map ? proxy['request'] as Map : const {};
@@ -611,7 +649,14 @@ class AddonStream {
       headers: {for (final e in request.entries) '${e.key}': '${e.value}'},
       sizeBytes: (hints['videoSize'] as num?)?.toInt(),
       infoHash: isTorrent ? hash.toLowerCase() : null,
-      fileIdx: isTorrent ? (j['fileIdx'] as num?)?.toInt() : null,
+      fileIdx: isTorrent || isNzb ? (j['fileIdx'] as num?)?.toInt() : null,
+      nzbUrl: isNzb ? nzb : null,
+      usenetServers: [
+        if (isNzb)
+          for (final s in (j['servers'] is List ? j['servers'] as List : const []))
+            if ('$s'.startsWith('nntp://') || '$s'.startsWith('nntps://')) '$s',
+      ],
+      fileMustInclude: isNzb && '${j['fileMustInclude'] ?? ''}'.trim().isNotEmpty ? '${j['fileMustInclude']}'.trim() : null,
       trackers: [
         if (isTorrent)
           for (final s in (j['sources'] as List?) ?? const [])
@@ -991,14 +1036,15 @@ class Addons {
 
   /// [saved] with the built-in addons in it: each stays where you put it and on or off as you
   /// left it (only that is taken from the saved copy; its name and description are the app's),
-  /// and one the list doesn't have yet goes at the end, turned on.
+  /// and one the list doesn't have yet goes at the end, turned on: Usenet turned off, as it has
+  /// nothing to search until your indexers and providers are in (Settings > Usenet turns it on).
   static List<Addon> withBuiltIns(List<Addon> saved) {
     Addon? builtIn(Addon a) => Addon.builtIns.where((b) => b.manifestUrl == a.manifestUrl).firstOrNull;
     return [
       for (final a in saved)
         if (!a.builtIn) a else if (builtIn(a) != null) builtIn(a)!.copyWith(enabled: a.enabled),
       for (final b in Addon.builtIns)
-        if (!saved.any((a) => a.manifestUrl == b.manifestUrl)) b,
+        if (!saved.any((a) => a.manifestUrl == b.manifestUrl)) b.manifestUrl == Addon.usenet.manifestUrl ? b.copyWith(enabled: false) : b,
     ];
   }
 

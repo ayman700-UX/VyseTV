@@ -83,6 +83,9 @@ dependencies:
   # our own torrent engine (TorrServer), kept in the repo rather than fetched from pub
   torrserver_flutter:
     path: packages/torrserver_flutter
+  # our own Usenet engine, shipped with the app on every platform (packages/vyse_usenet)
+  vyse_usenet:
+    path: packages/vyse_usenet
   path_provider: ^2.1.6
   flutter_secure_storage: ^10.3.4
   # (named for lib/core/platform/webos_secrets.dart, which stands in front of the plugin's store on an LG TV)

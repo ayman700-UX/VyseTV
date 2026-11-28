@@ -55,6 +55,7 @@ SHARED_SOURCES = [
     'ios/Runner/MpvPlayer/MpvPlayerPlugin.swift',
     'ios/Runner/MpvPlayer/MpvPlayerPluginShared.swift',
     'packages/torrserver_flutter/ios/Classes/TorrserverFlutterPlugin.swift',
+    'packages/vyse_usenet/ios/Classes/VyseUsenetPlugin.swift',
 ]
 RESOURCES = ['Assets.xcassets', 'Base.lproj/LaunchScreen.storyboard', 'Base.lproj/Main.storyboard']
 
@@ -221,6 +222,15 @@ def main():
     frameworks_children.append((torrent_ref, 'TorrServerKit.xcframework'))
     torrent_build = oid('build', 'Frameworks', torrent_ref)
     add('PBXBuildFile', torrent_build, f'{torrent_build} /* TorrServerKit.xcframework in Frameworks */ = {{isa = PBXBuildFile; fileRef = {torrent_ref} /* TorrServerKit.xcframework */; }};')
+    # The Usenet engine: a static library linked into the app (packages/vyse_usenet; the tvos
+    # job unpacks binaries/vyse-usenet-tvos-arm64.xcframework.zip into tvos/Frameworks)
+    usenet_ref = oid('file', 'Frameworks/VyseUsenet-tvos.xcframework')
+    add('PBXFileReference', usenet_ref,
+        f'{usenet_ref} /* VyseUsenet-tvos.xcframework */ = {{isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; '
+        f'name = VyseUsenet-tvos.xcframework; path = Frameworks/VyseUsenet-tvos.xcframework; sourceTree = SOURCE_ROOT; }};')
+    frameworks_children.append((usenet_ref, 'VyseUsenet-tvos.xcframework'))
+    usenet_build = oid('build', 'Frameworks', usenet_ref)
+    add('PBXBuildFile', usenet_build, f'{usenet_build} /* VyseUsenet-tvos.xcframework in Frameworks */ = {{isa = PBXBuildFile; fileRef = {usenet_ref} /* VyseUsenet-tvos.xcframework */; }};')
     # WebRTC (the voice call): a dynamic framework, linked and put inside the app
     # (tvos/scripts/fetch_webrtc.sh places its Apple TV slices in tvos/Frameworks)
     webrtc_ref = oid('file', 'Frameworks/WebRTC.xcframework')
@@ -236,7 +246,7 @@ def main():
         f'settings = {{ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }}; }};')
     frameworks_phase = phase('PBXFrameworksBuildPhase', 'Frameworks',
                              [(mpvkit_build, 'MPVKit in Frameworks'), (torrent_build, 'TorrServerKit.xcframework in Frameworks'),
-                              (webrtc_build, 'WebRTC.xcframework in Frameworks')])
+                              (usenet_build, 'VyseUsenet-tvos.xcframework in Frameworks'), (webrtc_build, 'WebRTC.xcframework in Frameworks')])
     embed_phase = oid('phase', 'Embed Frameworks')
     add('PBXCopyFilesBuildPhase', embed_phase,
         f'{embed_phase} /* Embed Frameworks */ = {{\n\t\t\tisa = PBXCopyFilesBuildPhase;\n\t\t\tbuildActionMask = 2147483647;\n'

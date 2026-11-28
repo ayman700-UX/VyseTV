@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- the engine is run from the installed native library folder, so the libraries are
+         unpacked there rather than kept inside the APK -->
+    <application android:extractNativeLibs="true" />
+</manifest>

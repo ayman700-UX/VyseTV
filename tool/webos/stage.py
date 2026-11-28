@@ -80,7 +80,7 @@ LG_PLUGINS = {
 #                       model is asked of LG's embedder directly
 
 # The app's own packages that have a webOS part.
-OWN_PACKAGES = ["vyse_webos", "torrserver_flutter"]
+OWN_PACKAGES = ["vyse_webos", "torrserver_flutter", "vyse_usenet"]
 
 # Of the torrent engine's archives only the TV's is needed (the others are 270 MB).
 ENGINE_ARCHIVE = "torrserver-linux-arm7.tar.gz"
@@ -235,6 +235,15 @@ def main() -> None:
             keep = lambda p: (
                 p.parts[0] in {"lib", "webos"}
                 or p.as_posix() in {"pubspec.yaml", "LICENSE", "LICENSE-GPL3", "NOTICE.md", f"binaries/{ENGINE_ARCHIVE}"}
+            )
+        if name == "vyse_usenet":
+            # its Dart, its webOS folder and the TV's engine (not the engine's Go source, nor the
+            # other platforms' builds)
+            keep = lambda p: (
+                p.parts[0] in {"lib", "webos"}
+                or p.as_posix() in {"pubspec.yaml", "NOTICE.md", "README.md", "tool/unpack.cmake", "binaries/manifest.json",
+                                    "binaries/vyse-usenet-webos-arm.zip", "engine/LICENSE"}
+                or (len(p.parts) > 1 and p.parts[0] == "engine" and p.parts[1] == "licenses")
             )
         n += mirror(REPO / "packages" / name, out / "packages" / name, keep=keep)
     for name in ("analysis_options.yaml", "LICENSE"):

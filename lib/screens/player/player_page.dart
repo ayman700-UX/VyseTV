@@ -3425,6 +3425,12 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   /// (PlaybackFailure.droppedPart). That was the other way to a silent film or a black screen
   /// with nothing said. (Media3 hands such a video to mpv itself.)
   void _watchForDroppedPart(pz.PlayerLog l) {
+    // a Samsung TV: the video went to the TV's basic player (player_tizen.dart)
+    if (l.prefix == 'tv-basic') {
+      _editReport((r) => r.withTvBasicPlayer(l.text.trim()));
+      SubLog.line("the TV's streaming player gave way to its basic player: ${l.text.trim()}");
+      return;
+    }
     final part = PlaybackFailure.droppedPart(
       error: l.level == pz.PlayerLogLevel.error || l.level == pz.PlayerLogLevel.fatal,
       prefix: l.prefix,

@@ -19,6 +19,14 @@ namespace Runner
                 UserPixelRatio = global::System.Math.Min(global::System.Math.Max(width / 960.0, 1.0), 2.0);
             }
 
+            // The TV's player draws the video under the app. On Tizen 6.5 (2022 sets) some show
+            // black behind an app window that isn't see-through, so there it is made see-through
+            // (another native Tizen player app found the same); every other TV keeps it as it was.
+            if (Information.TryGetValue("http://tizen.org/feature/platform.version", out string version) && version.StartsWith("6.5"))
+            {
+                IsWindowTransparent = true;
+            }
+
             base.OnCreate();
 
             GeneratedPluginRegistrant.RegisterPlugins(this);

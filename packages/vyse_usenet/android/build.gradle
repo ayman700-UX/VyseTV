@@ -1,0 +1,97 @@
+group 'com.vyse.usenet'
+version '1.0.0'
+
+buildscript {
+    ext.kotlin_version = '1.9.0'
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+android {
+    namespace 'com.vyse.usenet'
+    compileSdkVersion 34
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    defaultConfig {
+        minSdkVersion 21
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['src/main/jniLibs']
+        }
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+}
+
+// The engine for each processor, from the archives in ../binaries, unpacked as
+// jniLibs/<abi>/libvyse_usenet.so: Android installs it in the app's native library folder, the
+// one place an app may run a program from. It is a program the app starts, not a library it
+// loads (hence a .so name: only those are installed there). Every archive is checked against
+// binaries/manifest.json first.
+import java.security.MessageDigest
+import groovy.json.JsonSlurper
+
+task unpackUsenetEngine {
+    def binaries = file('../binaries')
+    def jniDir = file('src/main/jniLibs')
+    inputs.dir binaries
+    outputs.dir jniDir
+    doLast {
+        def manifest = new JsonSlurper().parse(new File(binaries, 'manifest.json'))
+        def abis = ['arm64-v8a': 'android-arm64', 'armeabi-v7a': 'android-arm', 'x86_64': 'android-amd64']
+        abis.each { abi, target ->
+            def zip = new File(binaries, "vyse-usenet-${target}.zip")
+            if (!zip.exists()) {
+                throw new GradleException("The Usenet engine for ${abi} is missing: ${zip}")
+            }
+            def digest = MessageDigest.getInstance('SHA-256')
+            zip.eachByte(65536) { buffer, length -> digest.update(buffer, 0, length) }
+            def got = digest.digest().encodeHex().toString()
+            def want = manifest.sha256[zip.name]
+            if (got != want) {
+                throw new GradleException("${zip.name} is not the build manifest.json names (sha256 ${got})")
+            }
+            def folder = new File(jniDir, abi)
+            folder.mkdirs()
+            copy {
+                from zipTree(zip)
+                into folder
+                include 'libvyse_usenet.so'
+            }
+            def out = new File(folder, 'libvyse_usenet.so')
+            out.setExecutable(true, false)
+            out.setReadable(true, false)
+        }
+    }
+}
+
+preBuild.dependsOn unpackUsenetEngine

@@ -258,6 +258,16 @@ jobs:
           else
             echo "::warning::No macOS engine archives in $B: the pod's own download is the fallback."
           fi
+      # The Usenet engine: a program in the vyse_usenet pod's resources (one file for Intel and
+      # Apple silicon), made runnable and signed ad hoc like the torrent engine
+      - name: Prepare the Usenet engine
+        run: |
+          D=packages/vyse_usenet/macos/bin
+          rm -rf "$D" && mkdir -p "$D"
+          unzip -o -q packages/vyse_usenet/binaries/vyse-usenet-darwin-universal.zip -d "$D"
+          chmod 755 "$D/vyse-usenet"
+          codesign --force --sign - "$D/vyse-usenet"
+          lipo -info "$D/vyse-usenet"
       # The real server settings (the account server, the update addresses) are not in the
       # repository: they come from the SERVER_CONFIG secret (lib/data/server_config.dart in
       # base64). A build without them would have no accounts and could never be updated, so it
@@ -345,6 +355,12 @@ jobs:
           else
             echo "::warning::No TorrServerKit.xcframework.zip in the package: this build has no torrent engine."
           fi
+      # The Usenet engine: linked into the app from packages/vyse_usenet/ios (its pod)
+      - name: Prepare the Usenet engine
+        run: |
+          rm -rf packages/vyse_usenet/ios/VyseUsenet-ios.xcframework
+          unzip -q packages/vyse_usenet/binaries/vyse-usenet-ios-arm64.xcframework.zip -d packages/vyse_usenet/ios/
+          plutil -p packages/vyse_usenet/ios/VyseUsenet-ios.xcframework/Info.plist | grep -E 'LibraryIdentifier|SupportedPlatform'
       # The real server settings (the account server, the update addresses) are not in the
       # repository: they come from the SERVER_CONFIG secret (lib/data/server_config.dart in
       # base64). A build without them would have no accounts and could never be updated, so it
@@ -614,6 +630,11 @@ jobs:
           rm -rf tvos/Frameworks && mkdir -p tvos/Frameworks
           unzip -q packages/torrserver_flutter/binaries/TorrServerKit-tvos.xcframework.zip -d tvos/Frameworks
           plutil -p tvos/Frameworks/TorrServerKit.xcframework/Info.plist | grep -E 'LibraryIdentifier|SupportedPlatform'
+      # The Usenet engine, linked into the app (packages/vyse_usenet)
+      - name: Unpack the Usenet engine
+        run: |
+          unzip -q packages/vyse_usenet/binaries/vyse-usenet-tvos-arm64.xcframework.zip -d tvos/Frameworks
+          plutil -p tvos/Frameworks/VyseUsenet-tvos.xcframework/Info.plist | grep -E 'LibraryIdentifier|SupportedPlatform'
       # A party's voice call: the WebRTC build flutter_webrtc pins, its Apple TV slices (tvOS 17)
       - name: Fetch WebRTC for tvOS
         run: bash tvos/scripts/fetch_webrtc.sh
