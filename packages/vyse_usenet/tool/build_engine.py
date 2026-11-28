@@ -215,10 +215,19 @@ def build_apple_library(target: str, out: Path):
     shutil.rmtree(stage, ignore_errors=True)
     (stage / "include").mkdir(parents=True)
     run(["go", "build", "-buildmode=c-archive", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid=",
-         "-o", stage / "libvyse_usenet.a", LIBRARY], cwd=ENGINE,
+         "-o", stage / "libvyse_usenet_go.a", LIBRARY], cwd=ENGINE,
         env=go_env(GOOS="ios", GOARCH="arm64", CC=f"{clang} {flags}", CXX=f"{clangxx} {flags}",
                    CGO_CFLAGS=flags, CGO_LDFLAGS=flags))
-    shutil.move(str(stage / "libvyse_usenet.h"), stage / "include" / "libvyse_usenet.h")
+    # A c-archive holds Go's own objects only: the yEnc decoder's library it links against goes
+    # into the same archive, or the app is left without its functions (the 1.0.4 iPhone and
+    # Apple TV builds: "Undefined symbol: _rapidyenc_decode_init").
+    run(["libtool", "-static", "-o", stage / "libvyse_usenet.a", stage / "libvyse_usenet_go.a",
+         WRAPPER / "librapidyenc_ios_arm64.a"])
+    (stage / "libvyse_usenet_go.a").unlink()
+    symbols = subprocess.check_output(["nm", "-gU", stage / "libvyse_usenet.a"], text=True, stderr=subprocess.DEVNULL)
+    if "_rapidyenc_decode_init" not in symbols:
+        raise SystemExit("libvyse_usenet.a: the yEnc decoder is not in it")
+    shutil.move(str(stage / "libvyse_usenet_go.h"), stage / "include" / "libvyse_usenet.h")
     framework = stage / f"{name}.xcframework"
     run(["xcodebuild", "-create-xcframework", "-library", stage / "libvyse_usenet.a",
          "-headers", stage / "include", "-output", framework])
