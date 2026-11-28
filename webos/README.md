@@ -68,8 +68,11 @@ The second package (`..._older-webos.ipk`) is the webOS 26 build with the follow
 
 **A runtime of its own.** A folder `runtime/` holds a loader, glibc 2.41 and the C++ library,
 as Debian 13 builds them for 32-bit soft-float ARM, which is the kind of code a webOS TV runs.
-They are Debian's files unchanged, four packages, each checked against its checksum as the
-package is made (`runtime/README.txt` names them and their source). The app's program is set to
+They are Debian's files, four packages, each checked against its checksum as the package is
+made (`runtime/README.txt` names them and their source), unchanged but for one name in the
+loader: every webOS preloads its own crash handler into every program (`/etc/ld.so.preload`),
+built for the TV's older C library, and this loader looks for a file that never exists in its
+place, so that handler stays out and VyseTV's own record of a fall is the one written. The app's program is set to
 start under that loader and to load that runtime before anything else, and the TV's own
 libraries (graphics, Wayland, the media library, Luna) then run on top of it. That is the
 direction that works: a library made for an older C library runs on a newer one, never the
@@ -105,11 +108,20 @@ window a video goes in. When a player starts it asks SDL (the library LG's own n
 made with) for the app's window and for the id of the window exported from it. This app has no
 SDL window, so the library got nothing and the app fell at once on every video and every song
 (a webOS 5.6 tester, 27 November 2026: "App closes when playing any media"). The package now
-brings a stand-in for SDL (`older/vyse_sdl.c`, under SDL's own name), loaded by the player just
-before the first player starts: asked for the window, it answers with the one the app made for
-the picture, or a placeholder for sound alone. On such a TV the media library also keeps the
+brings a stand-in for SDL (`older/vyse_sdl.c`, under SDL's own name), a library the program
+needs, so it is there from the start: asked for the window, it answers with the one the app made
+for the picture, or a placeholder for sound alone. (Loaded by the player, as at first, it came
+too late from webOS 6 on: the first media call loads the media library, and the TV's own SDL
+came in with it. A webOS 25 tester, 28 November 2026.) On such a TV the media library also keeps the
 window it started with for good, so one window serves every video of the app's life. An open
 project that runs LG's Flutter apps on older webOS found and fixed the same thing on webOS 6.5.
+
+*The C++ runtime's waits.* The TV's own libraries were built for a newer ARM than the one
+Debian's C++ library is built for, and three functions of the C++ runtime that a `std::future`
+waits with exist only for the newer one. Read against webOS Brew's firmware data, webOS 6 to 25
+all have them and nothing else of the kind this runtime lacks; a TV library waiting on a future
+would end the app with "symbol lookup error". `older/vyse_fallback.c` has the three, written as
+the GNU C++ library writes them, looked for after everything else.
 
 *The Magic Remote.* An older set's compositor offers several input seats (the Magic Remote, a
 mouse) without names, and LG's embedder listens to the first seat's pointer only. The remote's
@@ -131,7 +143,11 @@ TV later gains the service, the file's values move into it.
 started: everything the app, LG's embedder and the loader print goes to
 `appdata/vysetv-start.log` in the app's folder, headed by the TV's kernel, its webOS and every
 library that was loaded with where each came from. If the app falls in native code, the signal,
-the place and the map of what was loaded are added. To read it from the PC:
+the place and the map of what was loaded are added; if it ends any other way, how: a library
+calling `exit()` or `_exit()` (which one, from where), or a signal that stopped it (with the
+program that sent it). Each step of starting a player is a line too (`[vyse_webos] player ...`):
+whether LG's media library loads with every name it uses, which SDL it was given, what each
+call answered, what the player then says, and the memory the app holds at each step. To read it from the PC:
 
 ```bash
 ares-novacom --device <tv> --run "cat /media/developer/apps/usr/palm/applications/com.vyse.vysetv/appdata/vysetv-start.log"

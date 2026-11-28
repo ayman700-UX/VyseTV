@@ -99,9 +99,29 @@ for f in "${RUNTIME_FILES[@]}"; do
   chmod 644 "$APP/runtime/$f"
 done
 chmod 755 "$APP/runtime/ld-linux.so.3"
+# Every webOS names its own crash handler, /lib/libSegFault.so (built for the TV's older C
+# library), in /etc/ld.so.preload, a file the loader of every program reads. In VyseTV's runtime
+# it is a foreign library, and it takes the crash signals over from libvyse_start, whose record
+# is the one a tester can send (it was loaded so in a webOS 25 tester's start log, 2026-11-28).
+# The loader has no switch to skip the file, so this copy looks for a name that never exists,
+# of the same length, in its place (the way the open project for older webOS does it).
+python3 - "$APP/runtime/ld-linux.so.3" <<'PY'
+import sys
+p = sys.argv[1]
+b = open(p, 'rb').read()
+old, new = b'/etc/ld.so.preload\0', b'/etc/ld.so.nopreld\0'
+assert len(old) == len(new)
+if b.count(old) != 1:
+    sys.exit('the loader names /etc/ld.so.preload %d times, not once' % b.count(old))
+open(p, 'wb').write(b.replace(old, new))
+print('   the loader: /etc/ld.so.preload is not read (the TV\'s crash handler stays out)')
+PY
 cat > "$APP/runtime/README.txt" <<'NOTICE'
 The system runtime VyseTV brings along on an older webOS: the loader (ld-linux.so.3), the GNU C
-Library and the GNU C++ runtime, unchanged, as Debian 13 ("trixie") builds them for armel.
+Library and the GNU C++ runtime, as Debian 13 ("trixie") builds them for armel, unchanged but
+for one name in the loader: it looks for /etc/ld.so.nopreld where Debian's looks for
+/etc/ld.so.preload, so the crash handler the TV preloads into every program is not loaded into
+VyseTV's (it is built for the TV's own C library).
 
   libc6       2.41-12+deb13u5   GNU C Library, LGPL-2.1-or-later
   libstdc++6  14.2.0-19         GNU Standard C++ Library, GPL-3.0-or-later with the GCC Runtime Library Exception

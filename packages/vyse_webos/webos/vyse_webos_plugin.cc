@@ -28,6 +28,11 @@
 // sets that cannot place a window under the app at all (webOS 4) the picture placed by the
 // media library itself. And there the media library takes its window from SDL, so VyseTV
 // gives it a stand-in for SDL that answers with the app's window (UseWindowForOlderLibrary).
+//
+// Each step of starting a player, what LG's library answered, and what it then says, is a line
+// on stderr ("[vyse_webos] ..."): in the package for older webOS that is the start log a tester
+// can send (appdata/vysetv-start.log), the one way to see where playing stops on a TV nobody
+// here has.
 
 #include "include/vyse_webos/vyse_webos_plugin.h"
 
@@ -46,6 +51,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -96,6 +102,66 @@ struct Slot {
 class VyseWebosPlugin;
 VyseWebosPlugin* g_plugin = nullptr;
 
+// ── the start log's lines ──
+
+// How much memory the app holds now (a TV ends an app that holds too much, without a word).
+std::string MemoryInUse() {
+  FILE* status = std::fopen("/proc/self/status", "re");
+  if (status == nullptr) return "?";
+  char line[160];
+  std::string rss = "?";
+  while (std::fgets(line, sizeof line, status) != nullptr) {
+    if (std::strncmp(line, "VmRSS:", 6) == 0) {
+      const char* at = line + 6;
+      while (*at == ' ' || *at == '\t') ++at;
+      rss = at;
+      while (!rss.empty() && (rss.back() == '\n' || rss.back() == ' ')) rss.pop_back();
+      break;
+    }
+  }
+  std::fclose(status);
+  return rss;
+}
+
+// An address with its path and query left out (a debrid link carries the account's key).
+std::string Shortened(const std::string& text) {
+  std::string out;
+  size_t at = 0;
+  while (at < text.size()) {
+    const size_t scheme = text.find("://", at);
+    if (scheme == std::string::npos) {
+      out += text.substr(at);
+      break;
+    }
+    size_t host_end = text.find_first_of("/?\"' ", scheme + 3);
+    if (host_end == std::string::npos) host_end = text.size();
+    out += text.substr(at, host_end - at);
+    size_t end = text.find_first_of("\"' ", host_end);
+    if (end == std::string::npos) end = text.size();
+    if (end > host_end) out += "/...";
+    at = end;
+  }
+  return out;
+}
+
+void Note(int slot, const std::string& what) {
+  std::fprintf(stderr, "[vyse_webos] player %d: %s (memory in use: %s)\n", slot, what.c_str(),
+               MemoryInUse().c_str());
+}
+
+// What LG's library says, as it says it, up to a few hundred lines (its clock, every second or
+// so, is left out).
+void NoteEvent(int slot, const char* json) {
+  static std::atomic<int> told{0};
+  if (std::strstr(json, "currentTime") != nullptr) return;
+  const int n = ++told;
+  if (n > 400) return;
+  std::string text(json);
+  if (text.size() > 600) text = text.substr(0, 600) + "...";
+  std::fprintf(stderr, "[vyse_webos] player %d says: %s%s\n", slot, Shortened(text).c_str(),
+               n == 400 ? " (and no more of what it says from here on)" : "");
+}
+
 // Events arrive on a thread of LG's library. They wait here until the main loop takes them.
 std::mutex g_queue_mutex;
 std::deque<std::pair<int, std::string>> g_queue;
@@ -106,6 +172,7 @@ gboolean DrainOnMainLoop(gpointer);
 
 void Enqueue(int slot, const char* json) {
   if (json == nullptr) return;
+  NoteEvent(slot, json);
   std::lock_guard<std::mutex> lock(g_queue_mutex);
   g_queue.emplace_back(slot, std::string(json));
   if (g_drain_scheduled || g_main_context == nullptr) return;
@@ -190,6 +257,39 @@ void UseWindowForOlderLibrary(const std::string& window) {
                  use != nullptr ? "VyseTV's stand-in" : dlerror());
   }
   if (use != nullptr) use(window.c_str());
+}
+
+// Before the first call of an older TV's media library: LG's front library (libNDL_media,
+// loaded with the app) loads the media library proper, libNDL_media_impl, at that first call,
+// with every name it uses looked up only when it is first used, so a name VyseTV's runtime
+// lacks would end the app then and there. It is loaded here first, every name looked up at
+// once, and what is missing, if anything, said in the start log; then which SDL it was given.
+// (The front library's own load later finds it loaded.)
+void CheckMediaLibrary() {
+  static bool checked = false;
+  if (checked) return;
+  checked = true;
+  void* media = dlopen("libNDL_media_impl.so.1", RTLD_NOW | RTLD_LOCAL);
+  if (media == nullptr) {
+    const char* why = dlerror();
+    std::fprintf(stderr, "[vyse_webos] LG's media library does not load with every name it uses: %s\n",
+                 why != nullptr ? why : "(no reason given)");
+  } else {
+    std::fprintf(stderr, "[vyse_webos] LG's media library loads, every name it uses found\n");
+  }
+  void* sdl = dlopen("libSDL2-2.0.so.0", RTLD_LAZY | RTLD_NOLOAD);
+  if (sdl == nullptr) {
+    std::fprintf(stderr, "[vyse_webos] no SDL in the app (this TV's media library does not use it)\n");
+    return;
+  }
+  Dl_info where{};
+  void* one = dlsym(sdl, "SDL_GetWindowSize");
+  const bool found = one != nullptr && dladdr(one, &where) != 0 && where.dli_fname != nullptr;
+  const bool ours = dlsym(sdl, "VyseSdlUseWindow") != nullptr;
+  std::fprintf(stderr, "[vyse_webos] the media library's SDL: %s (%s)\n",
+               ours ? "VyseTV's stand-in" : "THE TV'S OWN: it gives no window",
+               found ? where.dli_fname : "?");
+  dlclose(sdl);
 }
 
 // Whether the TV can put a window of its video plane under the app ("exported windows",
@@ -419,6 +519,10 @@ class VyseWebosPlugin : public flutter::Plugin {
           EncodableValue(HasDisplayWindow());
       has[EncodableValue(std::string("exportedWindows"))] =
           EncodableValue(HasExportedWindows());
+      Note(index, std::string("this TV has: window ids ") + (HasInitWithWindowId() ? "yes" : "no") +
+                      ", players " + (HasPlayers() ? "yes" : "no (one, shared)") +
+                      ", mute display " + (HasMuteDisplay() ? "yes" : "no") +
+                      ", exported windows " + (HasExportedWindows() ? "yes" : "no"));
       reply->Success(EncodableValue(has));
       return;
     }
@@ -442,15 +546,22 @@ class VyseWebosPlugin : public flutter::Plugin {
         reply->Error("NO_ADDRESS", "Nothing to open");
         return;
       }
+      Note(index, "to open " + Shortened(uri) + " in window " + (window.empty() ? "(none: sound alone)" : window));
       // An older TV's library takes the window from SDL: VyseTV's stand-in is told which, and
       // this before any call of the media library, the first of which loads it (see
       // UseWindowForOlderLibrary).
-      if (!HasInitWithWindowId()) UseWindowForOlderLibrary(window);
+      if (!HasInitWithWindowId()) {
+        UseWindowForOlderLibrary(window);
+        CheckMediaLibrary();
+      }
       const bool one_player = !HasPlayers();
       if (one_player) {
         TakeTheOnePlayer(index);
-      } else if (!Select(index, reply)) {
-        return;
+        Note(index, "has the TV's one player");
+      } else {
+        const bool selected = Select(index, reply);
+        Note(index, std::string("NDL_MediaSetPlayer: ") + (selected ? "yes" : "no, " + LastError()));
+        if (!selected) return;
       }
       // (the one player is started once, whichever slot comes first)
       bool& started = one_player ? one_player_started_ : slot.started;
@@ -458,26 +569,31 @@ class VyseWebosPlugin : public flutter::Plugin {
         // With the window's id for a picture (without one LG's library goes looking for an
         // SDL window, which this app has not); plain for sound alone. A webOS older than 26
         // has only the plain start: there the window's id reaches the TV in the payload alone.
-        const int failed = window.empty() || !HasInitWithWindowId()
-                               ? NDL_MediaInit(0)
-                               : NDL_MediaInitWithWindowId(0, window.c_str());
+        const bool with_id = !window.empty() && HasInitWithWindowId();
+        Note(index, with_id ? "NDL_MediaInitWithWindowId..." : "NDL_MediaInit...");
+        const int failed = with_id ? NDL_MediaInitWithWindowId(0, window.c_str()) : NDL_MediaInit(0);
+        Note(index, std::string(with_id ? "NDL_MediaInitWithWindowId: " : "NDL_MediaInit: ") +
+                        (failed == 0 ? "started" : "FAILED, " + LastError()));
         if (failed != 0) {
           reply->Error("NO_PLAYER", "The TV's player did not start: " + LastError());
           return;
         }
         if (NDL_MediaSubscribeEvents(one_player ? OnShared : kOnSlot[index]) != 0) {
-          std::fprintf(stderr, "[vyse_webos] slot %d: no events: %s\n", index,
-                       LastError().c_str());
+          Note(index, "NDL_MediaSubscribeEvents: no events, " + LastError());
         }
         started = true;
       } else if (slot.loaded) {
         NDL_MediaUnload();
+        Note(index, "NDL_MediaUnload (the one before)");
       }
       slot.loaded = false;
+      Note(index, "NDL_MediaLoadWithOption, with " + Shortened(payload));
       if (NDL_MediaLoadWithOption(uri.c_str(), payload.c_str()) != 0) {
+        Note(index, "NDL_MediaLoadWithOption: FAILED, " + LastError());
         reply->Error("LOAD_FAILED", LastError());
         return;
       }
+      Note(index, "NDL_MediaLoadWithOption: loading");
       slot.loaded = true;
       reply->Success();
       return;
@@ -546,6 +662,9 @@ class VyseWebosPlugin : public flutter::Plugin {
       return;
     }
 
+    if (method == "play" || method == "pause" || method == "muteDisplay" || failed != 0) {
+      Note(index, method + ": " + (failed == 0 ? "done" : "FAILED, " + LastError()));
+    }
     if (failed != 0) {
       reply->Error("COMMAND_FAILED", method + ": " + LastError());
     } else {

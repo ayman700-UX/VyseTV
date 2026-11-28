@@ -118,8 +118,9 @@ target_link_libraries(quickjs_c_bridge_plugin PRIVATE m Threads::Threads atomic)
 #   vyse_sdevent   the embedder's event loop: the TV's libsystemd, or its own on webOS 4
 #   vyse_wlegl     the window the embedder draws into, whatever the TV's library is called
 #   vyse_fallback  what is looked for last: the description of exported windows, for TVs
-#                  whose library has none
-#   vyse_sdl       the window the TV's media library asks SDL for (loaded by the player)
+#                  whose library has none, and what the TV's own libraries ask the runtime
+#                  for that VyseTV's runtime lacks (std::future's futex waits)
+#   vyse_sdl       the window the TV's media library asks SDL for (made part of the program)
 add_library(vyse_fallback SHARED "older/vyse_fallback.c")
 # (it uses two names of the TV's Wayland library, which is always loaded before it; it is
 # not linked against that library, so the build needs no Wayland files of its own)
@@ -141,6 +142,7 @@ add_library(vyse_wlegl SHARED "older/vyse_wlegl.c")
 target_link_libraries(vyse_wlegl PRIVATE dl)
 
 add_library(vyse_start SHARED "older/vyse_start.c")
+target_link_libraries(vyse_start PRIVATE dl)
 
 # vyse_sdl: what an older TV's media library is told when it asks SDL for the app's window.
 # It carries SDL's own name (its soname) and the package for older webOS makes it a library the

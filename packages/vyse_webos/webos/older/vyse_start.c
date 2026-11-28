@@ -11,17 +11,22 @@
 //     webOS, and every program and library that was loaded, each with where it came from (the
 //     app's own runtime or the TV's);
 //   * should the app fall (a fault in native code), adds which signal, where, and the map of
-//     what is loaded where, so the place can be found in the files the package was made of.
+//     what is loaded where, so the place can be found in the files the package was made of;
+//   * should it end any other way, says how: a library calling exit() or _exit() (which one,
+//     and from where), or a signal that stops it (SIGTERM and the like, with the program that
+//     sent it). A webOS 25 tester's log simply ended, with none of the above (2026-11-28).
 //
 // The file is started afresh each time the app starts. See webos/README.md, "Older webOS".
 
 #define _GNU_SOURCE
 
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/syscall.h>
 #include <sys/utsname.h>
 #include <time.h>
 #include <ucontext.h>
@@ -121,6 +126,79 @@ static void vyse_fell(int sig, siginfo_t *info, void *context) {
   raise(sig);
 }
 
+// ── an ending that is not a fault ──
+
+// (the app's own process; a child of it, between fork and exec, is left alone)
+static pid_t vyse_main_pid;
+static void (*vyse_real_exit)(int);
+
+static void vyse_put_sender(const siginfo_t *info) {
+  if (info == NULL || info->si_code > 0 || info->si_pid <= 0) return;
+  vyse_put(", sent by process ");
+  vyse_put_number((long)info->si_pid);
+  char path[48];
+  // (its command line, NULs and all, read as it is: open, read and write are safe here)
+  snprintf(path, sizeof path, "/proc/%d/cmdline", (int)info->si_pid);
+  vyse_put(": ");
+  vyse_put_file(path, 200);
+}
+
+static void vyse_stopped(int sig, siginfo_t *info, void *context) {
+  (void)context;
+  vyse_put("\n[vyse] THE APP WAS STOPPED: signal ");
+  vyse_put_number(sig);
+  vyse_put(sig == SIGTERM ? " (SIGTERM: asked to close)" : sig == SIGHUP ? " (SIGHUP)" : sig == SIGQUIT ? " (SIGQUIT)" : sig == SIGSYS ? " (SIGSYS: a system call this TV refuses)" : sig == SIGXCPU ? " (SIGXCPU: out of processor time)" : "");
+  vyse_put_sender(info);
+  vyse_put("\n");
+  signal(sig, SIG_DFL);
+  raise(sig);
+}
+
+static void vyse_leaving(const char *how, int code, void *from) {
+  if (getpid() != vyse_main_pid) return;
+  vyse_put("\n[vyse] THE APP IS LEAVING: ");
+  vyse_put(how);
+  vyse_put("(");
+  vyse_put_number(code);
+  vyse_put(")");
+  Dl_info where;
+  memset(&where, 0, sizeof where);
+  if (from != NULL && dladdr(from, &where) != 0 && where.dli_fname != NULL) {
+    vyse_put(", called from ");
+    vyse_put(where.dli_fname);
+    if (where.dli_sname != NULL) {
+      vyse_put(" (in ");
+      vyse_put(where.dli_sname);
+      vyse_put(")");
+    }
+    vyse_put(" at ");
+    vyse_put_hex((unsigned long)((uintptr_t)from - (uintptr_t)where.dli_fbase));
+  } else {
+    vyse_put(", called from ");
+    vyse_put_hex((unsigned long)(uintptr_t)from);
+  }
+  vyse_put("\n");
+}
+
+// exit() and _exit() as every library of the app calls them: said, then done as the C library
+// does them. (This library is one the program needs, ahead of the C library, so its two are the
+// ones found.)
+__attribute__((visibility("default"), noreturn)) void exit(int code) {
+  vyse_leaving("exit", code, __builtin_return_address(0));
+  if (vyse_real_exit != NULL) vyse_real_exit(code);
+  for (;;) syscall(SYS_exit_group, code);
+}
+
+__attribute__((visibility("default"), noreturn)) void _exit(int code) {
+  vyse_leaving("_exit", code, __builtin_return_address(0));
+  for (;;) syscall(SYS_exit_group, code);
+}
+
+__attribute__((visibility("default"), noreturn)) void _Exit(int code) {
+  vyse_leaving("_Exit", code, __builtin_return_address(0));
+  for (;;) syscall(SYS_exit_group, code);
+}
+
 // ── the start ──
 
 static void vyse_loaded(void) {
@@ -198,4 +276,10 @@ __attribute__((constructor)) static void vyse_started(void) {
   sigemptyset(&act.sa_mask);
   static const int faults[] = {SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE};
   for (size_t i = 0; i < sizeof faults / sizeof faults[0]; i++) sigaction(faults[i], &act, NULL);
+
+  vyse_main_pid = getpid();
+  vyse_real_exit = (void (*)(int))dlsym(RTLD_NEXT, "exit");
+  act.sa_sigaction = vyse_stopped;
+  static const int stops[] = {SIGTERM, SIGHUP, SIGQUIT, SIGSYS, SIGXCPU};
+  for (size_t i = 0; i < sizeof stops / sizeof stops[0]; i++) sigaction(stops[i], &act, NULL);
 }
