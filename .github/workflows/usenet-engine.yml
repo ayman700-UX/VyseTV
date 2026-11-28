@@ -1,0 +1,159 @@
+# The Usenet engine (packages/vyse_usenet/engine) for every platform VyseTV runs on, and its
+# tests. Started by a push to main whose message has [usenet-engine], or by hand. Each job
+# uploads what it built; the files are committed to packages/vyse_usenet/binaries (as the
+# torrent engine's are to packages/torrserver_flutter/binaries), where the app's builds take
+# them from. packages/vyse_usenet/tool/build_engine.py says what each target is.
+name: Usenet engine
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  plan:
+    name: Asked for?
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.ask.outputs.go }}
+    steps:
+      - id: ask
+        env:
+          EVENT: ${{ github.event_name }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ] || printf '%s' "$MESSAGE" | grep -qF '[usenet-engine]'; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Android (executables the app starts), Linux desktop, LG TVs, and the engine's own tests
+  linux:
+    name: Tests, Android, Linux, LG
+    needs: plan
+    if: ${{ needs.plan.outputs.go == 'true' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/vyse_usenet/engine/go.mod
+          cache-dependency-path: packages/vyse_usenet/engine/go.sum
+      - name: Cross compilers
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-aarch64-linux-gnu g++-aarch64-linux-gnu gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf cmake
+      - name: The engine's tests
+        working-directory: packages/vyse_usenet/engine
+        run: go test ./... -timeout 20m
+      - name: Android
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: |
+          for t in android-arm64 android-arm android-amd64; do
+            python3 packages/vyse_usenet/tool/build_engine.py "$t" "dist/$t"
+          done
+      - name: Linux and LG
+        run: |
+          for t in linux-amd64 linux-arm64 webos-arm; do
+            python3 packages/vyse_usenet/tool/build_engine.py "$t" "dist/$t"
+          done
+      - name: What was built
+        run: |
+          file dist/*/*
+          ls -lR dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vyse-usenet-linux
+          path: dist
+          retention-days: 3
+
+  windows:
+    name: Windows
+    needs: plan
+    if: ${{ needs.plan.outputs.go == 'true' }}
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/vyse_usenet/engine/go.mod
+          cache-dependency-path: packages/vyse_usenet/engine/go.sum
+      - name: A C compiler (MinGW)
+        run: |
+          if ! command -v gcc >/dev/null; then choco install mingw -y --no-progress; fi
+          gcc --version
+      - name: Build
+        run: python packages/vyse_usenet/tool/build_engine.py windows-amd64 dist/windows-amd64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vyse-usenet-windows
+          path: dist
+          retention-days: 3
+
+  apple:
+    name: Mac, iPhone, Apple TV
+    needs: plan
+    if: ${{ needs.plan.outputs.go == 'true' }}
+    runs-on: macos-26-intel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/vyse_usenet/engine/go.mod
+          cache-dependency-path: packages/vyse_usenet/engine/go.sum
+      - name: Build
+        run: |
+          for t in darwin-universal ios-arm64 tvos-arm64; do
+            python3 packages/vyse_usenet/tool/build_engine.py "$t" "dist/$t"
+          done
+          ls -lR dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vyse-usenet-apple
+          path: dist
+          retention-days: 3
+
+  # Samsung TVs: built with the Tizen SDK's compiler, which comes under the Tizen SDK licence
+  # (the repository variable TIZEN_SDK_LICENSE says it was accepted, as for the tizen job)
+  tizen:
+    name: Samsung TV
+    needs: plan
+    if: ${{ needs.plan.outputs.go == 'true' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: The Tizen SDK licence
+        env:
+          TIZEN_SDK_LICENSE: ${{ vars.TIZEN_SDK_LICENSE }}
+        run: |
+          if [ "$TIZEN_SDK_LICENSE" != "accepted" ]; then
+            echo "::error::The Tizen SDK is under the Tizen SDK licence. Set the repository variable TIZEN_SDK_LICENSE to: accepted"
+            exit 1
+          fi
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/vyse_usenet/engine/go.mod
+          cache-dependency-path: packages/vyse_usenet/engine/go.sum
+      - name: The Tizen SDK's tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake
+          bash tool/tizen/setup.sh --accept-tizen-sdk-license
+      - name: Build
+        run: |
+          python3 packages/vyse_usenet/tool/build_engine.py tizen-arm dist/tizen-arm
+          file dist/tizen-arm/*
+          readelf --dyn-syms -W dist/tizen-arm/libvyse_usenet.so | grep -E 'VyseUsenet(Start|Stop|Error)'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vyse-usenet-tizen
+          path: dist
+          retention-days: 3

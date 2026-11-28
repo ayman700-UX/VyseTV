@@ -1,0 +1,6 @@
+# what tool/build_engine.py makes on the way
+engine/build/
+engine/third_party/rapidyenc/librapidyenc_android_*.a
+engine/third_party/rapidyenc/librapidyenc_ios_arm64.a
+engine/third_party/rapidyenc/librapidyenc_linux_arm.a
+dist/
