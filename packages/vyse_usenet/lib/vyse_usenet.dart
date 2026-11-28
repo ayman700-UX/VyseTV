@@ -40,7 +40,8 @@ class UsenetProgram {
     final sep = Platform.pathSeparator;
     final candidates = <String>[
       if (Platform.isWindows) '$exe$sep$fileName',
-      if (Platform.isLinux) ...['$exe/lib/$fileName', '$exe/$fileName'],
+      // (an older LG's package starts the app under a loader of its own: from there, ../lib)
+      if (Platform.isLinux) ...['$exe/lib/$fileName', '$exe/$fileName', '$exe/../lib/$fileName'],
       if (Platform.isMacOS) ...[
         '$exe/../Frameworks/vyse_usenet.framework/Resources/$fileName',
         '$exe/../Frameworks/vyse_usenet.framework/Versions/A/Resources/$fileName',
