@@ -1,6 +1,6 @@
 {
     "id": "com.vyse.vysetv",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "vendor": "VyseTV",
     "type": "native",
     "main": "vysetv",
