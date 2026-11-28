@@ -72,7 +72,8 @@ val mpvLibcxxJniDir = File(mpvNativeDir, "libcxx/jni")
 val mpvAbis = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
 val extractMpvNatives = tasks.register<Sync>("extractMpvNatives") {
   from(provider { zipTree(mpvAarNatives.singleFile) }) {
-    include("jni/*/libavcodec.so", "jni/*/libavutil.so", "jni/*/libswresample.so")
+    // (swscale: FFmpeg's video decoder for Media3 draws its frames with it)
+    include("jni/*/libavcodec.so", "jni/*/libavutil.so", "jni/*/libswresample.so", "jni/*/libswscale.so")
     into("ffmpeg")
   }
   from(provider { zipTree(mpvAarNatives.singleFile) }) {
@@ -106,7 +107,7 @@ val mpvFfmpegDevelopmentDir = layout.buildDirectory.dir("libmpv-ffmpeg-developme
 val prepareMpvFfmpegDevelopment = tasks.register("prepareMpvFfmpegDevelopment") {
   dependsOn(extractMpvNatives)
   val manifest = File(mpvFfmpegDevelopmentDir, ".manifest")
-  val libraries = listOf("avcodec", "avutil", "swresample")
+  val libraries = listOf("avcodec", "avutil", "swresample", "swscale")
   inputs.dir(mpvFfmpegJniDir)
   inputs.property("ffmpegVersion", mpvFfmpegVersion)
   inputs.property("sourceUrl", mpvFfmpegSourceUrl)
@@ -120,6 +121,7 @@ val prepareMpvFfmpegDevelopment = tasks.register("prepareMpvFfmpegDevelopment") 
     File(mpvFfmpegDevelopmentDir, "include/libavcodec/avcodec.h"),
     File(mpvFfmpegDevelopmentDir, "include/libavutil/avconfig.h"),
     File(mpvFfmpegDevelopmentDir, "include/libswresample/swresample.h"),
+    File(mpvFfmpegDevelopmentDir, "include/libswscale/swscale.h"),
     manifest
   )
   doLast {
@@ -156,7 +158,7 @@ val prepareMpvFfmpegDevelopment = tasks.register("prepareMpvFfmpegDevelopment") 
       } catch (error: Exception) {
         throw GradleException("Failed to extract FFmpeg $mpvFfmpegVersion headers", error)
       }
-      listOf("libavcodec", "libavutil", "libswresample").forEach { library ->
+      listOf("libavcodec", "libavutil", "libswresample", "libswscale").forEach { library ->
         project.copy {
           from(File(extractedSource, library)) {
             include("*.h")

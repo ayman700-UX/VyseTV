@@ -226,7 +226,8 @@ class PlaybackReport {
       ])),
       (title: 'Player engine', facts: _facts([
         ('Engine', engineLine),
-        ('Video decoder', decoder ?? ''),
+        // (FFmpeg's decoder in the app, Media3's software path: "ffmpeg<version>-<codec>")
+        ('Video decoder', decoder == null ? '' : (decoder.startsWith('ffmpeg') ? '$decoder (in the app, software)' : decoder)),
       ])),
       (title: 'Video', facts: _facts([
         ('Codec', _videoCodec(exo, mpv)),

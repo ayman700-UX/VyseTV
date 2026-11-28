@@ -10,6 +10,7 @@ import '../../services/music/music_service.dart';
 import '../app_settings.dart';
 import '../playback/audio_focus.dart';
 import 'music_library.dart';
+import 'yt_audio.dart';
 import 'yt_music.dart';
 
 enum LoopMode { off, all, one }
@@ -31,6 +32,9 @@ class MusicPlayer extends ChangeNotifier {
     });
     _player.streams.position.listen((p) {
       position.value = p;
+      // half a minute of the song playing well since it was mended: it gets its two tries back
+      // (Metrolist's rule: a failure that far on is a new one, not the same one again)
+      if (_retries > 0 && p - _mendedAt > const Duration(seconds: 30)) _retries = 0;
       // a while into a song: the next one is looked up now, so it starts at once
       if (_started && p > const Duration(seconds: 15) && _aheadFor != _generation) {
         _aheadFor = _generation;
@@ -88,6 +92,9 @@ class MusicPlayer extends ChangeNotifier {
 
   /// Fresh addresses asked for the song on now after it broke.
   int _retries = 0;
+
+  /// Where in the song it was last mended (see [_retries]).
+  Duration _mendedAt = Duration.zero;
 
   /// Songs in a row that would not start. At three the queue stops, rather than asking for
   /// every song left in it: a burst of look-ups is what makes YouTube refuse a device.
@@ -404,11 +411,38 @@ class MusicPlayer extends ChangeNotifier {
   @visibleForTesting
   static int debugAsked = 0;
 
-  /// One question to the lookup: [t]'s address, or null when it found none.
-  Future<MusicAddress?> _ask(MusicTrack t) async {
+  /// Tests: answers in place of VyseTV's own lookup (yt_audio.dart); null leaves it out.
+  @visibleForTesting
+  static Future<MusicAddress?> Function(MusicTrack t, {required bool fresh})? debugOwnLookup;
+
+  /// One question to the lookup: [t]'s address, or null when it found none. VyseTV's own lookup
+  /// first (yt_audio.dart: a plain request, AAC on Samsung's and LG's players, a second or less),
+  /// then the one before it for what that found nothing for. A bot check from the first ends it
+  /// there: no other client is asked to get past one. [fresh]: never from what was kept.
+  Future<MusicAddress?> _ask(MusicTrack t, {bool fresh = false}) async {
     debugAsked++;
     final hook = debugLookup;
     if (hook != null) return hook(t);
+    final own = debugOwnLookup;
+    try {
+      if (own != null) {
+        final r = await own(t, fresh: fresh);
+        if (r != null) return r;
+      } else {
+        final r = await YtAudio.instance.find(t.id, fresh: fresh);
+        if (r != null) {
+          MusicLog.line('  own     ${r.client} itag ${r.itag} ${r.mimeType.split(';').first}');
+          return (url: r.url, userAgent: r.userAgent);
+        }
+        MusicLog.line('  own     found nothing: asking the other lookup');
+      }
+    } on YtBotCheck catch (e) {
+      MusicLog.line('  own     BOT CHECK: ${MusicLog.clip(e.reason, 200)}');
+      rethrow;
+    } catch (e) {
+      MusicLog.line('  own     failed: ${MusicLog.clip('$e', 200)}');
+    }
+    if (own != null) return null; // (a test's own lookup stands for both)
     final r = await (MusicLog.enabled ? _loggedLookup(t) : MusicService.instance.getAudioStream(t));
     return r == null ? null : (url: r.url, userAgent: r.userAgent);
   }
@@ -418,9 +452,9 @@ class MusicPlayer extends ChangeNotifier {
   /// on 23 Nov 2026, 2 of 34 songs came back with nothing, and both answered when asked again.
   /// Never more than twice: a burst of look-ups is what makes YouTube refuse a device. A song
   /// looked up while the one before it played ([_lookAhead]) is answered from that.
-  Future<MusicAddress?> _lookup(MusicTrack t, int gen) async {
+  Future<MusicAddress?> _lookup(MusicTrack t, int gen, {bool fresh = false}) async {
     final ahead = _ahead.remove(t.id);
-    if (ahead != null) {
+    if (ahead != null && !fresh) {
       final r = await ahead;
       final ends = r == null ? null : _expiryOf(r.url);
       if (r != null && (ends == null || DateTime.now().isBefore(ends.subtract(const Duration(minutes: 5))))) {
@@ -432,9 +466,12 @@ class MusicPlayer extends ChangeNotifier {
       Object? failure;
       StackTrace? trace;
       try {
-        final r = await _ask(t).timeout(const Duration(seconds: 20));
+        final r = await _ask(t, fresh: fresh).timeout(const Duration(seconds: 20));
         if (r != null) return r;
         MusicLog.line('  lookup  try $attempt found nothing at ${_logClock.elapsedMilliseconds}ms');
+      } on YtBotCheck {
+        // (not asked again a moment later: that is what makes YouTube refuse a device for longer)
+        return null;
       } catch (e, st) {
         failure = e;
         trace = st;
@@ -476,6 +513,8 @@ class MusicPlayer extends ChangeNotifier {
           try {
             final r = await _ask(next).timeout(const Duration(seconds: 20));
             if (r != null) return r;
+          } on YtBotCheck {
+            return null; // (not asked again: see [_lookup])
           } catch (_) {}
           if (attempt == 1) await Future<void>.delayed(const Duration(seconds: 2));
         }
@@ -500,8 +539,11 @@ class MusicPlayer extends ChangeNotifier {
       _stale = true; // mended when play is pressed
       return;
     }
+    // (what was found for it is dead: the next ask is a fresh one)
+    YtAudio.instance.forget(t.id);
     if (_retries < (_started ? 2 : 1)) {
       _retries++;
+      _mendedAt = position.value;
       unawaited(_playCurrent(resume: _started ? position.value : null, again: true));
     } else if (ended) {
       _onCompleted(); // it really does end there
@@ -573,7 +615,7 @@ class MusicPlayer extends ChangeNotifier {
         await Future<void>.delayed(const Duration(milliseconds: 450));
         if (gen != _generation) return;
       }
-      final stream = await _lookup(t, gen);
+      final stream = await _lookup(t, gen, fresh: again);
       if (gen != _generation) {
         MusicLog.line('  dropped ${t.id}: another song was picked while this one was looked up');
         return;

@@ -515,6 +515,9 @@ List<PhoneSection> phoneSections({required List<SubtitleFontChoice> fonts}) {
     if (!lg) PhoneSection('player', 'Sound and picture', 'Set for this TV only.', [
       if (PlayerEngine.offered) _Engine(),
       if (m3) _Toggle(AppSettings.mpvHandOver, "Switch to mpv when Media3 can't play", 'mpv carries on from the same spot. Off: the video is said not to play'),
+      if (m3)
+        _Choice<String>(AppSettings.videoDecoding, 'Video decoding', [for (final d in PlayerEngine.decodings) (d, PlayerEngine.decodingLabel(d))],
+            sub: "Automatic: the TV's decoders, and the app's for what they can't play, up to 1080p. Software: every video in the app, slow at 4K"),
       _Stepper(AppSettings.audioDelayMs, 'Audio sync', min: -5000, max: 5000, step: 50, fmt: 'delay', zero: 'In sync', sub: 'Fixes lip-sync. + plays the sound later'),
       _Choice<String>(AppSettings.audioChannels, 'Channels', [const ('original', 'Original'), if (!m3) const ('surround51', '5.1'), const ('stereo', 'Stereo')], sub: 'Stereo folds surround down for headphones and TV speakers',
           // (Media3 has no 5.1 limit: it plays that choice as Original)

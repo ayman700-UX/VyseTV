@@ -513,13 +513,51 @@ jobs:
         run: bash tool/webos/setup.sh --accept-lg-ndk-license
       - name: Build
         run: bash tool/webos/build.sh
+      # The webOS Homebrew project's checker (github.com/webosbrew/dev-toolbox-cli, as
+      # moonlight-tv runs it): every library in each package against the libraries and symbols of
+      # real LG firmware, webOS 3 to 24 (its data), and whether a TV would install the package at
+      # all. The report goes to the job's summary. For now it only warns: what it says of the
+      # older-webOS package is the first look at it against firmware older than the one TV that
+      # has run it.
+      - name: Check the packages against LG firmware
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set +e
+          ls build/webos/*.ipk >/dev/null 2>&1 || { echo "No package to check."; exit 0; }
+          TAG=v20261017-2d5a7b6
+          VER=0.10.0-1
+          mkdir -p /tmp/toolbox
+          for p in ipk-verify fw-symbols; do
+            curl -sfL -o "/tmp/toolbox/$p.deb" "https://github.com/webosbrew/dev-toolbox-cli/releases/download/$TAG/webosbrew-toolbox-${p}_${VER}_amd64.deb" || { echo "::warning::The firmware checker could not be downloaded ($p)."; exit 0; }
+          done
+          sudo apt-get install -yq /tmp/toolbox/*.deb >/dev/null || { echo "::warning::The firmware checker would not install."; exit 0; }
+          worst=0
+          for ipk in build/webos/*.ipk; do
+            echo "## $(basename "$ipk")" >> "$GITHUB_STEP_SUMMARY"
+            webosbrew-ipk-verify -f markdown -d -o /tmp/report.md "$ipk"
+            code=$?
+            cat /tmp/report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null
+            webosbrew-ipk-verify -f plain "$ipk" > "build/webos/$(basename "$ipk" .ipk).firmware-check.txt" 2>&1
+            case $code in
+              0) echo "$(basename "$ipk"): compatible with every firmware checked" ;;
+              1) echo "::warning::$(basename "$ipk"): needs something some LG firmware lacks (the job summary lists which)"; worst=1 ;;
+              6) echo "::error::$(basename "$ipk"): built in a way no TV will install"; worst=6 ;;
+              *) echo "::warning::$(basename "$ipk"): the checker could not check it (exit $code)" ;;
+            esac
+          done
+          # (a package no TV installs is a broken build; anything else is for reading)
+          [ "$worst" = 6 ] && exit 1
+          exit 0
       # (also when the look inside the package found something missing: the package is then
       # what there is to look at)
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
           name: vysetv-webos
-          path: build/webos/*.ipk
+          path: |
+            build/webos/*.ipk
+            build/webos/*.firmware-check.txt
           if-no-files-found: ignore
           retention-days: 2 # a private repository has 500 MB for these
 

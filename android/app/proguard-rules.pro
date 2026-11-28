@@ -19,6 +19,12 @@
 # growOutputBuffer's JNI descriptor names this type, so it may not be renamed either.
 -keep class androidx.media3.decoder.SimpleDecoderOutputBuffer { *; }
 
+# FFmpeg's video decoder for Media3 (nextlib's, in io.github.anilbeesetti.nextlib): its JNI
+# functions are named after these classes, and ffvideo.cpp finds the output buffer's fields
+# and methods by name.
+-keep class io.github.anilbeesetti.nextlib.media3ext.ffdecoder.** { *; }
+-keep class androidx.media3.decoder.VideoDecoderOutputBuffer { *; }
+
 # MatroskaExtractor.init is final and its ExtractorOutput / subtitle scratch buffer live
 # in private fields, so the extractor wrappers reach both by name: AssMatroskaExtractor
 # (android/libass/.../media/extractor/AssMatroskaExtractor.kt) resolves extractorOutput

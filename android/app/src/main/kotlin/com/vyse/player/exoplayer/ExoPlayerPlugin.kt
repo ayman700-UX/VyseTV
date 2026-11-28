@@ -272,6 +272,11 @@ class ExoPlayerPlugin :
         allowMpvFallback = call.argument<Boolean>("allow") ?: true
         result.success(null)
       }
+      // VyseTV: Settings > Playback > Video decoding (SoftwareVideo)
+      "setVideoDecoding" -> {
+        SoftwareVideo.mode = call.argument<String>("mode") ?: SoftwareVideo.AUTO
+        result.success(null)
+      }
       "setSubtitleStyle" -> handleSetSubtitleStyle(call, result)
       "setBoxFitMode" -> handleSetBoxFitMode(call, result)
       "setVideoZoom" -> handleSetVideoZoom(call, result)

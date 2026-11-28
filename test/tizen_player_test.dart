@@ -489,18 +489,96 @@ void main() {
     expect(player.state.playing, isTrue);
   });
 
-  tvTest('a fault the TV really stopped at ends the film', (t) async {
-    tv.position = 0;
-    final player = await playing(t);
+  tvTest('a fault the TV really stopped at, before the film ever played, ends it', (t) async {
+    final player = await opened(t);
+    await say(t, _loaded());
     final errors = <m.PlayerError>[];
     player.streams.error.listen(errors.add);
-    await t.pump(const Duration(seconds: 1));
-    tv.position = null; // (it says no position: neither playing nor paused)
     tv.events[0]!.addError(PlatformException(code: 'PlusPlayer error', message: 'Error: Streaming connection failed'));
-    for (var i = 0; i < 4; i++) {
+    for (var i = 0; i < 9; i++) {
       await t.pump(const Duration(seconds: 1));
     }
     expect(errors.single.message, startsWith("The TV couldn't reach the video"));
+    expect(tv.calls.where((c) => c.startsWith('create')), ['create 0'], reason: 'nothing to open again where it was');
+  });
+
+  // (Moonfin's player does the same: a fault after the film has played is a hiccup of the
+  // stream or of the TV's pipeline far more often than a film that can't be played)
+  tvTest('a fault the TV stopped at after the film played: opened again where it was, with its subtitles and sound; the third time ends it', (t) async {
+    final dir = Directory.systemTemp.createTempSync('vyse_tizen_again');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final file = File('${dir.path}${Platform.pathSeparator}film.en.srt')..writeAsStringSync('1\n00:00:01,000 --> 01:00:00,000\nA line\n');
+    tv.position = 0;
+    final player = await playing(t);
+    await t.runAsync(() => player.addSubtitleFile(Uri.file(file.path).toString(), title: 'English', language: 'en'));
+    await player.selectAudioTrack(player.state.tracks.audio[1]);
+    expect(player.state.track.audio?.id, '2');
+    final errors = <m.PlayerError>[];
+    final logs = <m.PlayerLog>[];
+    player.streams.error.listen(errors.add);
+    player.streams.log.listen(logs.add);
+    await t.pump(const Duration(seconds: 3));
+    for (var round = 1; round <= 2; round++) {
+      tv.position = null; // (it says no position: neither playing nor paused)
+      tv.events[round - 1]!.addError(PlatformException(code: 'PlusPlayer error', message: 'Error: Not supported media format'));
+      for (var i = 0; i < 4; i++) {
+        await t.pump(const Duration(seconds: 1));
+      }
+      expect(errors, isEmpty, reason: 'round $round: opened again, not ended');
+      expect(tv.calls, contains('create $round'));
+      expect(logs.map((l) => l.text), contains(contains('opened again where it was')));
+      tv.position = 3000;
+      tv.activeAudio = 0;
+      await say(t, _loaded(), id: round);
+      expect(tv.calls.where((c) => c.startsWith('seek $round ')), isNotEmpty, reason: 'round $round: back where it was');
+      await say(t, _playing(true), id: round);
+      expect(tv.calls, contains('select audio 2'), reason: 'round $round: the sound track it had');
+      expect(player.state.track.audio?.id, '2');
+      expect(player.state.track.subtitle?.id, 'file:0', reason: 'round $round: the subtitle file it had');
+      expect(player.currentSubText, 'A line');
+      tv.calls.remove('select audio 2');
+      await t.pump(const Duration(seconds: 2));
+    }
+    tv.position = null;
+    tv.events[2]!.addError(PlatformException(code: 'PlusPlayer error', message: 'Error: Not supported media format'));
+    for (var i = 0; i < 9; i++) {
+      await t.pump(const Duration(seconds: 1));
+    }
+    expect(errors.single.message, startsWith("The TV can't read this stream"), reason: 'the third time: the link is taken to be gone');
+    expect(tv.calls, isNot(contains('create 3')));
+  });
+
+  test('a sound track instead of one the TV cannot play: the same language, never DTS or TrueHD', () {
+    AudioTrack a(int id, String mime, String lang) => AudioTrack(trackId: id, mimetype: mime, language: lang, channel: 6, bitrate: 0);
+    final tracks = [a(1, 'audio/x-dts', 'eng'), a(2, 'audio/x-true-hd', 'eng'), a(3, 'audio/x-ac3', 'fre'), a(4, 'audio/x-eac3', 'en')];
+    expect(PlayerTizen.soundInstead(tracks, 1), 3, reason: "'en' is 'eng'; French is not put on in its place");
+    expect(PlayerTizen.soundInstead([a(1, 'audio/x-dts', 'eng'), a(2, 'audio/x-ac3', 'fra')], 1), isNull);
+    expect(PlayerTizen.soundInstead([a(1, 'audio/x-dts', 'und'), a(2, 'audio/x-ac3', 'fra')], 1), 1, reason: 'no language said: any it plays');
+    // (a track the TV does not list, its language unknown: the first it lists that it plays)
+    expect(PlayerTizen.soundInstead([a(2, 'audio/x-dts', 'eng'), a(3, 'audio/x-aac', 'eng')], 9), 1);
+  });
+
+  tvTest("a sound the TV cannot play: another track in the same language is put on once it plays", (t) async {
+    tv.audio
+      ..clear()
+      ..addAll([
+        AudioTrack(trackId: 1, mimetype: 'audio/x-dts', language: 'eng', channel: 6, bitrate: 1509000),
+        AudioTrack(trackId: 2, mimetype: 'audio/x-ac3', language: 'eng', channel: 6, bitrate: 640000),
+      ]);
+    tv.position = 0;
+    final player = await opened(t);
+    final logs = <m.PlayerLog>[];
+    player.streams.log.listen(logs.add);
+    // (said while it prepares: the switch waits until it plays)
+    tv.events[0]!.addError(PlatformException(code: 'PlusPlayer error', message: 'Error: Not supported audio codec but video can be played'));
+    await t.pump();
+    await say(t, _loaded());
+    expect(tv.calls, isNot(contains('select audio 2')));
+    await say(t, _playing(true));
+    expect(tv.calls, contains('select audio 2'));
+    expect(player.state.track.audio?.id, '2');
+    expect(logs.where((l) => l.prefix == 'tv-part'), isEmpty, reason: 'it has sound: nothing to say on the page');
+    expect(logs.map((l) => l.text), contains(contains('playing the eng AC3 track instead')));
   });
 
   tvTest('a sound the TV cannot play: the film goes on and the page is told which half is gone', (t) async {

@@ -460,6 +460,8 @@ VyseTV stands on a lot of other people's work.
 - **[mpv](https://mpv.io/)**, **FFmpeg** and **libass**, which do the actual playing.
 - **[TorrServer](https://github.com/YouROK/TorrServer)** (GPL-3.0), by YouROK: the torrent engine.
 - **PlayTorrio** (GPL-3.0): the anime sources, the built-in torrent search and the debrid providers were ported from it.
+- **[nextlib](https://github.com/anilbeesetti/nextlib)** (GPL-3.0), by Anil Beesetti: the FFmpeg video decoder inside Media3 on Android TV, under `android/app/src/main/java/io/github/anilbeesetti` and `android/app/src/main/cpp/nextlib_ffvideo`.
+- **[Metrolist](https://github.com/MetrolistGroup/Metrolist)** and its **InnerTubeX** library (GPL-3.0): VyseTV's own YouTube Music lookup (`lib/data/music/yt_audio.dart`) is translated from their Kotlin.
 - **The Vyla SDK**: the film and TV sources were ported from its scrapers.
 - **Anime4K**, **ArtCNN** and **NVIDIA Image Scaling**: the upscaling shaders in `assets/shaders`.
 - **[TMDB](https://www.themoviedb.org/)**: the catalogue. This product uses the TMDB API but is not endorsed or certified by TMDB.

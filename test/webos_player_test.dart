@@ -187,6 +187,13 @@ void main() {
   });
 
   group('what the TV is told when a video opens', () {
+    test("the app's id: LG's Flutter's, else webOS's own unless it is Developer Mode's, else the package's", () {
+      expect(PlayerWebos.appIdFrom({'FLUTTER_APP_ID': 'com.vyse.vysetv', 'APPID': 'x'}), 'com.vyse.vysetv');
+      expect(PlayerWebos.appIdFrom({'APPID': 'com.vyse.vysetv'}), 'com.vyse.vysetv');
+      expect(PlayerWebos.appIdFrom({'APPID': 'com.palmdts.devmode.sshd'}), 'com.vyse.vysetv', reason: 'started over Developer Mode SSH');
+      expect(PlayerWebos.appIdFrom({}), 'com.vyse.vysetv', reason: 'the older-webOS embedder sets neither');
+    });
+
     test('a file: whose window, and nothing about its kind', () {
       final p = PlayerWebos.loadPayload('http://127.0.0.1:8090/stream/film.mkv', appId: 'com.vyse.vysetv', windowId: 'window-1');
       expect(p, {

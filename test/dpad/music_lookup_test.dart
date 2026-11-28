@@ -7,6 +7,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vyse_tv/data/music/music_player.dart';
+import 'package:vyse_tv/data/music/yt_audio.dart';
 import 'package:vyse_tv/models/music/music_track.dart';
 
 import 'harness.dart';
@@ -28,6 +29,7 @@ void main() {
   setUp(asked.clear);
   tearDown(() async {
     MusicPlayer.debugLookup = null;
+    MusicPlayer.debugOwnLookup = null;
     await player.stop();
   });
 
@@ -44,6 +46,30 @@ void main() {
     await wait(t);
     expect(asked['a1'], 2, reason: 'nothing the first time: asked again');
     expect((player.current?.id, player.error, player.resolving), ('a1', null, false), reason: 'and it plays');
+  });
+
+  // (2026-11-28: the lookup translated from Metrolist's goes first, the one before it after it)
+  testWidgets("VyseTV's own lookup is asked first, and the song plays from what it found", (t) async {
+    MusicPlayer.debugOwnLookup = (s, {required fresh}) async {
+      asked[s.id] = (asked[s.id] ?? 0) + 1;
+      return _address(s.id);
+    };
+    player.playQueue([_song('o1')]).ignore();
+    await wait(t);
+    expect(asked['o1'], 1);
+    expect((player.current?.id, player.error, player.resolving), ('o1', null, false));
+  });
+
+  testWidgets('a bot check is not asked again a moment later, nor taken to the other lookup', (t) async {
+    MusicPlayer.debugOwnLookup = (s, {required fresh}) async {
+      asked[s.id] = (asked[s.id] ?? 0) + 1;
+      throw const YtBotCheck("Sign in to confirm you're not a bot");
+    };
+    player.playQueue([_song('o2')]).ignore();
+    await wait(t);
+    await wait(t);
+    expect(asked['o2'], 1);
+    expect(player.error, contains('Song o2'));
   });
 
   testWidgets('never more than twice: a song that finds nothing either time is given up', (t) async {

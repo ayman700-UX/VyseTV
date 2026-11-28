@@ -1592,6 +1592,20 @@ class _EngineRow extends StatelessWidget {
             subtitle: 'mpv carries on from the same spot. Off: the video is said not to play, and you pick another source',
             trailing: _Toggle(AppSettings.mpvHandOver),
           ),
+        if (PlayerEngine.isMedia3)
+          ValueListenableBuilder<String>(
+            valueListenable: AppSettings.videoDecoding,
+            builder: (context, _, _) => _Row(
+              title: 'Video decoding',
+              subtitle: '${PlayerEngine.decodingNote(PlayerEngine.videoDecoding)}. Applies from the next video',
+              below: _Choice<String>(
+                value: PlayerEngine.videoDecoding,
+                options: PlayerEngine.decodings,
+                label: PlayerEngine.decodingLabel,
+                onChanged: PlayerEngine.chooseVideoDecoding,
+              ),
+            ),
+          ),
       ],
     ),
   );

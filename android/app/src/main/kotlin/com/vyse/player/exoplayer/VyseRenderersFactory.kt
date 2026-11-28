@@ -30,6 +30,8 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
 import androidx.media3.exoplayer.video.VideoRendererEventListener
 import com.vyse.player.TvDetection
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegLibrary
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegVideoRenderer
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
@@ -115,6 +117,22 @@ class VyseRenderersFactory(context: Context) : DefaultRenderersFactory(context) 
       forceSetOutputSurfaceWorkaround,
       videoDiagnosticsLogger
     )
+    // VyseTV: FFmpeg's video decoder, after the device's own: for what they can't decode, as
+    // Settings > Playback > Video decoding says (SoftwareVideo). After the device's renderer, so
+    // a video both can play stays with the device's decoder.
+    if (extensionRendererMode != EXTENSION_RENDERER_MODE_OFF &&
+      runCatching { FfmpegLibrary.isAvailable() }.getOrDefault(false)
+    ) {
+      SoftwareVideo.context = context.applicationContext
+      FfmpegVideoRenderer.gate = FfmpegVideoRenderer.Gate { format -> SoftwareVideo.allows(format) }
+      out.add(
+        index + 1,
+        FfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY)
+      )
+      videoDiagnosticsLogger?.invoke("info", "video", "Software video decoder: FFmpeg ${FfmpegLibrary.getVersion()} (${SoftwareVideo.mode})")
+    } else {
+      videoDiagnosticsLogger?.invoke("warn", "video", "Software video decoder not loaded")
+    }
   }
 
   /**
@@ -516,6 +534,14 @@ internal class DvSanitizingVideoRenderer(
 ) : MediaCodecVideoRenderer(builder) {
 
   private val sanitizer = DvBitstreamSanitizer()
+
+  // VyseTV: with Video decoding set to Software, what FFmpeg's decoder takes is left to it
+  override fun supportsFormat(mediaCodecSelector: MediaCodecSelector, format: Format): Int {
+    if (SoftwareVideo.leftToSoftware(format)) {
+      return androidx.media3.exoplayer.RendererCapabilities.create(androidx.media3.common.C.FORMAT_UNSUPPORTED_SUBTYPE)
+    }
+    return super.supportsFormat(mediaCodecSelector, format)
+  }
 
   private var stripHdr10PlusSei = false
   private var stripDvRpu = false

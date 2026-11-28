@@ -19,7 +19,7 @@ else()
     target_link_libraries(dovi_bridge log)
 endif()
 
-foreach(ffmpeg_library avcodec avutil swresample)
+foreach(ffmpeg_library avcodec avutil swresample swscale)
     add_library(${ffmpeg_library} SHARED IMPORTED)
     set_target_properties(${ffmpeg_library} PROPERTIES
         IMPORTED_LOCATION "${MPV_FFMPEG_ROOT}/native/${ANDROID_ABI}/lib${ffmpeg_library}.so")
@@ -35,5 +35,24 @@ target_link_libraries(ffmpegJNI
     avcodec
     avutil
     swresample
+    android
+    log)
+
+# FFmpeg's video decoding for Media3: nextlib's (github.com/anilbeesetti/nextlib, GPL-3.0,
+# nextlib_ffvideo/LICENSE), loaded as "media3ext" by its FfmpegLibrary.
+add_library(media3ext SHARED
+    nextlib_ffvideo/ffmain.cpp
+    nextlib_ffvideo/ffcommon.cpp
+    nextlib_ffvideo/ffvideo.cpp)
+target_compile_features(media3ext PRIVATE cxx_std_17)
+target_include_directories(media3ext PRIVATE
+    "${MPV_FFMPEG_ROOT}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/nextlib_ffvideo")
+target_link_options(media3ext PRIVATE "-Wl,-z,max-page-size=16384")
+target_link_libraries(media3ext
+    avcodec
+    avutil
+    swresample
+    swscale
     android
     log)

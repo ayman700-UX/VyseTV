@@ -88,6 +88,7 @@ union wl_argument {
 #define VYSE_MARSHAL_FLAG_DESTROY 1u
 #define VYSE_MAX_ARGS 20
 #define VYSE_REGISTRY_BIND 0u
+#define VYSE_POINTER_SET_CURSOR 0u
 
 // ── the TV's own library, as much of it as this TV has ──
 
@@ -338,6 +339,18 @@ EXPORT struct wl_proxy *wl_proxy_marshal_flags(struct wl_proxy *proxy, uint32_t 
                                                 uint32_t version, uint32_t flags, ...) {
   union wl_argument args[VYSE_MAX_ARGS];
   const struct wl_interface *own = ((const struct wl_object *)proxy)->interface;
+  // wl_pointer.set_cursor is never sent: on webOS it stops the pointer's input for good (Kodi's
+  // webOS port found it, and leaves its SetCursor empty for it), and the Magic Remote's cursor
+  // is the TV's own anyway. An embedder sets one each time the pointer moves onto something
+  // that changes its shape, so the remote's pointer would go dead at the first button.
+  if (opcode == VYSE_POINTER_SET_CURSOR && own->name != NULL && strcmp(own->name, "wl_pointer") == 0) {
+    static int said;
+    if (!said) {
+      said = 1;
+      fprintf(stderr, "[vyse] wl_pointer.set_cursor left unsent (it breaks the pointer on webOS)\n");
+    }
+    return NULL;
+  }
   const char *signature = own->methods[opcode].signature;
   int count = 0;
   va_list ap;

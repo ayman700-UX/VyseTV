@@ -39,6 +39,7 @@ import 'package:video_player_avplay/video_player_platform_interface.dart' as avp
 
 import '../../models.dart';
 import '../../../core/platform/tv_memory.dart';
+import '../../../data/subtitles/subtitles.dart' show exactLanguage;
 import '../../support/app_logger.dart';
 import '../../support/header_relay.dart';
 import '../../support/subtitle_cues.dart';
@@ -116,6 +117,15 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
   bool _started = false; // the first "playing" of this load was seen
   bool _ended = false;
   bool _suspended = false; // the app went to the background and the TV's player was put away
+  // The film opened again where it was after the TV's player stopped at a fault ([_endIfStopped]):
+  // how many times for this film (a link that is really gone ends it the third time).
+  int _faultReopens = 0;
+  bool _reopening = false; // [open] called by [_openAgain], for the film already open
+  // The sound track to put back on once the film opened again plays: (track id, language).
+  (int, String)? _wantSound;
+  int? _activeSoundId; // the sound track the TV says it plays (it may be one it does not list)
+  String? _soundRefused; // the TV can't play the sound it started on: said once it plays
+  bool _soundTried = false; // another sound track was tried for this load
   Media? _media;
   bool _live = false;
   int _startMs = 0;
@@ -178,6 +188,10 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
   }) async {
     if (disposed) return;
     await _ensureInitialized();
+    if (!_reopening) {
+      _faultReopens = 0;
+      _wantSound = null;
+    }
     final startPosition = media.start ?? timelineOffset;
     final previousState = state;
     final previousPosition = currentPosition;
@@ -300,6 +314,9 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     _tvLine = null;
     _polledMs = null;
     _stillPolls = 0;
+    _activeSoundId = null;
+    _soundRefused = null;
+    _soundTried = false;
     _stopClock();
     vyseResetForNewFile();
   }
@@ -383,6 +400,7 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     _video = videos.isEmpty ? null : videos.first;
     for (final t in await _quiet(() => _tv.getActiveTrackInfo(id)) ?? const []) {
       if (t is avplay.AudioTrack) {
+        _activeSoundId = t.trackId;
         final i = _audio.indexWhere((a) => a.trackId == t.trackId);
         if (i >= 0) _audioIndex = i;
       } else if (t is avplay.VideoTrack) {
@@ -412,7 +430,78 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     if (!_started) {
       _started = true;
       handlePlayerEvent('playback-restart', {'sourceId': _sources, 'positionSeconds': _clockNowMs() / 1000});
+      // (a sound track is switched only while the TV plays or is paused, never before)
+      unawaited(_soundOnFirstPlay(_sources));
     }
+  }
+
+  /// What waits for the film to play: the sound track chosen before it was opened again, and
+  /// another track for a sound the TV said it can't play.
+  Future<void> _soundOnFirstPlay(int source) async {
+    final want = _wantSound;
+    _wantSound = null;
+    final id = _id;
+    if (want != null && id != null) {
+      final i = _audio.indexWhere((a) => a.trackId == want.$1 && a.language == want.$2);
+      if (i >= 0 && i != _audioIndex && await _quiet(() => _tv.setTrackSelection(id, _audio[i])) == true) {
+        if (disposed || source != _sources) return;
+        _audioIndex = i;
+        _activeSoundId = _audio[i].trackId;
+        _publishTracks();
+      }
+    }
+    if (_soundRefused != null) await _otherSound(source);
+  }
+
+  /// The TV started on a sound track it can't play (a file's default track is the one it
+  /// starts on, whatever it is: a DTS track on a 2026 set): another track in the same language
+  /// that it can play is put on. Failing that, the page is told the sound is gone.
+  Future<void> _otherSound(int source) async {
+    final what = _soundRefused;
+    final id = _id;
+    if (what == null || disposed || source != _sources || id == null) return;
+    _soundRefused = null;
+    final pick = _soundTried ? null : soundInstead(_audio, _activeSoundId ?? (_audioIndex < _audio.length ? _audio[_audioIndex].trackId : null));
+    _soundTried = true;
+    if (pick != null && await _quiet(() => _tv.setTrackSelection(id, _audio[pick])) == true) {
+      if (disposed || source != _sources) return;
+      _audioIndex = pick;
+      _activeSoundId = _audio[pick].trackId;
+      _publishTracks();
+      final a = _audio[pick];
+      final lang = a.language.trim().isEmpty ? '' : '${a.language} ';
+      appLogger.i('[Tizen] sound switched to track ${pick + 1} after: $what');
+      logController.add(PlayerLog(level: PlayerLogLevel.warn, prefix: 'tv', text: '$what · playing the $lang${codecOf(a.mimetype).toUpperCase()} track instead'));
+      return;
+    }
+    // (the player page says it: no sound, and what to do)
+    logController.add(PlayerLog(level: PlayerLogLevel.error, prefix: 'tv-part', text: what));
+  }
+
+  /// Which of [tracks] to play instead of the one with [refusedId], which the TV can't play:
+  /// the first in the same language (or with none said, or when the refused one's language is
+  /// not known) that is not of a kind Samsung's sets are known not to play (DTS, TrueHD). Null
+  /// when there is none: a track in another language is never put on in its place.
+  @visibleForTesting
+  static int? soundInstead(List<avplay.AudioTrack> tracks, int? refusedId) {
+    String? lang(String raw) {
+      final l = raw.trim();
+      if (l.isEmpty || l == 'und' || l == 'unknown') return null;
+      return exactLanguage(l) ?? l.toLowerCase();
+    }
+
+    final refused = tracks.where((a) => a.trackId == refusedId).firstOrNull;
+    final want = refused == null ? null : lang(refused.language);
+    for (var i = 0; i < tracks.length; i++) {
+      final a = tracks[i];
+      if (refusedId != null && a.trackId == refusedId) continue;
+      final codec = codecOf(a.mimetype);
+      if (codec == 'dts' || codec == 'truehd') continue;
+      final l = lang(a.language);
+      if (want != null && l != null && l != want) continue;
+      return i;
+    }
+    return null;
   }
 
   void _onEnded() {
@@ -480,7 +569,7 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
       'ac3' => 'ac3',
       'aac' || 'mp4a' || 'mpeg-4' => 'aac',
       'dts' || 'dtshd' || 'dts-hd' => 'dts',
-      'truehd' || 'mlp' => 'truehd',
+      'truehd' || 'true-hd' || 'mlp' => 'truehd',
       'subrip' || 'srt' => 'subrip',
       'ssa' || 'ass' => 'ass',
       'vtt' || 'webvtt' => 'webvtt',
@@ -508,8 +597,13 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
         // (the line is in the log; the film goes on, without that subtitle)
         logController.add(PlayerLog(level: PlayerLogLevel.warn, prefix: 'tv', text: what));
         return;
-      case 'audio' || 'video':
-        // (the player page says it: no sound, or no picture, and what to do)
+      case 'audio':
+        // (another sound track is tried once the film plays; see [_otherSound])
+        _soundRefused = what;
+        if (_started) unawaited(_otherSound(source));
+        return;
+      case 'video':
+        // (the player page says it: no picture, and what to do)
         logController.add(PlayerLog(level: PlayerLogLevel.error, prefix: 'tv-part', text: what));
         return;
     }
@@ -531,6 +625,11 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
   /// After a fault with a film open: looks at the TV's player for a few seconds, and ends the
   /// film only if it has stopped. The TV gives a position only while it plays or is paused, so
   /// a position that moves (or one that is there at all while paused) means it carries on.
+  ///
+  /// A film that had played and then stopped is opened again where it was, twice at most: a
+  /// fault there is a hiccup of the stream or of the TV's pipeline far more often than a film
+  /// that can't be played (a TV left paused long enough drops its pipeline, and says "Not
+  /// supported media format" for it). One that never started ends at once.
   Future<void> _endIfStopped(int source, String what) async {
     final id = _id;
     int? last;
@@ -554,7 +653,20 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
       }
       last = at;
     }
+    if (_started && _faultReopens < 2 && !_live) {
+      await _reopenAfterFault(source, what);
+      return;
+    }
     _end(source, what);
+  }
+
+  /// Opens the film again where it was after the TV's player stopped at a fault.
+  Future<void> _reopenAfterFault(int source, String what) async {
+    if (disposed || source != _sources) return;
+    _faultReopens++;
+    appLogger.w('[Tizen] stopped at a fault, opened again where it was ($_faultReopens): $what');
+    logController.add(PlayerLog(level: PlayerLogLevel.warn, prefix: 'tv', text: '$what · opened again where it was'));
+    if (!await _openAgain() && !disposed) _end(_sources, what);
   }
 
   /// Which half of the video the TV plays on without, by its own words: 'audio', 'video' or
@@ -673,12 +785,34 @@ class PlayerTizen extends PlayerBase with VideoRectSupport {
     if (id != null && _wantPlay) unawaited(_quiet(() => _tv.play(id)));
   }
 
-  /// Opens what was playing again, where it was.
-  Future<void> _openAgain() async {
+  /// Opens what was playing again, where it was, with the subtitles and the sound track it had
+  /// ([open] starts from nothing; what was chosen goes back on once the TV has the video).
+  /// False when the TV would not take it.
+  Future<bool> _openAgain() async {
     final media = _media;
-    if (media == null) return;
+    if (media == null) return false;
     final at = currentPosition;
-    await _quiet(() => open(Media(media.uri, headers: media.headers, start: at), play: _wantPlay, isLive: _live, timelineDuration: configuredTimelineDuration, timelineOffset: timelineOffset));
+    final files = List<_SubFile>.of(_files);
+    final sub = _subId;
+    final sound = _audioIndex < _audio.length ? _audio[_audioIndex] : null;
+    _reopening = true;
+    try {
+      await open(Media(media.uri, headers: media.headers, start: at), play: _wantPlay, isLive: _live, timelineDuration: configuredTimelineDuration, timelineOffset: timelineOffset);
+    } catch (e) {
+      appLogger.w('[Tizen] not opened again: $e');
+      return false;
+    } finally {
+      _reopening = false;
+    }
+    if (disposed) return false;
+    _files
+      ..clear()
+      ..addAll(files);
+    _subId = sub;
+    _wantSound = sound == null ? null : (sound.trackId, sound.language);
+    _applySubtitleChoice();
+    _publishTracks();
+    return true;
   }
 
   // ── position ──

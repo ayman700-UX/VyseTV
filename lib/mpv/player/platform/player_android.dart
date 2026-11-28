@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/services.dart';
 
+import '../../../data/app_settings.dart';
 import '../../support/audio_channel_limit.dart';
 import '../../support/player_settings.dart';
 import '../../models.dart';
@@ -166,6 +167,9 @@ class PlayerAndroid extends PlayerBase {
       }
       // VyseTV: whether a video Media3 can't play may go to mpv (the plugin outlives a player)
       await invoke('setAllowMpvFallback', {'allow': _allowMpvFallback});
+      // VyseTV: how Media3 decodes video (Settings > Playback > Video decoding; said again at
+      // each open, so a change applies from the next video)
+      await _sayVideoDecoding();
 
       // Register property observers before flipping `initialized` so partial
       // failures don't leave us in a half-initialized state that the memoized
@@ -224,6 +228,7 @@ class PlayerAndroid extends PlayerBase {
   }) async {
     if (disposed) return;
     await _ensureInitialized();
+    await _sayVideoDecoding();
     final startPosition = media.start ?? timelineOffset;
     final previousState = state;
     final previousPosition = currentPosition;
@@ -570,6 +575,20 @@ class PlayerAndroid extends PlayerBase {
   // VyseTV: whether a video Media3 can't play is handed to mpv (Settings > Playback). Told to the
   // native side as it starts and whenever it changes.
   bool _allowMpvFallback = true;
+
+  String? _saidDecoding;
+
+  /// Tells the plugin how Media3 is to decode video, when that changed since it was last told.
+  Future<void> _sayVideoDecoding() async {
+    final mode = AppSettings.videoDecoding.value;
+    if (mode == _saidDecoding || disposed) return;
+    try {
+      await invoke('setVideoDecoding', {'mode': mode});
+      _saidDecoding = mode;
+    } catch (_) {
+      // (an older plugin without it: it decodes as it always did)
+    }
+  }
 
   @override
   Future<void> setAllowMpvFallback(bool allow) async {

@@ -183,6 +183,45 @@ void main() {
     expect(PlayerEngine.isMedia3, isTrue);
   }, variant: tv);
 
+  // (2026-11-28: FFmpeg's video decoding inside Media3, nextlib's, for a video the TV's own
+  // decoders can't play: a choice under the engine while Media3 is it)
+  testWidgets('Settings > Playback on a TV: Video decoding under the engine, Automatic first; the remote moves along it and OK picks', (t) async {
+    addTearDown(() => AppSettings.videoDecoding.set('auto'));
+    await openSettings(t, 'Playback');
+    expect(find.text('Video decoding'), findsOneWidget);
+    expect(find.textContaining("FFmpeg in the app for a video they can't play, up to 1080p"), findsOneWidget);
+    await Bed.focus(t, find.widgetWithText(Pressable, 'Automatic').first);
+    await Bed.right(t);
+    await Bed.right(t);
+    await Bed.ok(t);
+    await Bed.settle(t, rounds: 2);
+    expect(AppSettings.videoDecoding.value, 'software');
+    expect(find.textContaining('Every video decoded in the app'), findsOneWidget);
+    await Bed.picture(t, 'engine/settings_video_decoding');
+    // (mpv decodes its own way: the choice is Media3's only)
+    PlayerEngine.choose(PlayerEngine.mpv);
+    await Bed.settle(t, rounds: 2);
+    expect(find.text('Video decoding'), findsNothing);
+  }, variant: tv);
+
+  test('a Media3 player tells the plugin the Video decoding chosen before a video opens, and again once it changed', () async {
+    AppSettings.videoDecoding.set('software');
+    addTearDown(() => AppSettings.videoDecoding.set('auto'));
+    final player = Player(useExoPlayer: true);
+    addTearDown(player.dispose);
+    Bed.exoCalls.clear();
+    await player.open(Media('https://files.example/film.mkv'));
+    final told = Bed.exoCalls.indexOf('setVideoDecoding {mode: software}');
+    expect(told, isNot(-1));
+    expect(told, lessThan(Bed.exoCalls.indexWhere((c) => c.startsWith('open '))));
+    Bed.exoCalls.clear();
+    await player.open(Media('https://files.example/next.mkv'));
+    expect(Bed.exoCalls.where((c) => c.startsWith('setVideoDecoding')), isEmpty, reason: 'nothing changed: not said again');
+    AppSettings.videoDecoding.set('hardware');
+    await player.open(Media('https://files.example/third.mkv'));
+    expect(Bed.exoCalls, contains('setVideoDecoding {mode: hardware}'));
+  });
+
   testWidgets('Settings > Subtitles on a TV: font, spacing, shadow and styled subtitles show with mpv only', (t) async {
     await openSettings(t, 'Subtitles');
     const mpvOnly = ['Font', 'Letter spacing', 'Shadow', 'Shadow strength', 'Soft edges', 'Styled subtitles'];

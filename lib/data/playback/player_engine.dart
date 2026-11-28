@@ -46,6 +46,35 @@ abstract final class PlayerEngine {
 
   static void chooseHandOver(bool on) => AppSettings.mpvHandOver.set(on);
 
+  /// How Media3 decodes video (Settings > Playback > Video decoding): [decodeAuto], the TV's own
+  /// decoders and FFmpeg in the app for a video they can't decode (10-bit H.264, VC-1, AV1 on a
+  /// TV without it), up to 1080p; [decodeHardware], the TV's decoders only (then mpv); or
+  /// [decodeSoftware], FFmpeg for every video it can decode (for a TV whose decoders show a
+  /// black or broken picture; slow at 4K). Applies from the next video.
+  static const decodeAuto = 'auto';
+  static const decodeHardware = 'hardware';
+  static const decodeSoftware = 'software';
+  static const decodings = [decodeAuto, decodeHardware, decodeSoftware];
+
+  static String get videoDecoding {
+    final v = AppSettings.videoDecoding.value;
+    return decodings.contains(v) ? v : decodeAuto;
+  }
+
+  static void chooseVideoDecoding(String mode) => AppSettings.videoDecoding.set(decodings.contains(mode) ? mode : decodeAuto);
+
+  static String decodingLabel(String mode) => switch (mode) {
+    decodeHardware => 'Hardware',
+    decodeSoftware => 'Software',
+    _ => 'Automatic',
+  };
+
+  static String decodingNote(String mode) => switch (mode) {
+    decodeHardware => "The TV's own decoders only. A video they can't play goes to mpv",
+    decodeSoftware => "Every video decoded in the app (FFmpeg). For a TV whose decoders show a black or broken picture. Slow at 4K",
+    _ => "The TV's own decoders, and FFmpeg in the app for a video they can't play, up to 1080p",
+  };
+
   /// Tells when the choice changes.
   static Listenable get changes => AppSettings.playerEngine;
 

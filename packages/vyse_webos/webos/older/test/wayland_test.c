@@ -41,7 +41,8 @@ static const struct wl_interface shell_interface = {"wl_webos_shell", 2, 0, NULL
 // A seat and its pointer, as Wayland has them: a seat's first request makes its pointer.
 static const struct wl_message seat_requests[] = {{"get_pointer", "n", NULL}};
 static const struct wl_interface seat_interface = {"wl_seat", 5, 1, seat_requests, 0, NULL};
-static const struct wl_interface pointer_interface = {"wl_pointer", 5, 0, NULL, 0, NULL};
+static const struct wl_message pointer_requests[] = {{"set_cursor", "u?oii", NULL}, {"release", "5", NULL}};
+static const struct wl_interface pointer_interface = {"wl_pointer", 5, 2, pointer_requests, 0, NULL};
 
 // What the app heard from the compositor.
 static struct {
@@ -171,6 +172,13 @@ int main(int argc, char **argv) {
         wl_proxy_add_listener(pointer_b, plain_listener, &window) == 0 && ((struct fake_proxy *)pointer_b)->listener == plain_listener);
   CHECK("  while a pointer listened to twice by the embedder is still refused the second time",
         wl_proxy_add_listener(pointer_a, plain_listener, &window) == -1);
+
+  // Setting the cursor breaks the pointer on webOS: never sent. Anything else on a pointer is.
+  wl_proxy_marshal_flags(thing, 1, NULL, 3, 0, 1, 2u, 3, text, NULL, NULL, array, 4);
+  CHECK("a pointer's set_cursor is not sent on",
+        wl_proxy_marshal_flags(pointer_a, 0, NULL, 5, 0, 7u, NULL, 0, 0) == NULL && fake_last.proxy == thing);
+  wl_proxy_marshal_flags(pointer_c, 1, NULL, 5, 1u);
+  CHECK("  while its release is", fake_last.proxy == pointer_c && fake_last.opcode == 1);
 
   if (failed) {
     printf("     some of it is WRONG\n");

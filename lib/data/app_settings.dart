@@ -156,6 +156,10 @@ class AppSettings {
   // Media3 hands a video it can't play to mpv, which carries on from the same spot (on unless
   // turned off). Read through PlayerEngine.handOver.
   static final mpvHandOver = Setting<bool>('device.handOver', true);
+  // How Media3 decodes video on an Android TV: 'auto' (the TV's own decoders, and FFmpeg in the
+  // app for what they can't decode, up to 1080p), 'hardware' or 'software'. Read through
+  // PlayerEngine.videoDecoding.
+  static final videoDecoding = Setting<String>('device.videoDecoding', 'auto');
   // Fewer animations and less paint, for a TV's chip: '' (not chosen: on for an Android TV),
   // 'on' or 'off'. Read through Lean (core/lean.dart).
   static final leanMotion = Setting<String>('device.lean', '');
@@ -203,7 +207,7 @@ class AppSettings {
         subtitleLanguage, autoSyncSubtitles, subtitleSize, subtitleColor,
         subtitleBackground, subtitleFont, subtitleBold, subtitleItalic, subtitleBackColor, subtitleOutline, subtitleOutlineColor,
         subtitleShadow, subtitleShadowColor, subtitleBlur, subtitleSpacing, subtitleTop, subtitleLift, subtitleOnPicture, subtitleAss,
-        audioDelayMs, audioPassthrough, audioChannels, hdrOutput, matchRefreshRate, playerEngine, mpvHandOver, leanMotion, pictureShape, playSideways, volumeLevelling,
+        audioDelayMs, audioPassthrough, audioChannels, hdrOutput, matchRefreshRate, playerEngine, mpvHandOver, videoDecoding, leanMotion, pictureShape, playSideways, volumeLevelling,
         upscaler, ambientLight, partyLibrary, musicAutoplay, debridProvider, debridOn, updateAuto, updateSkipped, addonsRefreshed,
         torrentMemory, torrentPreload, torrentConnections, torrentUpload, torrentTrackers, publicTrackers, myListGrid, myListSort, partyMembers, partySounds, partyMuted, animeAdult, animeAudio,
       ];

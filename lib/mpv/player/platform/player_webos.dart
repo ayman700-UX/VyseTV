@@ -330,7 +330,20 @@ class PlayerWebos extends PlayerBase with VideoRectSupport {
     }
   }
 
-  static String get _appId => Platform.environment['FLUTTER_APP_ID'] ?? '';
+  static String get _appId => appIdFrom(Platform.environment);
+
+  /// The app's id for the TV's media service: what LG's Flutter says, else what webOS itself
+  /// sets for a native app (`APPID`) unless that is Developer Mode's own (an app started over its
+  /// SSH has that one, as Kodi's webOS port found), else the id the package is installed as
+  /// (webos/meta/appinfo.json). The older-webOS embedder sets no FLUTTER_APP_ID of its own.
+  @visibleForTesting
+  static String appIdFrom(Map<String, String> env) {
+    final flutter = env['FLUTTER_APP_ID']?.trim() ?? '';
+    if (flutter.isNotEmpty) return flutter;
+    final system = env['APPID']?.trim() ?? '';
+    if (system.isNotEmpty && !system.startsWith('com.palmdts.devmode')) return system;
+    return 'com.vyse.vysetv';
+  }
 
   /// The address the TV is given: the link itself, or a relay on this device when the link
   /// needs headers the TV cannot send.
