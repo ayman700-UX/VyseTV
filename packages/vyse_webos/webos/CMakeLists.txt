@@ -143,8 +143,9 @@ target_link_libraries(vyse_wlegl PRIVATE dl)
 add_library(vyse_start SHARED "older/vyse_start.c")
 
 # vyse_sdl: what an older TV's media library is told when it asks SDL for the app's window.
-# It carries SDL's own name (its soname), and the player's native side loads it just before
-# the first player starts, so the media library's request for SDL by that name finds it.
+# It carries SDL's own name (its soname) and the package for older webOS makes it a library the
+# program needs (tool/webos/older.sh), so it is loaded at the start and the media library's
+# request for SDL by that name finds it, never the TV's own SDL.
 add_library(vyse_sdl SHARED "older/vyse_sdl.c")
 set_target_properties(vyse_sdl PROPERTIES NO_SONAME ON)
 target_link_options(vyse_sdl PRIVATE "-Wl,-soname,libSDL2-2.0.so.0")

@@ -114,7 +114,14 @@ You may replace these files with builds of your own: they are found by name, in 
 NOTICE
 
 echo "   the program: its own loader, its own runtime first"
-ADD=(--add-needed libvyse_start.so --add-needed libvyse_wayland.so)
+# libvyse_sdl.so is VyseTV's stand-in for SDL (its library name is libSDL2-2.0.so.0). LG's media
+# library on webOS 5 to 25 is linked against SDL and is loaded at the first media call, and on
+# webOS 6 to 25 that first call (NDL_MediaSetPlayer) came before the plugin loaded the stand-in:
+# the TV's own SDL was loaded with it, gave it no window, and playing anything ended the app
+# (LG UT8050, webOS 25, 2026-11-28). Needed by the program, the stand-in is loaded at the start;
+# when the media library asks for libSDL2-2.0.so.0, the loader finds it by that name, already
+# loaded, and the TV's SDL never comes in (the way the open project for older webOS does it).
+ADD=(--add-needed libvyse_sdl.so --add-needed libvyse_start.so --add-needed libvyse_wayland.so)
 for f in "${RUNTIME_FIRST[@]}"; do ADD+=(--add-needed "$f"); done
 # (single quotes: $ORIGIN is the loader's word for "where this program is", not the shell's)
 patchelf --set-interpreter "$INSTALLED/runtime/ld-linux.so.3" \
@@ -132,7 +139,7 @@ echo "     loader:  $(patchelf --print-interpreter "$APP/$MAIN")"
 echo "     looks in: $(patchelf --print-rpath "$APP/$MAIN")"
 echo "     program needs:  $(patchelf --print-needed "$APP/$MAIN" | tr '\n' ' ')"
 echo "     embedder needs: $(patchelf --print-needed "$APP/lib/libflutter_webos_media.so" | tr '\n' ' ')"
-for want in libvyse_start.so libvyse_wayland.so libvyse_sdevent.so libvyse_wlegl.so libvyse_fallback.so; do
+for want in libvyse_sdl.so libvyse_start.so libvyse_wayland.so libvyse_sdevent.so libvyse_wlegl.so libvyse_fallback.so; do
   [ -f "$APP/lib/$want" ] || { echo "lib/$want is not in the package LG's tool built" >&2; exit 1; }
 done
 
@@ -155,7 +162,7 @@ if command -v qemu-arm-static >/dev/null 2>&1; then
       BAD=1
     fi
   done
-  for f in libvyse_start.so libvyse_wayland.so libvyse_sdevent.so libvyse_wlegl.so libvyse_fallback.so libflutter_webos_media.so libflutter_engine.so libvyse_webos_plugin.so; do
+  for f in libvyse_sdl.so libvyse_start.so libvyse_wayland.so libvyse_sdevent.so libvyse_wlegl.so libvyse_fallback.so libflutter_webos_media.so libflutter_engine.so libvyse_webos_plugin.so; do
     if ! printf '%s\n' "$FOUND" | grep -F "$f =>" | grep -q "/lib/$f"; then
       echo "   $f of the package is not found" >&2
       BAD=1

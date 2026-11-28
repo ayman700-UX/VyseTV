@@ -9,8 +9,10 @@
 // when playing any media").
 //
 // This library is VyseTV's SDL as far as the media library is concerned. It carries SDL's
-// name (libSDL2-2.0.so.0) and is loaded by the player's native side just before the first
-// player starts, so when the media library asks for SDL by that name it is given this one.
+// name (libSDL2-2.0.so.0) and is a library the app's program needs (tool/webos/older.sh), so it
+// is loaded at the start, before the media library, and when that library asks for SDL by that
+// name it is given this one. (Loaded just before the first player instead, it came too late on
+// webOS 6 to 25, where the first media call loads the media library and the TV's SDL with it.)
 // It answers the few calls the media library makes:
 //
 //   * the window: a stand-in (the media library only checks there is one);
@@ -98,6 +100,30 @@ EXPORT int SDL_webOSSetExportedWindow(const char *id, vyse_rect *src, vyse_rect 
 
 EXPORT int SDL_webOSExportedSetProperty(const char *id, const char *name, const char *value) {
   fprintf(stderr, "[vyse] media asked SDL: %s's %s = %s (left to the app)\n", id != NULL ? id : "", name != NULL ? name : "", value != NULL ? value : "");
+  return 1;
+}
+
+// The rest of the TV's SDL calls for an exported window and the screen: said yes to, so a call
+// the list above did not foresee is answered instead of ending the app. (The window is the
+// app's embedder's to place.)
+EXPORT int SDL_webOSExportedSetCropRegion(const char *id, vyse_rect *org, vyse_rect *src, vyse_rect *dst) {
+  (void)org;
+  (void)src;
+  (void)dst;
+  fprintf(stderr, "[vyse] media asked SDL: crop %s (left to the app)\n", id != NULL ? id : "");
+  return 1;
+}
+
+EXPORT int SDL_webOSGetPanelResolution(int *width, int *height) {
+  fprintf(stderr, "[vyse] media asked SDL: the panel's size\n");
+  if (width != NULL) *width = 1920;
+  if (height != NULL) *height = 1080;
+  return 1;
+}
+
+EXPORT int SDL_webOSGetRefreshRate(int *rate) {
+  fprintf(stderr, "[vyse] media asked SDL: the refresh rate\n");
+  if (rate != NULL) *rate = 60;
   return 1;
 }
 

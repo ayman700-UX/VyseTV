@@ -147,16 +147,29 @@ bool HasDisplayWindow() {
 // sound alone). Before webOS 26 that library cannot be handed a window: when a player starts
 // it asks SDL for one, and an app without SDL gave it nothing, which ended the app on the spot
 // (an LG webOS 5.6 tester, 2026-11-27: "App closes when playing any media"). VyseTV's stand-in
-// for SDL (older/vyse_sdl.c, which carries SDL's name) is loaded here before the first player
-// starts, so the library's request for SDL finds it, and it is told the window each time.
+// for SDL (older/vyse_sdl.c, which carries SDL's name) is a library the program needs in the
+// package for older webOS, so it is in the process before the media library is loaded and that
+// library's request for SDL finds it; it is told the window each time. (Loaded here instead,
+// before the first media call, it came too late on webOS 6 to 25: the first call loads the
+// media library and the TV's SDL with it; an LG webOS 25 tester, 2026-11-28.)
 void UseWindowForOlderLibrary(const std::string& window) {
   static void (*use)(const char*) = nullptr;
   static bool looked = false;
   if (!looked) {
     looked = true;
-    // (an SDL already in the process would be the one found: there is none in this app)
+    // The package for older webOS makes the stand-in a library the program needs, so it is in
+    // the process from the start, before LG's media library (which is linked against SDL) is
+    // loaded, and that library is given it in place of the TV's SDL (tool/webos/older.sh).
+    use = reinterpret_cast<void (*)(const char*)>(dlsym(RTLD_DEFAULT, "VyseSdlUseWindow"));
+    if (use != nullptr) {
+      std::fprintf(stderr, "[vyse_webos] the media library's SDL: VyseTV's stand-in, there from the start\n");
+      use(window.c_str());
+      return;
+    }
+    // Otherwise the TV's own SDL may be in already, and the media library bound to it: it gives
+    // no window and playing ends the app. Said in the start log, so a tester's log shows it.
     if (void* sdl = dlopen("libSDL2-2.0.so.0", RTLD_NOW | RTLD_NOLOAD)) {
-      std::fprintf(stderr, "[vyse_webos] an SDL is loaded already: the media library asks that one\n");
+      std::fprintf(stderr, "[vyse_webos] the TV's own SDL is loaded already: the media library may get no window\n");
       dlclose(sdl);
     }
     // (beside this library, in the app's lib/)
@@ -429,6 +442,10 @@ class VyseWebosPlugin : public flutter::Plugin {
         reply->Error("NO_ADDRESS", "Nothing to open");
         return;
       }
+      // An older TV's library takes the window from SDL: VyseTV's stand-in is told which, and
+      // this before any call of the media library, the first of which loads it (see
+      // UseWindowForOlderLibrary).
+      if (!HasInitWithWindowId()) UseWindowForOlderLibrary(window);
       const bool one_player = !HasPlayers();
       if (one_player) {
         TakeTheOnePlayer(index);
@@ -437,9 +454,6 @@ class VyseWebosPlugin : public flutter::Plugin {
       }
       // (the one player is started once, whichever slot comes first)
       bool& started = one_player ? one_player_started_ : slot.started;
-      // An older TV's library takes the window from SDL, at the start and perhaps at each
-      // load: VyseTV's stand-in is told which (see UseWindowForOlderLibrary).
-      if (!HasInitWithWindowId()) UseWindowForOlderLibrary(window);
       if (!started) {
         // With the window's id for a picture (without one LG's library goes looking for an
         // SDL window, which this app has not); plain for sound alone. A webOS older than 26
