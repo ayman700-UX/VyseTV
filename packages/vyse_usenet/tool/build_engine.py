@@ -187,8 +187,8 @@ def build_tizen(out: Path):
     cmake_rapidyenc(ENGINE / "build" / "rapidyenc-tizen", "librapidyenc_linux_arm.a",
                     "-DCMAKE_SYSTEM_NAME=Linux", "-DCMAKE_SYSTEM_PROCESSOR=armv7", "-DTARGET_ARCH=armv7",
                     f"-DCMAKE_C_COMPILER={gcc}", f"-DCMAKE_CXX_COMPILER={gxx}", f"-DCMAKE_SYSROOT={sysroot}",
-                    f"-DCMAKE_C_FLAGS=--sysroot={sysroot}", f"-DCMAKE_CXX_FLAGS=--sysroot={sysroot}",
-                    "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY")
+                    f"-DCMAKE_C_FLAGS=--sysroot={sysroot} -fPIC", f"-DCMAKE_CXX_FLAGS=--sysroot={sysroot} -fPIC",
+                    "-DCMAKE_POSITION_INDEPENDENT_CODE=ON", "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY")
     run(["go", "build", "-buildmode=c-shared", "-trimpath", "-buildvcs=false",
          "-ldflags=-s -w -buildid= -extldflags=-Wl,-soname,libvyse_usenet.so",
          "-o", out / "libvyse_usenet.so", LIBRARY], cwd=ENGINE,
