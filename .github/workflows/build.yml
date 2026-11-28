@@ -341,26 +341,15 @@ jobs:
           channel: stable
           cache: true
       - run: flutter config --enable-swift-package-manager
-      # The pod links TorrServerKit.xcframework from packages/torrserver_flutter/ios.
-      # Its own install script unpacks it too, but CocoaPods does not promise to run
-      # that for a plugin, so it is unpacked here first. Without the framework the
-      # app still builds, with torrents hidden.
-      - name: Prepare the torrent engine
-        run: |
-          Z=packages/torrserver_flutter/binaries/TorrServerKit.xcframework.zip
-          if [ -f "$Z" ]; then
-            rm -rf packages/torrserver_flutter/ios/TorrServerKit.xcframework
-            unzip -q "$Z" -d packages/torrserver_flutter/ios/
-            ls packages/torrserver_flutter/ios/TorrServerKit.xcframework
-          else
-            echo "::warning::No TorrServerKit.xcframework.zip in the package: this build has no torrent engine."
-          fi
-      # The Usenet engine: linked into the app from packages/vyse_usenet/ios (its pod)
-      - name: Prepare the Usenet engine
+      # The engines: the Usenet engine and the torrent engine in ONE Go library (one Go runtime in
+      # the app; packages/vyse_usenet/apple), linked into the app by the Usenet plugin's pod, which
+      # the torrent plugin's pod depends on
+      - name: Prepare the engines
         run: |
           rm -rf packages/vyse_usenet/ios/VyseUsenet-ios.xcframework
           unzip -q packages/vyse_usenet/binaries/vyse-usenet-ios-arm64.xcframework.zip -d packages/vyse_usenet/ios/
           plutil -p packages/vyse_usenet/ios/VyseUsenet-ios.xcframework/Info.plist | grep -E 'LibraryIdentifier|SupportedPlatform'
+          nm -gU packages/vyse_usenet/ios/VyseUsenet-ios.xcframework/ios-arm64/libvyse_usenet.a 2>/dev/null | grep -E ' T _(TorrServer|VyseUsenet)Start$' | sort -u
       # The real server settings (the account server, the update addresses) are not in the
       # repository: they come from the SERVER_CONFIG secret (lib/data/server_config.dart in
       # base64). A build without them would have no accounts and could never be updated, so it
@@ -382,15 +371,9 @@ jobs:
           flutter build ios --config-only --release --no-codesign
           xcodebuild -resolvePackageDependencies -workspace ios/Runner.xcworkspace -scheme Runner
       - run: flutter build ios --release --no-codesign
-      # The engine is tens of megabytes of code; a small plugin binary means it was left out.
-      - name: Check the torrent engine
-        run: |
-          F=build/ios/iphoneos/Runner.app/Frameworks/torrserver_flutter.framework/torrserver_flutter
-          if [ -f "$F" ] && [ "$(stat -f%z "$F")" -gt 20000000 ]; then
-            echo "Torrent engine linked in."
-          else
-            echo "::warning::The torrent engine is not linked into the app: torrents will be hidden on iOS."
-          fi
+      # One Go runtime in the whole app, holding both engines (two crashed 1.0.4 at launch)
+      - name: Check the engines
+        run: bash packages/vyse_usenet/tool/one_go_runtime.sh build/ios/iphoneos/Runner.app
       - name: Package an unsigned .ipa
         run: |
           mkdir -p Payload
@@ -624,17 +607,14 @@ jobs:
           python3 tool/tvos/vendor_plugins.py --check
           python3 tool/tvos/make_project.py
           git diff --exit-code -- tvos/ || { echo "::error::tvos/ is not what tool/tvos/make_project.py makes: run it and commit the result."; exit 1; }
-      # The torrent engine, TorrServer built for tvOS (the tvos-torrent job made the .zip).
-      - name: Unpack the torrent engine
+      # The engines: the Usenet engine and the torrent engine in ONE Go library linked into the app
+      # (one Go runtime: two in the app's program crashed 1.0.4 at launch; packages/vyse_usenet/apple)
+      - name: Unpack the engines
         run: |
           rm -rf tvos/Frameworks && mkdir -p tvos/Frameworks
-          unzip -q packages/torrserver_flutter/binaries/TorrServerKit-tvos.xcframework.zip -d tvos/Frameworks
-          plutil -p tvos/Frameworks/TorrServerKit.xcframework/Info.plist | grep -E 'LibraryIdentifier|SupportedPlatform'
-      # The Usenet engine, linked into the app (packages/vyse_usenet)
-      - name: Unpack the Usenet engine
-        run: |
           unzip -q packages/vyse_usenet/binaries/vyse-usenet-tvos-arm64.xcframework.zip -d tvos/Frameworks
           plutil -p tvos/Frameworks/VyseUsenet-tvos.xcframework/Info.plist | grep -E 'LibraryIdentifier|SupportedPlatform'
+          nm -gU tvos/Frameworks/VyseUsenet-tvos.xcframework/tvos-arm64/libvyse_usenet.a 2>/dev/null | grep -E ' T _(TorrServer|VyseUsenet)Start$' | sort -u
       # A party's voice call: the WebRTC build flutter_webrtc pins, its Apple TV slices (tvOS 17)
       - name: Fetch WebRTC for tvOS
         run: bash tvos/scripts/fetch_webrtc.sh
@@ -686,6 +666,8 @@ jobs:
           [ "$(stat -f%z "$APP/Runner")" -gt 30000000 ] && echo "torrent engine linked in" || { echo "::error::the app's program is too small to hold the torrent engine"; exit 1; }
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' -c 'Print :MinimumOSVersion' -c 'Print :DTPlatformName' "$APP/Info.plist"
           otool -L "$APP/Runner" | head -n 30
+          # one Go runtime in the whole app, holding both engines
+          bash packages/vyse_usenet/tool/one_go_runtime.sh "$APP"
       - name: Package an unsigned .ipa
         run: |
           rm -rf Payload && mkdir -p Payload

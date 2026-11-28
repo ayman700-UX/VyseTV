@@ -1,11 +1,12 @@
 import Flutter
 import UIKit
 
-// VyseTV: TorrServerKit.xcframework is fetched when the pod is installed and is
-// not always there. Without it the plugin still builds and reports that there
-// is no engine (VyseTV does not start torrents on iOS: Torrents.supported).
-#if canImport(TorrServerKit)
-  import TorrServerKit
+// VyseTV: the torrent engine is in the same Go library as the Usenet engine (one Go runtime in
+// the app: packages/vyse_usenet/apple). On an iPhone that library comes with the Usenet plugin's
+// pod, whose module declares the entry points (VyseUsenetEngine.h); on Apple TV both plugins are
+// compiled into the app and the bridging header declares them.
+#if canImport(vyse_usenet)
+  import vyse_usenet
 #endif
 
 public class TorrserverFlutterPlugin: NSObject, FlutterPlugin {
@@ -15,21 +16,13 @@ public class TorrserverFlutterPlugin: NSObject, FlutterPlugin {
     registrar.addMethodCallDelegate(instance, channel: channel)
   }
 
-  #if !canImport(TorrServerKit)
-    public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-      switch call.method {
-      case "hasEngine":
-        result(false)
-      case "isRunning":
-        result(false)
-      case "startServer", "stopServer":
-        result(
-          FlutterError(code: "UNAVAILABLE", message: "The torrent engine is not part of this build", details: nil))
-      default:
-        result(FlutterMethodNotImplemented)
-      }
-    }
-  #else
+  /// The engine's answer: nil, or why not (a string the engine made, freed here).
+  private static func message(_ error: UnsafeMutablePointer<CChar>?) -> String? {
+    guard let error else { return nil }
+    defer { TorrServerFree(error) }
+    return String(cString: error)
+  }
+
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "startServer":
@@ -41,10 +34,15 @@ public class TorrserverFlutterPlugin: NSObject, FlutterPlugin {
       let dataDir = args["dataDir"] as? String ?? ""
 
       DispatchQueue.global(qos: .userInitiated).async {
-        let errStr = TorrserverkitStartServer(port, dataDir)
+        let error = dataDir.withCString { dir in
+          "".withCString { ip in
+            TorrserverFlutterPlugin.message(
+              TorrServerStart(Int32(port), UnsafeMutablePointer(mutating: dir), UnsafeMutablePointer(mutating: ip)))
+          }
+        }
         DispatchQueue.main.async {
-          if !errStr.isEmpty {
-            result(FlutterError(code: "START_FAILED", message: errStr, details: nil))
+          if let error, !error.isEmpty {
+            result(FlutterError(code: "START_FAILED", message: error, details: nil))
           } else {
             result(nil)
           }
@@ -52,24 +50,22 @@ public class TorrserverFlutterPlugin: NSObject, FlutterPlugin {
       }
     case "stopServer":
       DispatchQueue.global(qos: .userInitiated).async {
-        let errStr = TorrserverkitStopServer()
+        let error = TorrserverFlutterPlugin.message(TorrServerStop())
         DispatchQueue.main.async {
-          if !errStr.isEmpty {
-            result(FlutterError(code: "STOP_FAILED", message: errStr, details: nil))
+          if let error, !error.isEmpty {
+            result(FlutterError(code: "STOP_FAILED", message: error, details: nil))
           } else {
             result(nil)
           }
         }
       }
     case "hasEngine":
-      // VyseTV: this build carries the engine (the other branch of this file answers false)
+      // VyseTV: the engine is always linked in (the build stops without it)
       result(true)
     case "isRunning":
-      let running = TorrserverkitIsRunning()
-      result(running)
+      result(TorrServerIsRunning() != 0)
     default:
       result(FlutterMethodNotImplemented)
     }
   }
-  #endif
 }

@@ -1,5 +1,7 @@
 # The Usenet engine (packages/vyse_usenet/engine) for every platform VyseTV runs on, and its
-# tests. Started by a push to main whose message has [usenet-engine], or by hand. Each job
+# tests. Started by a push to main whose message has [usenet-engine], or by hand;
+# [usenet-engine-apple] builds the Mac, iPhone and Apple TV files only (the iPhone and Apple TV
+# library holds the torrent engine too: packages/vyse_usenet/apple). Each job
 # uploads what it built; the files are committed to packages/vyse_usenet/binaries (as the
 # torrent engine's are to packages/torrserver_flutter/binaries), where the app's builds take
 # them from. packages/vyse_usenet/tool/build_engine.py says what each target is.
@@ -16,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       go: ${{ steps.ask.outputs.go }}
+      apple: ${{ steps.ask.outputs.apple }}
     steps:
       - id: ask
         env:
@@ -24,8 +27,13 @@ jobs:
         run: |
           if [ "$EVENT" = "workflow_dispatch" ] || printf '%s' "$MESSAGE" | grep -qF '[usenet-engine]'; then
             echo "go=true" >> "$GITHUB_OUTPUT"
+            echo "apple=true" >> "$GITHUB_OUTPUT"
+          elif printf '%s' "$MESSAGE" | grep -qF '[usenet-engine-apple]'; then
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "apple=true" >> "$GITHUB_OUTPUT"
           else
             echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "apple=false" >> "$GITHUB_OUTPUT"
           fi
 
   # Android (executables the app starts), Linux desktop, LG TVs, and the engine's own tests
@@ -96,10 +104,12 @@ jobs:
           path: dist
           retention-days: 3
 
+  # (the iPhone and Apple TV library is both engines in one Go program: build_engine.py fetches
+  # TorrServer's source for it)
   apple:
     name: Mac, iPhone, Apple TV
     needs: plan
-    if: ${{ needs.plan.outputs.go == 'true' }}
+    if: ${{ needs.plan.outputs.apple == 'true' }}
     runs-on: macos-26-intel
     steps:
       - uses: actions/checkout@v4

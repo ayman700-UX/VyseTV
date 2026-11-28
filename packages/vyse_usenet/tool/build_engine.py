@@ -22,7 +22,9 @@ Targets, and what each makes:
     ios-arm64 | tvos-arm64
                        VyseUsenet-ios.xcframework.zip / VyseUsenet-tvos.xcframework.zip: the
                        engine linked into the app (an iPhone or Apple TV app may not start a
-                       program), with the entry points of cmd/libvyse-usenet (Xcode)
+                       program) TOGETHER WITH THE TORRENT ENGINE, as one Go program (../apple:
+                       an app must hold one Go runtime only), with the entry points of capi and
+                       of the torrent engine (Xcode, git: TorrServer's source is fetched)
 
 The engine's yEnc decoder is C++ (third_party/rapidyenc-native): it is compiled for the target
 here, except where third_party/rapidyenc already carries the library (Windows, Linux, Mac).
@@ -42,6 +44,10 @@ NATIVE = ENGINE / "third_party" / "rapidyenc-native"
 WRAPPER = ENGINE / "third_party" / "rapidyenc"
 PROGRAM = "./cmd/vyse-usenet"
 LIBRARY = "./cmd/libvyse-usenet"
+# The iPhone and Apple TV library: this engine and the torrent engine in one Go program
+APPLE = HERE.parent / "apple"
+GO_SHIM = HERE.parent.parent / "torrserver_flutter" / "tool" / "go-shim"
+TORRSERVER_TAG = "MatriX.151"  # (as the torrent engine's own build scripts in GO_SHIM)
 IOS_MIN = "15.5"
 TVOS_MIN = "17.0"
 
@@ -214,8 +220,15 @@ def build_apple_library(target: str, out: Path):
     stage = ENGINE / "build" / name
     shutil.rmtree(stage, ignore_errors=True)
     (stage / "include").mkdir(parents=True)
-    run(["go", "build", "-buildmode=c-archive", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid=",
-         "-o", stage / "libvyse_usenet_go.a", LIBRARY], cwd=ENGINE,
+    # Both engines in one Go program (../apple/main.go says why): TorrServer's source first, at
+    # the release the torrent engine's own scripts use (its web pages come ready-made with it)
+    source = GO_SHIM / "torrserver-src"
+    if not (source / "server" / "go.mod").exists():
+        shutil.rmtree(source, ignore_errors=True)
+        run(["git", "clone", "--depth", "1", "--branch", TORRSERVER_TAG, "https://github.com/YouROK/TorrServer.git", source])
+    # (nosqlite and checklinkname=0: as the torrent engine has always been built)
+    run(["go", "build", "-buildmode=c-archive", "-trimpath", "-buildvcs=false", "-tags=nosqlite",
+         "-ldflags=-s -w -buildid= -checklinkname=0", "-o", stage / "libvyse_usenet_go.a", "."], cwd=APPLE,
         env=go_env(GOOS="ios", GOARCH="arm64", CC=f"{clang} {flags}", CXX=f"{clangxx} {flags}",
                    CGO_CFLAGS=flags, CGO_LDFLAGS=flags))
     # A c-archive holds Go's own objects only: the yEnc decoder's library it links against goes
@@ -225,9 +238,17 @@ def build_apple_library(target: str, out: Path):
          WRAPPER / "librapidyenc_ios_arm64.a"])
     (stage / "libvyse_usenet_go.a").unlink()
     symbols = subprocess.check_output(["nm", "-gU", stage / "libvyse_usenet.a"], text=True, stderr=subprocess.DEVNULL)
-    if "_rapidyenc_decode_init" not in symbols:
-        raise SystemExit("libvyse_usenet.a: the yEnc decoder is not in it")
-    shutil.move(str(stage / "libvyse_usenet_go.h"), stage / "include" / "libvyse_usenet.h")
+    for need, what in (("_rapidyenc_decode_init", "the yEnc decoder"), ("_VyseUsenetStart", "the Usenet engine"),
+                       ("_TorrServerStart", "the torrent engine")):
+        if need not in symbols:
+            raise SystemExit(f"libvyse_usenet.a: {what} is not in it ({need})")
+    every = subprocess.check_output(["nm", stage / "libvyse_usenet.a"], text=True, stderr=subprocess.DEVNULL)
+    runtimes = sum(1 for line in every.splitlines() if line.endswith(" __rt0_arm64_ios_lib"))
+    if runtimes != 1:
+        raise SystemExit(f"libvyse_usenet.a: {runtimes} Go runtimes in it, one wanted")
+    # (Go writes a header for the main package's entry points only; Swift's declares both sets)
+    (stage / "libvyse_usenet_go.h").unlink()
+    shutil.copyfile(HERE.parent / "ios" / "Classes" / "VyseUsenetEngine.h", stage / "include" / "VyseUsenetEngine.h")
     framework = stage / f"{name}.xcframework"
     run(["xcodebuild", "-create-xcframework", "-library", stage / "libvyse_usenet.a",
          "-headers", stage / "include", "-output", framework])

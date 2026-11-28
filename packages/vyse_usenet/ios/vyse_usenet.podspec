@@ -1,9 +1,11 @@
 Pod::Spec.new do |s|
   s.name             = 'vyse_usenet'
   s.version          = '1.0.0'
-  s.summary          = "VyseTV's Usenet engine, linked into the app"
+  s.summary          = "VyseTV's Usenet engine and torrent engine, linked into the app"
   s.description      = <<-DESC
-The Go Usenet engine as a static library (VyseUsenet-ios.xcframework), with the plugin that starts it.
+The Go Usenet engine and the torrent engine (TorrServer) as one static library, one Go program
+(VyseUsenet-ios.xcframework, built from ../apple), with the plugin that starts the Usenet engine.
+The torrent plugin's pod depends on this one for its engine.
                        DESC
   s.homepage         = 'https://vysetv.cc'
   s.license          = { :file => '../engine/LICENSE' }

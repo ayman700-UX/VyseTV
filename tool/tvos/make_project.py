@@ -10,9 +10,10 @@ What the target does, in order:
   Run Script     tvos/scripts/xcode_appletv.sh build: the app's Dart, assets, App.framework and
                  the engine's Flutter.framework (Flutter's tool has no Apple TV target)
   Sources        the Swift below
-  Frameworks     MPVKit (libmpv and FFmpeg, the same package and revision as the iPhone app), and
-                 TorrServerKit (the torrent engine: tvos/Frameworks, unpacked from
-                 packages/torrserver_flutter/binaries/TorrServerKit-tvos.xcframework.zip)
+  Frameworks     MPVKit (libmpv and FFmpeg, the same package and revision as the iPhone app), the
+                 engines (the Usenet engine and the torrent engine in one Go library:
+                 tvos/Frameworks/VyseUsenet-tvos.xcframework, unpacked from
+                 packages/vyse_usenet/binaries/vyse-usenet-tvos-arm64.xcframework.zip), WebRTC
   Resources      icons, storyboards
   Thin Binary    tvos/scripts/xcode_appletv.sh sync_version: version from pubspec.yaml, and
                  App.framework and Flutter.framework put into the app
@@ -215,15 +216,10 @@ def main():
     mpvkit = oid('product', 'MPVKit')
     mpvkit_build = oid('build', 'Frameworks', 'MPVKit')
     add('PBXBuildFile', mpvkit_build, f'{mpvkit_build} /* MPVKit in Frameworks */ = {{isa = PBXBuildFile; productRef = {mpvkit} /* MPVKit */; }};')
-    torrent_ref = oid('file', 'Frameworks/TorrServerKit.xcframework')
-    add('PBXFileReference', torrent_ref,
-        f'{torrent_ref} /* TorrServerKit.xcframework */ = {{isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; '
-        f'name = TorrServerKit.xcframework; path = Frameworks/TorrServerKit.xcframework; sourceTree = SOURCE_ROOT; }};')
-    frameworks_children.append((torrent_ref, 'TorrServerKit.xcframework'))
-    torrent_build = oid('build', 'Frameworks', torrent_ref)
-    add('PBXBuildFile', torrent_build, f'{torrent_build} /* TorrServerKit.xcframework in Frameworks */ = {{isa = PBXBuildFile; fileRef = {torrent_ref} /* TorrServerKit.xcframework */; }};')
-    # The Usenet engine: a static library linked into the app (packages/vyse_usenet; the tvos
-    # job unpacks binaries/vyse-usenet-tvos-arm64.xcframework.zip into tvos/Frameworks)
+    # The engines: the Usenet engine and the torrent engine in ONE Go static library linked into
+    # the app (packages/vyse_usenet/apple; the tvos job unpacks
+    # binaries/vyse-usenet-tvos-arm64.xcframework.zip into tvos/Frameworks). Never a second Go
+    # library beside it: two Go runtimes in one program crashed the 1.0.4 app at launch.
     usenet_ref = oid('file', 'Frameworks/VyseUsenet-tvos.xcframework')
     add('PBXFileReference', usenet_ref,
         f'{usenet_ref} /* VyseUsenet-tvos.xcframework */ = {{isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; '
@@ -245,8 +241,8 @@ def main():
         f'{webrtc_embed} /* WebRTC.xcframework in Embed Frameworks */ = {{isa = PBXBuildFile; fileRef = {webrtc_ref} /* WebRTC.xcframework */; '
         f'settings = {{ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }}; }};')
     frameworks_phase = phase('PBXFrameworksBuildPhase', 'Frameworks',
-                             [(mpvkit_build, 'MPVKit in Frameworks'), (torrent_build, 'TorrServerKit.xcframework in Frameworks'),
-                              (usenet_build, 'VyseUsenet-tvos.xcframework in Frameworks'), (webrtc_build, 'WebRTC.xcframework in Frameworks')])
+                             [(mpvkit_build, 'MPVKit in Frameworks'), (usenet_build, 'VyseUsenet-tvos.xcframework in Frameworks'),
+                              (webrtc_build, 'WebRTC.xcframework in Frameworks')])
     embed_phase = oid('phase', 'Embed Frameworks')
     add('PBXCopyFilesBuildPhase', embed_phase,
         f'{embed_phase} /* Embed Frameworks */ = {{\n\t\t\tisa = PBXCopyFilesBuildPhase;\n\t\t\tbuildActionMask = 2147483647;\n'
