@@ -25,6 +25,10 @@ Targets, and what each makes:
                        program) TOGETHER WITH THE TORRENT ENGINE, as one Go program (../apple:
                        an app must hold one Go runtime only), with the entry points of capi and
                        of the torrent engine (Xcode, git: TorrServer's source is fetched)
+    tvos-sim-arm64     VyseUsenet-tvos-simulator.xcframework.zip: the same library for the Apple
+                       TV simulator on an Apple silicon Mac (the xcframework inside is named
+                       VyseUsenet-tvos, so the Apple TV project takes it in place of the device
+                       one); used by the Apple TV start test of .github/workflows/build.yml
 
 The engine's yEnc decoder is C++ (third_party/rapidyenc-native): it is compiled for the target
 here, except where third_party/rapidyenc already carries the library (Windows, Linux, Mac).
@@ -208,15 +212,20 @@ def build_apple_library(target: str, out: Path):
     sdk, cmake_system, min_flag, minimum, name = {
         "ios-arm64": ("iphoneos", "iOS", "-miphoneos-version-min", IOS_MIN, "VyseUsenet-ios"),
         "tvos-arm64": ("appletvos", "tvOS", "-mtvos-version-min", TVOS_MIN, "VyseUsenet-tvos"),
+        # (the simulator: its own SDK and version flag; the linker tells a simulator object from
+        # a device one by the platform these give it)
+        "tvos-sim-arm64": ("appletvsimulator", "tvOS", "-mtvos-simulator-version-min", TVOS_MIN, "VyseUsenet-tvos"),
     }[target]
+    archive_name = "VyseUsenet-tvos-simulator" if target == "tvos-sim-arm64" else name
     sysroot = subprocess.check_output(["xcrun", "--sdk", sdk, "--show-sdk-path"], text=True).strip()
     clang = subprocess.check_output(["xcrun", "--sdk", sdk, "-f", "clang"], text=True).strip()
     clangxx = subprocess.check_output(["xcrun", "--sdk", sdk, "-f", "clang++"], text=True).strip()
+    flags = f"-isysroot {sysroot} -arch arm64 {min_flag}={minimum}"
     cmake_rapidyenc(ENGINE / "build" / f"rapidyenc-{target}", "librapidyenc_ios_arm64.a",
                     f"-DCMAKE_SYSTEM_NAME={cmake_system}", "-DCMAKE_OSX_ARCHITECTURES=arm64",
                     f"-DCMAKE_OSX_SYSROOT={sysroot}", f"-DCMAKE_OSX_DEPLOYMENT_TARGET={minimum}",
+                    # (a simulator SDK as the sysroot: CMake gives the simulator's version flag)
                     "-DCMAKE_SYSTEM_PROCESSOR=aarch64", "-DTARGET_ARCH=arm64")
-    flags = f"-isysroot {sysroot} -arch arm64 {min_flag}={minimum}"
     stage = ENGINE / "build" / name
     shutil.rmtree(stage, ignore_errors=True)
     (stage / "include").mkdir(parents=True)
@@ -252,7 +261,7 @@ def build_apple_library(target: str, out: Path):
     framework = stage / f"{name}.xcframework"
     run(["xcodebuild", "-create-xcframework", "-library", stage / "libvyse_usenet.a",
          "-headers", stage / "include", "-output", framework])
-    archive = out / f"{name}.xcframework.zip"
+    archive = out / f"{archive_name}.xcframework.zip"
     archive.unlink(missing_ok=True)
     run(["ditto", "-c", "-k", "--keepParent", framework, archive])
 
@@ -274,7 +283,7 @@ def main():
         build_webos(out)
     elif target == "tizen-arm":
         build_tizen(out)
-    elif target in ("ios-arm64", "tvos-arm64"):
+    elif target in ("ios-arm64", "tvos-arm64", "tvos-sim-arm64"):
         build_apple_library(target, out)
     else:
         raise SystemExit(f"unknown target {target}\n\n{__doc__}")
