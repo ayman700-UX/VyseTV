@@ -182,9 +182,13 @@ def build_tizen(out: Path):
     gcc, gxx = toolchain / "arm-linux-gnueabi-gcc", toolchain / "arm-linux-gnueabi-g++"
     # (Tizen's C library and the TV's own libraries are soft-float ARM EABI, the compiler's own
     # default; GOARM=7 uses the FPU inside Go code only)
+    # (the compiler was made with a system folder of Samsung's build machine as its default: every
+    # call must name the TV's, CMake's own compiler checks included, or it looks there and fails)
     cmake_rapidyenc(ENGINE / "build" / "rapidyenc-tizen", "librapidyenc_linux_arm.a",
                     "-DCMAKE_SYSTEM_NAME=Linux", "-DCMAKE_SYSTEM_PROCESSOR=armv7", "-DTARGET_ARCH=armv7",
-                    f"-DCMAKE_C_COMPILER={gcc}", f"-DCMAKE_CXX_COMPILER={gxx}", f"-DCMAKE_SYSROOT={sysroot}")
+                    f"-DCMAKE_C_COMPILER={gcc}", f"-DCMAKE_CXX_COMPILER={gxx}", f"-DCMAKE_SYSROOT={sysroot}",
+                    f"-DCMAKE_C_FLAGS=--sysroot={sysroot}", f"-DCMAKE_CXX_FLAGS=--sysroot={sysroot}",
+                    "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY")
     run(["go", "build", "-buildmode=c-shared", "-trimpath", "-buildvcs=false",
          "-ldflags=-s -w -buildid= -extldflags=-Wl,-soname,libvyse_usenet.so",
          "-o", out / "libvyse_usenet.so", LIBRARY], cwd=ENGINE,

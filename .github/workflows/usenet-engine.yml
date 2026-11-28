@@ -48,9 +48,10 @@ jobs:
         working-directory: packages/vyse_usenet/engine
         run: go test ./... -timeout 20m
       - name: Android
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
         run: |
+          # (the runner's own newest NDK)
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          echo "NDK: $ANDROID_NDK_HOME"
           for t in android-arm64 android-arm android-amd64; do
             python3 packages/vyse_usenet/tool/build_engine.py "$t" "dist/$t"
           done
