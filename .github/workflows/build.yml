@@ -514,11 +514,14 @@ jobs:
       - name: Build
         run: bash tool/webos/build.sh
       # The webOS Homebrew project's checker (github.com/webosbrew/dev-toolbox-cli, as
-      # moonlight-tv runs it): every library in each package against the libraries and symbols of
-      # real LG firmware, webOS 3 to 24 (its data), and whether a TV would install the package at
-      # all. The report goes to the job's summary. For now it only warns: what it says of the
-      # older-webOS package is the first look at it against firmware older than the one TV that
-      # has run it.
+      # moonlight-tv runs it): whether a TV would install each package at all (a fault there
+      # fails the job), and every library in it against the libraries and symbols of real LG
+      # firmware (its data: webOS 1 to 25). Those rows read FAIL for both packages and that is
+      # expected (first run, 2026-11-28): the older-webOS package starts on a runtime of its own
+      # (glibc 2.41, the C++ library), which the checker does not see, and the webOS 26 package
+      # needs LG's Flutter libraries, which only webOS 26 has and the data does not. So the
+      # report is only for reading (the job summary, and *.firmware-check.txt in the artifact):
+      # a row that changes from one build to the next is the thing to look at.
       - name: Check the packages against LG firmware
         if: ${{ always() }}
         shell: bash
@@ -541,7 +544,7 @@ jobs:
             webosbrew-ipk-verify -f plain "$ipk" > "build/webos/$(basename "$ipk" .ipk).firmware-check.txt" 2>&1
             case $code in
               0) echo "$(basename "$ipk"): compatible with every firmware checked" ;;
-              1) echo "::warning::$(basename "$ipk"): needs something some LG firmware lacks (the job summary lists which)"; worst=1 ;;
+              1) echo "$(basename "$ipk"): libraries the firmware data does not have (expected, see above)" ;;
               6) echo "::error::$(basename "$ipk"): built in a way no TV will install"; worst=6 ;;
               *) echo "::warning::$(basename "$ipk"): the checker could not check it (exit $code)" ;;
             esac
