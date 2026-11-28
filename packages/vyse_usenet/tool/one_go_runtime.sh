@@ -11,25 +11,26 @@
 #   bash one_go_runtime.sh <path to Runner.app>
 set -euo pipefail
 
-APP="${1:?the app's folder (Runner.app)}"
+APP="${1:?give the path of Runner.app}"
 runtimes=0
 helpers=0
 torrent=""
 usenet=""
 while IFS= read -r -d '' f; do
   # (Mach-O files only: the program and every framework's binary)
-  file -b "$f" | grep -q 'Mach-O' || continue
+  case "$(file -b "$f")" in *Mach-O*) ;; *) continue ;; esac
   symbols="$(nm -a "$f" 2>/dev/null || true)"
-  r=$(printf '%s\n' "$symbols" | grep -c ' __rt0_arm64_ios_lib$' || true)
-  h=$(printf '%s\n' "$symbols" | grep -c ' T _x_cgo_init$' || true)
+  # (here-strings, not pipes: with pipefail, a grep that stops early fails the pipe on a long list)
+  r=$(grep -c ' __rt0_arm64_ios_lib$' <<<"$symbols" || true)
+  h=$(grep -c ' T _x_cgo_init$' <<<"$symbols" || true)
   if [ "$r" -gt 0 ] || [ "$h" -gt 0 ]; then
     echo "Go in ${f#"$APP/"}: $r runtime start(s), $h thread helper(s)"
   fi
   runtimes=$((runtimes + r))
   helpers=$((helpers + h))
-  printf '%s\n' "$symbols" | grep -q ' T _TorrServerStart$' && torrent="${f#"$APP/"}"
-  printf '%s\n' "$symbols" | grep -q ' T _VyseUsenetStart$' && usenet="${f#"$APP/"}"
-done < <(find "$APP" -type f -perm -u+x -print0)
+  if grep -q ' T _TorrServerStart$' <<<"$symbols"; then torrent="${f#"$APP/"}"; fi
+  if grep -q ' T _VyseUsenetStart$' <<<"$symbols"; then usenet="${f#"$APP/"}"; fi
+done < <(find "$APP" -type f -print0)
 
 echo "Go runtimes in the app: $runtimes (thread helpers: $helpers)"
 echo "torrent engine: ${torrent:-MISSING}; Usenet engine: ${usenet:-MISSING}"
