@@ -636,7 +636,16 @@ jobs:
             echo "  ${f#"$ENGINE/out/"}: $(lipo -archs "$f" 2>/dev/null || echo '?')"
           done
       - name: Resolve Swift packages (MPVKit)
-        run: xcodebuild -resolvePackageDependencies -workspace tvos/Runner.xcworkspace -scheme Runner
+        # (three tries: Swift's package cache on GitHub's Macs sometimes loses its copy mid-fetch,
+        # "cannot change to .../repositories/mpv-build-...", run 46184077325)
+        run: |
+          for try in 1 2 3; do
+            xcodebuild -resolvePackageDependencies -workspace tvos/Runner.xcworkspace -scheme Runner && exit 0
+            echo "::warning::resolving the Swift packages failed (try $try); starting again with an empty package cache"
+            rm -rf "$HOME/Library/Caches/org.swift.swiftpm" "$HOME/Library/org.swift.swiftpm" tvos/Runner.xcworkspace/xcshareddata/swiftpm/configuration
+            sleep 10
+          done
+          exit 1
       # Xcode says a great deal; the whole of it is kept as a file of the run, and what matters
       # (the Dart build's own lines, errors, warnings of our Swift) is shown here.
       - name: Build for Apple TV
@@ -742,7 +751,16 @@ jobs:
           bash tvos/scripts/fetch_engine.sh
           ls "$(sed -n 's/^FLUTTER_LOCAL_ENGINE=//p' tvos/Flutter/Generated.xcconfig)/out"
       - name: Resolve Swift packages (MPVKit)
-        run: xcodebuild -resolvePackageDependencies -workspace tvos/Runner.xcworkspace -scheme Runner
+        # (three tries: Swift's package cache on GitHub's Macs sometimes loses its copy mid-fetch,
+        # "cannot change to .../repositories/mpv-build-...", run 46184077325)
+        run: |
+          for try in 1 2 3; do
+            xcodebuild -resolvePackageDependencies -workspace tvos/Runner.xcworkspace -scheme Runner && exit 0
+            echo "::warning::resolving the Swift packages failed (try $try); starting again with an empty package cache"
+            rm -rf "$HOME/Library/Caches/org.swift.swiftpm" "$HOME/Library/org.swift.swiftpm" tvos/Runner.xcworkspace/xcshareddata/swiftpm/configuration
+            sleep 10
+          done
+          exit 1
       - name: Build for the Apple TV simulator
         run: |
           mkdir -p build/tvos-start
@@ -801,10 +819,14 @@ jobs:
           echo "$launched"
           PID="${launched##*: }"
           alive=yes
+          # (a real Apple TV ends an app that takes too much memory; the simulator does not, so
+          # what it takes is shown: release builds take less than this debug one)
+          memory() { echo "  memory: $(( $(ps -o rss= -p "$PID" 2>/dev/null || echo 0) / 1024 )) MB resident"; }
           for second in 5 10 20 30 45 60 75 90; do
             sleep $(( second - ${last:-0} )); last=$second
             if kill -0 "$PID" 2>/dev/null; then
               echo "after ${second} s: VyseTV is running (pid $PID)"
+              memory
             else
               echo "after ${second} s: VyseTV is NOT running"
               alive=no
@@ -814,6 +836,7 @@ jobs:
               xcrun simctl io "$UDID" screenshot "$OUT/screen-${second}s.png" >/dev/null 2>&1 || true
             fi
           done
+          if [ "$alive" = yes ]; then footprint "$PID" 2>/dev/null | head -n 12 || true; fi
           echo "== what the app printed (stdout)"
           tail -n 200 "$OUT/stdout.log" 2>/dev/null || true
           echo "== what the app printed (stderr)"
