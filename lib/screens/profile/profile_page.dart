@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:flutter/services.dart' show Clipboard, ClipboardData, FilteringTextInputFormatter, LengthLimitingTextInputFormatter, TextInputFormatter;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/account/account_sync.dart';
@@ -10,6 +12,7 @@ import 'plugin_index_page.dart';
 import '../../core/nav.dart' show ShellRoute;
 import '../../data/catalog/meta_addons.dart' show MetaAddons;
 import '../home/addon_home.dart' show AddonHome;
+import '../home/home_look.dart';
 import '../../data/sources/film_sources/febbox.dart' show FebBoxUser;
 import '../../data/sources/film_sources/febbox_account.dart';
 import '../../data/sources/film_sources/film_sources.dart';
@@ -29,6 +32,8 @@ import '../party/friends_view.dart';
 import '../party/party_widgets.dart';
 import 'account_sheet.dart';
 import 'phone_edit_dialog.dart';
+import 'recent_playbacks.dart';
+import '../../data/usenet/usenet.dart' show Usenet;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
@@ -57,6 +62,16 @@ import '../../widgets/voice_search.dart';
 import '../../widgets/page_scrollbar.dart';
 import '../../widgets/section_chrome.dart';
 import 'avatar_picker.dart';
+import '../../data/usenet/newznab.dart' show Newznab;
+import '../../data/usenet/nntp.dart' show NntpResult, NntpTarget, nntpResultText, testProvider;
+import '../../data/usenet/usenet_engine.dart' show UsenetEngine;
+import '../../data/usenet/usenet_play.dart' show UsenetPlay;
+import '../../data/usenet/usenet_profile_json.dart';
+import '../../data/usenet/usenet_sources.dart';
+import 'usenet_stats_view.dart' show UsenetDiagnosticsCard, UsenetStatisticsSection;
+import 'usenet_tuner_dialog.dart' show showConnectionTuner;
+
+part 'usenet_settings.dart';
 
 const _card = Color(0xFF0D0F18);
 const _danger = Color(0xFFF26B6B);
@@ -64,10 +79,11 @@ const _danger = Color(0xFFF26B6B);
 enum _Tab {
   account('Account', 'Your profile, sign-in and sync.', Icons.person_outline_rounded),
   party('Party profile', 'How everyone in Party sees you.', Icons.public_rounded),
-  appearance('Appearance', 'The ambient light behind every page, and what the navbar shows.', Icons.palette_outlined),
+  appearance('Appearance', 'The ambient light behind every page, how Home looks, and what the navbar shows.', Icons.palette_outlined),
   addons('Addons', 'Stremio addons for catalogs, details, sources and subtitles. Synced with your account.', Icons.extension_outlined),
   sources('Sources', 'Where films and shows play from, and in what order. Synced with your account.', Icons.dns_outlined),
   debrid('Debrid', 'Stream torrents from a debrid service instead of peer to peer. Saved on this device.', Icons.cloud_download_outlined),
+  usenet('Usenet', 'Your own Usenet providers and Newznab indexers, searched and played straight from this device. Saved on this device.', Icons.newspaper_outlined),
   playback('Playback', 'How videos play by default. Saved on this device.', Icons.play_circle_outline_rounded),
   subtitles('Subtitles', 'Default captions for the player. Saved on this device.', Icons.closed_caption_outlined),
   about('About', 'VyseTV, its version and where to find us.', Icons.info_outline_rounded),
@@ -125,6 +141,7 @@ class _ProfilePageState extends State<ProfilePage> {
             _Tab.addons => const _AddonsTab(),
             _Tab.sources => const _SourcesTab(),
             _Tab.debrid => const _DebridTab(),
+            _Tab.usenet => const _UsenetTab(),
             _Tab.playback => const _PlaybackTab(),
             _Tab.subtitles => const _SubtitlesTab(),
             _Tab.about => const _AboutTab(),
@@ -1170,10 +1187,82 @@ class _AppearanceTab extends StatelessWidget {
           ),
         ),
       ),
+      const _HomeLookSection(),
       if (PlatformDetector.isTV()) const _Section(title: 'Interface', children: [_LeanRow()]),
       if (_handheld) const _Section(title: 'Player', children: [_SidewaysRow()]),
       const _Navigation(),
     ],
+  );
+}
+
+/// Settings > Appearance: how Home lays out its rows (screens/home/home_look.dart). Home follows
+/// at once.
+class _HomeLookSection extends StatelessWidget {
+  const _HomeLookSection();
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: HomeLook.changes,
+    builder: (context, _) {
+      final cards = HomeLook.cards;
+      return _Section(
+        title: 'Home',
+        subtitle: 'How Home lays out its rows of films and shows.',
+        children: [
+          _Row(
+            title: 'Cards',
+            subtitle: cards.blurb,
+            below: SingleChildScrollView(
+              scrollDirection: Axis.horizontal, // four options don't fit a phone's width
+              child: _Choice<HomeCards>(
+                value: cards,
+                options: HomeCards.values,
+                label: (c) => c.label,
+                onChanged: (c) => AppSettings.homeCards.set(c.name),
+              ),
+            ),
+          ),
+          _Row(
+            title: 'Card size',
+            subtitle: 'Larger reads better from across the room; smaller fits more on the screen',
+            below: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _Choice<HomeCardSize>(
+                value: HomeLook.size,
+                options: HomeCardSize.values,
+                label: (s) => s.label,
+                onChanged: (s) => AppSettings.homeCardSize.set(s.name),
+              ),
+            ),
+          ),
+          _Row(
+            title: 'Hero carousel',
+            subtitle: 'The big slideshow of featured titles at the top. Off: Home is only rows',
+            trailing: _Toggle(AppSettings.homeHero),
+          ),
+          _Row(
+            title: 'Genre and collection cards',
+            subtitle: "Explore genres, and each addon's More from cards. Off: they're still in Discover",
+            trailing: _Toggle(AppSettings.homeCategories),
+          ),
+          _Row(
+            title: 'On backdrop cards',
+            subtitle: "The title's logo art, or its name in plain letters",
+            trailing: _Choice<bool>(
+              value: HomeLook.logos,
+              options: const [true, false],
+              label: (v) => v ? 'Logo' : 'Name',
+              onChanged: AppSettings.homeLogos.set,
+            ),
+          ),
+          _Row(
+            title: 'Names under posters',
+            subtitle: 'The title and its year under each poster',
+            trailing: _Toggle(AppSettings.homeNames),
+          ),
+        ],
+      );
+    },
   );
 }
 
@@ -1441,7 +1530,7 @@ class _PlaybackTab extends StatelessWidget {
         title: 'Player',
         children: [
           if (PlayerEngine.offered) const _EngineRow(),
-          if (PlatformDetector.isTV()) const _LastPlaybackRow(),
+          const _RecentPlaybacksRow(),
           _Row(
             title: 'Streaming mode',
             subtitle: "On: videos play right away from VyseTV's servers. Off: pick a source from your addons first",
@@ -1611,17 +1700,18 @@ class _EngineRow extends StatelessWidget {
   );
 }
 
-/// Settings → Playback → Last playback (on a TV): the report card of the last video opened,
+/// Settings → Playback → Recent playbacks: the report cards of the last few videos opened,
 /// kept after the player has closed, so one that never started can still be photographed and
-/// reported (the player's own Stream info shows the same while it is open).
-class _LastPlaybackRow extends StatefulWidget {
-  const _LastPlaybackRow();
+/// reported after another has been tried (the player's own Stream info shows the same while it
+/// is open).
+class _RecentPlaybacksRow extends StatefulWidget {
+  const _RecentPlaybacksRow();
 
   @override
-  State<_LastPlaybackRow> createState() => _LastPlaybackRowState();
+  State<_RecentPlaybacksRow> createState() => _RecentPlaybacksRowState();
 }
 
-class _LastPlaybackRowState extends State<_LastPlaybackRow> {
+class _RecentPlaybacksRowState extends State<_RecentPlaybacksRow> {
   @override
   void initState() {
     super.initState();
@@ -1630,13 +1720,13 @@ class _LastPlaybackRowState extends State<_LastPlaybackRow> {
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder(
-    valueListenable: PlaybackReport.last,
-    builder: (context, report, _) => _Row(
-      title: 'Last playback',
-      subtitle: report == null
-          ? 'Nothing played yet. After a video that will not play, its report card is here to photograph'
-          : '${report.summary}. Its report card says what the TV and the player did, to photograph when you report a problem',
-      trailing: report == null ? null : _SmallButton(label: 'Report card', icon: Icons.fact_check_outlined, onTap: () => showReportCard(context, report)),
+    valueListenable: PlaybackReport.recent,
+    builder: (context, reports, _) => _Row(
+      title: 'Recent playbacks',
+      subtitle: reports.isEmpty
+          ? 'Nothing played yet. The last ${PlaybackReport.keepCount} videos you open are kept here, each with a report card to photograph when one will not play'
+          : 'The last ${PlaybackReport.keepCount} videos you opened. Pick one for its report card, and take a photo of it when you report a problem',
+      below: reports.isEmpty ? null : RecentPlaybackList(reports: reports, onOpen: (r) => showReportCard(context, r)),
     ),
   );
 }
@@ -2527,6 +2617,28 @@ class _DangerTab extends StatelessWidget {
             ),
           ),
           _Row(
+            title: 'Forget Usenet setup',
+            subtitle: 'Removes your Usenet providers and indexers, with their passwords and API keys, from this device, and forgets what releases did and the statistics.',
+            trailing: _SmallButton(
+              label: 'Forget',
+              danger: true,
+              onTap: () async {
+                final u = UsenetSourcesStore.current.value;
+                if (u.providers.isEmpty && u.indexers.isEmpty) return _done(context, 'No Usenet setup on this device', Icons.dns_outlined);
+                if (!await _confirm(
+                  context,
+                  'Forget Usenet setup?',
+                  'Your ${u.providers.length} ${u.providers.length == 1 ? 'provider' : 'providers'} and ${u.indexers.length} ${u.indexers.length == 1 ? 'indexer' : 'indexers'} are removed from this device, with what releases did and the statistics.',
+                  'Forget',
+                )) {
+                  return;
+                }
+                await Usenet.reset();
+                if (context.mounted) _done(context, 'Usenet setup forgotten', Icons.dns_outlined);
+              },
+            ),
+          ),
+          _Row(
             title: 'Clear manga reading history',
             subtitle: 'Empties Continue reading and forgets every saved page.',
             trailing: _SmallButton(
@@ -3350,6 +3462,7 @@ class _AddonRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final a = addon;
+    final usenet = a.manifestUrl == Addon.usenet.manifestUrl;
     final phone = Layout.isPhone(context);
     final logo = ClipRRect(
       borderRadius: BorderRadius.circular(11),
@@ -3378,10 +3491,13 @@ class _AddonRow extends StatelessWidget {
         if (!a.plugins && !a.builtIn && _AddonCatalogList.listed(a).isNotEmpty)
           _IconAction(icon: Icons.view_carousel_outlined, tooltip: 'Rows on Home', onTap: () => _showAddonCatalogs(context, a)),
         if (a.plugins) _IconAction(icon: Icons.receipt_long_rounded, tooltip: 'Plugin log', onTap: () => _showPluginLog(context)),
+        // built-in Usenet is set up on a tab of its own
+        if (usenet) _IconAction(icon: Icons.tune_rounded, tooltip: 'Usenet settings', onTap: () => _openUsenetTab(context)),
         // a built-in addon is part of the app: it is turned off, not removed
         if (!a.builtIn) _IconAction(icon: Icons.delete_outline_rounded, tooltip: 'Remove', danger: true, onTap: () => Addons.remove(a)),
         const SizedBox(width: 8),
-        _Switch(value: a.enabled, onChanged: (on) => Addons.setEnabled(a, on)),
+        // (built-in Usenet's first time on shows its notice first)
+        _Switch(value: a.enabled, onChanged: (on) => _setAddonOn(context, a, on)),
       ],
     );
     final info = Column(
@@ -3406,6 +3522,8 @@ class _AddonRow extends StatelessWidget {
           const SizedBox(height: 5),
           Text(a.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, color: VyseColors.textDim, height: 1.35)),
         ],
+        // built-in Usenet: what it still needs before it can search
+        if (usenet) _UsenetAddonNote(on: a.enabled),
         // TMDB off with nothing in its place: say what that leaves
         if (a.manifestUrl == Addon.tmdb.manifestUrl && !a.enabled && Addons.catalogAddons.isEmpty) ...[
           const SizedBox(height: 6),

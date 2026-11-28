@@ -42,6 +42,7 @@ const _phases = <(String, int)>[
   ('lib/screens/shell/floating.dart', 3),
   ('lib/screens/home/home_page.dart', 3),
   ('lib/screens/home/addon_home.dart', 3),
+  ('lib/screens/home/home_look.dart', 3), // (no controls: Home's look, read from Settings)
   ('lib/screens/discover/discover_page.dart', 3),
   ('lib/screens/library/my_list_page.dart', 3),
   ('lib/screens/library/history_page.dart', 3),
@@ -72,6 +73,8 @@ const _phases = <(String, int)>[
   ('lib/screens/profile/profile_page.dart', 8),
   ('lib/screens/profile/avatar_picker.dart', 8),
   ('lib/screens/profile/phone_edit_dialog.dart', 8),
+  ('lib/screens/profile/recent_playbacks.dart', 8),
+  ('lib/screens/profile/usenet_', 8), // Settings > Usenet, its tuner and its statistics
   ('lib/widgets/trackers/', 8),
   ('lib/screens/party/', 9),
 ];

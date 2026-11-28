@@ -20,6 +20,7 @@ import 'data/party/watch_party.dart' show WatchParty;
 import 'data/app_settings.dart';
 import 'data/catalog/tmdb.dart' show MyList;
 import 'data/downloads/downloads.dart';
+import 'data/usenet/usenet.dart';
 import 'data/sources/torrents.dart' show Torrents;
 import 'data/music/music_library.dart' show MusicLibrary;
 import 'data/sources/debrid/debrid.dart' show Debrid;
@@ -103,6 +104,8 @@ Future<void> main() async {
   await MusicLibrary.initialize();
   await Debrid.initialize();
   await FebBox.initialize(); // (its token, from the keychain: the FebBox source is asked with one)
+  // Usenet: your providers and indexers (keychain), what releases did; no engine unless kept warm
+  await Usenet.initialize();
   await Account.initialize();
   PartyPresence.start();
   Friends.start();

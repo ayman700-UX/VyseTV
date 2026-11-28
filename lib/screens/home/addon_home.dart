@@ -13,6 +13,7 @@ import '../../dpad/dpad_reveal.dart';
 import '../../widgets/common.dart';
 import '../../widgets/media_rows.dart';
 import '../profile/profile_page.dart';
+import 'home_look.dart' show CardShape;
 
 /// For a page that follows your addons (Settings > Addons): when they change while a frame is
 /// being built (the list is first read by a page that is being built), [then] runs after it
@@ -95,12 +96,27 @@ class _SeeAll {
 
 /// One catalog as a row of cards in its pictures' shape, ending in a card that opens all of it.
 class CatalogShelf extends StatefulWidget {
-  const CatalogShelf({super.key, required this.ref, required this.posterWidth});
+  const CatalogShelf({super.key, required this.ref, required this.posterWidth, this.look = const ShelfLook()});
   final CatalogRef ref;
   final double posterWidth;
 
+  /// How Settings > Appearance > Home draws it (out of the box: as the catalog's pictures are).
+  final ShelfLook look;
+
   @override
   State<CatalogShelf> createState() => _CatalogShelfState();
+}
+
+/// What Settings > Appearance > Home asks of a row of an addon's titles: [shape] its cards (a
+/// catalog of square or wide pictures keeps them), backdrops [landscapeWidth] wide, [logos] or
+/// names on them, [names] under posters, and [standIns] for a title with no backdrop or logo.
+class ShelfLook {
+  const ShelfLook({this.shape = CardShape.poster, this.landscapeWidth = 0, this.logos = true, this.names = false, this.standIns = false});
+  final CardShape shape;
+  final double landscapeWidth;
+  final bool logos;
+  final bool names;
+  final bool standIns;
 }
 
 class _CatalogShelfState extends State<CatalogShelf> {
@@ -111,7 +127,12 @@ class _CatalogShelfState extends State<CatalogShelf> {
   @override
   Widget build(BuildContext context) {
     final ref = widget.ref;
-    final (w, h) = cardSize(_shape, widget.posterWidth);
+    final look = widget.look;
+    // backdrops for a catalog of posters, when the look asks for them
+    final wide = look.shape == CardShape.backdrop && _shape == 'poster' && look.landscapeWidth > 0;
+    var (w, h) = wide ? (look.landscapeWidth, look.landscapeWidth * 9 / 16) : cardSize(_shape, widget.posterWidth);
+    final named = look.names && !wide;
+    if (named) h += CardName.height;
     return Shelf<Object>(
       title: ref.title,
       titleWidget: CatalogTitle(ref: ref),
@@ -129,7 +150,13 @@ class _CatalogShelfState extends State<CatalogShelf> {
       itemWidth: w,
       itemHeight: h,
       itemBuilder: (_, item, _) => switch (item) {
-        final Media m => PosterCard(media: m, heroTag: 'home/${ref.key}/${m.key}'),
+        final Media m when wide => LandscapeCard(media: m, logo: look.logos, standIns: look.standIns),
+        final Media m => PosterCard(media: m, heroTag: 'home/${ref.key}/${m.key}', named: named),
+        // (level with the pictures, above the names)
+        _ when named => Column(children: [
+          Expanded(child: _SeeAllCard(onTap: () => openCatalog(context, ref))),
+          const SizedBox(height: CardName.height),
+        ]),
         _ => _SeeAllCard(onTap: () => openCatalog(context, ref)),
       },
     );
@@ -161,18 +188,31 @@ class _SeeAllCard extends StatelessWidget {
 /// One metadata addon on Home: its first catalogs as rows, then two rows of collection cards (as
 /// many as TMDB's genre cards). Every catalog is on Discover, in its list of catalogs.
 class AddonSection extends StatelessWidget {
-  const AddonSection({super.key, required this.addon, required this.posterWidth});
+  const AddonSection({super.key, required this.addon, required this.posterWidth, this.looks = const [], this.collections = true});
   final Addon addon;
   final double posterWidth;
+
+  /// How each of its rows is drawn, in order (Settings > Appearance > Home); a row past the end
+  /// as its catalog's pictures are.
+  final List<ShelfLook> looks;
+
+  /// The collection cards after the rows ("More from …"). Off in Settings > Appearance > Home.
+  final bool collections;
 
   @override
   Widget build(BuildContext context) {
     final (rows, more) = AddonHome.split(addon);
-    final cards = more.take(FanGrid.columns(context) * 2);
+    final cards = collections ? more.take(FanGrid.columns(context) * 2) : const <CatalogRef>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final r in rows) CatalogShelf(key: ValueKey('catalog/${r.key}'), ref: r, posterWidth: posterWidth),
+        for (var i = 0; i < rows.length; i++)
+          CatalogShelf(
+            key: ValueKey('catalog/${rows[i].key}'),
+            ref: rows[i],
+            posterWidth: posterWidth,
+            look: i < looks.length ? looks[i] : const ShelfLook(),
+          ),
         if (cards.isNotEmpty)
           FanGrid(
             key: ValueKey('collections/${addon.manifestUrl}'),

@@ -527,7 +527,7 @@ class PlayerDock extends StatelessWidget {
 }
 
 /// A TV's controls: a row of round keys from the left, in the order they are reached for (the
-/// way NuvioTV lays its own out, which is what the user asked for). The key with the ring is a
+/// way the TV player the user pointed to lays its own out). The key with the ring is a
 /// white disc. Play is where the ring starts. Each menu has a key of its own, and Settings
 /// holds quality, speed and the rest. No volume (the remote sets it) and no skip keys: Left and
 /// Right seek from the picture, or from the bar above the row.

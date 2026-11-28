@@ -22,6 +22,9 @@ import '../../data/sources/badges.dart';
 import '../../data/sources/debrid/debrid.dart';
 import '../../data/downloads/downloads.dart';
 import '../../data/sources/torrents.dart';
+import '../../data/usenet/usenet_engine.dart';
+import '../../data/usenet/usenet_play.dart';
+import '../../data/usenet/usenet_stats.dart' show UsenetDiagnostics, UsenetStartupTrace;
 import '../../data/anime/anime_sources.dart';
 import '../../data/playback/intro_db.dart';
 import '../../data/party/party.dart' show PartyPresence;
@@ -503,6 +506,15 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   Duration? _resumeOverride; // switching source mid-video: carry on from here
   List<sub.SubtitleTrack> _addonSubs = const []; // your subtitle addons' files for this video
   String? _torrent; // info hash of the torrent playing (through our engine)
+
+  // A Usenet release playing through this device's Usenet engine (lib/data/usenet): its session
+  // is ours, let go when another source plays or the page goes.
+  UsenetSession? _usenet;
+  UsenetFallback? _usenetFallback; // the Usenet results after the one picked, should it not play
+  bool _usenetGoesOn = false; // the next load carries on down [_usenetFallback], not afresh
+  bool _usenetFrame = false; // its first frame has shown
+  UsenetStartupTrace? _usenetTrace; // how its start went (Settings > Usenet > Diagnostics)
+  bool _usenetTrying = false; // a release that stopped for good is being replaced
   String? _torrentNote; // "12 peers · 4.1 MB/s", under the spinner while it loads
   String? _loadNote; // "Getting it from Real-Debrid…", "Waiting for the host's stream…"
   String? _sharedUrl; // a party guest playing the host's own link
@@ -785,7 +797,10 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       ..add(_player.streams.log.listen(_mpvLog))
       ..add(_player.streams.log.listen(_watchForDroppedPart))
       // (the report card: the first frame, and why it did not play)
-      ..add(_player.streams.playbackRestart.listen((_) => _reportFirstFrame()))
+      ..add(_player.streams.playbackRestart.listen((_) {
+        _reportFirstFrame();
+        _usenetFirstFrame();
+      }))
       ..add(_player.streams.fileLoaded.listen((_) => unawaited(_applyShape(fresh: true))))
       // (why it did not play: on the report card, and said on screen when it ended the video)
       ..add(_player.streams.fileLoadFailed.listen((_) => _gaveUp = true))
@@ -939,6 +954,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     TrackerHub.playerClosed(this);
     _torrentTimer?.cancel();
     if (_torrent != null) unawaited(Torrents.release(_torrent!)); // stop downloading it
+    _releaseUsenet(); // the engine lets the release go
     _hide?.cancel();
     _noteTimer?.cancel();
     _reopenTimer?.cancel();
@@ -2182,7 +2198,7 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   void _usePick(AddonPick p) {
     setState(() => _sourcesOverlay = false);
     final now = _pick?.stream;
-    if (now != null && (p.stream.torrent ? p.stream.infoHash == now.infoHash && p.stream.fileIdx == now.fileIdx : p.stream.url == now.url)) return;
+    if (now != null && p.stream.sameAs(now)) return;
     _resumeOverride = _position.value > const Duration(seconds: 5) ? _position.value : null;
     _pick = p;
     // picked by hand: the next episodes follow this one, not the best
@@ -2216,7 +2232,8 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       final t = like?.target.withEpisode(ep?.season, ep?.number) ??
           await Addons.target(widget.media, season: ep?.season, episode: ep?.number, anime: widget.anime?.anime);
       final p2p = AppSettings.p2pStreaming.value && !widget.party;
-      final list = await Addons.best(t, where: (s) => !s.torrent || Debrid.active || p2p);
+      // (a room plays no Usenet release: each one is your own providers')
+      final list = await Addons.best(t, where: (s) => (!s.torrent || Debrid.active || p2p) && !(s.usenet && widget.party));
       final group = like?.stream.bingeGroup;
       if (group != null && list.isNotEmpty) {
         final same = list.takeWhile((s) => s.rank == list.first.rank).where((s) => s.bingeGroup == group).firstOrNull;
@@ -2361,6 +2378,18 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       _torrent = null;
       unawaited(Torrents.release(was));
     }
+    // a Usenet release from before, with something else to play now: the engine lets it go (the
+    // next Usenet release's open lets go of it by itself, once that one is ready)
+    if (!pick.stream.usenet) _releaseUsenet();
+    // a Usenet release plays from your own providers through this device's engine: nobody else
+    // in a room could play it
+    if (pick.stream.usenet && widget.party) {
+      setState(() {
+        _loadingSources = false;
+        _error = "Usenet sources play from your own providers, so they can't be played in a room. Pick another source.";
+      });
+      return;
+    }
     // debrid on: the service fetches the torrent and hands back an HTTPS link, no P2P here
     final viaDebrid = pick.stream.torrent && Debrid.active;
     // P2P turned off since (the next episode's torrent, say): ask before the engine starts
@@ -2439,6 +2468,10 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
         });
         return;
       }
+    } else if (pick.stream.usenet) {
+      final opened = await _openUsenet(id, ep);
+      if (opened == null) return;
+      src = opened;
     } else {
       src = Addons.sourceOf(pick);
     }
@@ -2463,6 +2496,167 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     } else {
       _loadSubtitles(id, await _filmSubtitles(ep));
     }
+  }
+
+  // ── Usenet ──
+
+  /// Opens the picked Usenet release in the engine, which the player then streams from
+  /// 127.0.0.1. One that won't open is followed, with Automatic Usenet fallback on (Settings >
+  /// Usenet), by the Usenet results listed after it, within the tries and the time allowed.
+  /// Null when nothing opened (why is on screen) or this load was replaced.
+  Future<StreamSource?> _openUsenet(int id, PlayerEpisode? ep) async {
+    final goesOn = _usenetGoesOn && _usenetFallback != null;
+    _usenetGoesOn = false;
+    final fb = goesOn ? _usenetFallback! : (_usenetFallback = UsenetFallback.take(_pick!.stream));
+    var pick = _pick!;
+    var first = !goesOn;
+    while (true) {
+      final st = pick.stream;
+      setState(() => _loadNote = first ? 'Opening Usenet stream…' : fb.nextMessage());
+      final clock = Stopwatch()..start();
+      final trace = UsenetStartupTrace();
+      try {
+        final session = await UsenetPlay.open(st, season: widget.anime != null ? null : ep?.season, episode: ep?.number, allowance: fb.allowance(initial: first), trace: trace);
+        // (a replacement opened after Automatic Usenet fallback was turned off isn't played)
+        if (!mounted || id != _loadId || (!first && !fb.enabled)) {
+          if (UsenetEngine.instance.owned == session.id) unawaited(UsenetEngine.instance.release(session.id));
+          if (mounted && id == _loadId) {
+            setState(() {
+              _loadNote = null;
+              _loadingSources = false;
+              _error = 'No more working Usenet releases. Pick another source.\n${fb.failureMessage}';
+            });
+          }
+          return null;
+        }
+        fb.opened(clock.elapsed);
+        _usenet = session;
+        _usenetFrame = false;
+        _usenetTrace = trace
+          ..mark('resolved')
+          ..mark('prepare');
+        _pick = pick;
+        unawaited(_usenetSubtitles(session, id));
+        return StreamSource(url: session.url, server: st.addon.name, quality: st.quality, referrer: '', userAgent: '', hls: false);
+      } catch (e) {
+        if (!mounted || id != _loadId) return null;
+        fb.failed(st, e, clock.elapsed);
+        final next = fb.next();
+        if (next != null) {
+          pick = AddonPick(next, pick.target);
+          first = false;
+          continue;
+        }
+        if (_nextBest(id)) return null;
+        setState(() {
+          _loadNote = null;
+          _loadingSources = false;
+          _error = _usenetWhy(e, fb);
+        });
+        return null;
+      }
+    }
+  }
+
+  /// Why no Usenet release played, for the middle of the screen.
+  static String _usenetWhy(Object e, UsenetFallback fb) {
+    final why = UsenetPlay.explanation(e is UsenetEngineError ? e.kind : null);
+    if (fb.attempts > 0) return 'No more working Usenet releases. Pick another source.\n${why ?? fb.failureMessage}';
+    return why ?? '${UsenetPlay.shortReason(e).replaceAll(RegExp(r'[.\s]+$'), '')}. Try another source.';
+  }
+
+  /// Subtitle files that came in the release, served by the engine.
+  Future<void> _usenetSubtitles(UsenetSession session, int id) async {
+    if (session.subtitles.isEmpty || !mounted || id != _loadId) return;
+    final tracks = <sub.SubtitleTrack>[
+      for (final (i, f) in session.subtitles.indexed)
+        sub.subtitleTrack(
+          'usenet-$i',
+          'Built in',
+          sub.exactLanguage(f.lang) ?? (f.lang.isEmpty ? 'und' : f.lang),
+          f.url,
+          release: f.filename,
+          format: _subFormat(f.filename),
+        ),
+    ];
+    setState(() => _builtIn = [..._builtIn.where((t) => _isBuiltIn(t.url)), ...tracks]);
+    _pickBuiltIn(id);
+  }
+
+  static String _subFormat(String name) {
+    final ext = name.split('.').last.toLowerCase();
+    return ext == 'ssa' ? 'ass' : ext;
+  }
+
+  /// The Usenet release playing, if the player is on its engine address now.
+  bool get _onUsenet {
+    final u = _usenet;
+    if (u == null || _sources.isEmpty || _source >= _sources.length) return false;
+    return _sources[_source].url == u.url;
+  }
+
+  /// The first frame of a Usenet release: it plays with your providers (AVAILABLE on the
+  /// sources list for two weeks, and counted in Settings > Usenet's statistics).
+  void _usenetFirstFrame() {
+    if (_usenetFrame || !_onUsenet) return;
+    _usenetFrame = true;
+    final s = _pick?.stream;
+    if (s != null && s.usenet) UsenetPlay.played(s);
+    final trace = _usenetTrace, session = _usenet;
+    _usenetTrace = null;
+    if (trace != null && session != null) unawaited(UsenetDiagnostics.instance.record(session, trace..mark('first_frame')));
+  }
+
+  /// The player gave a Usenet release up. The engine says whether the release itself is the
+  /// trouble (articles gone or damaged on your providers, a provider refusing): then it is
+  /// remembered as unplayable and, with Automatic Usenet fallback on, the next Usenet result
+  /// plays from where this one stopped. Anything else goes the usual way ([_playerFailed]).
+  Future<void> _usenetTrouble(pz.PlayerError e, {required bool ended}) async {
+    final session = _usenet!, s = _pick?.stream, seq = _openSeq, id = _loadId;
+    final d = await UsenetEngine.instance.diagnostics(session.id);
+    if (!mounted || seq != _openSeq || id != _loadId || _usenet?.id != session.id) return;
+    final kind = '${d?['streamFailure'] ?? ''}';
+    if (s == null || !s.usenet || !UsenetPlay.permanentKinds.contains(kind)) {
+      if (ended) await _playerFailed(e);
+      return;
+    }
+    if (_usenetTrying) return;
+    UsenetPlay.unplayable(s, kind);
+    final fb = _usenetFallback;
+    fb?.failed(s, UsenetEngineError('Usenet stream stopped', kind: kind, scope: kind.startsWith('provider') ? UsenetFailureScope.provider : UsenetFailureScope.source), Duration.zero);
+    final next = fb?.next();
+    if (next == null || _pick == null) {
+      _startTimer?.cancel();
+      setState(() {
+        _error = UsenetPlay.explanation(kind) ?? 'This Usenet release stopped. Try another source.';
+        _loadingSources = false;
+        _loadNote = null;
+        _buffering = false;
+        _veil = false;
+      });
+      _poke();
+      return;
+    }
+    // the next release, from where this one stopped
+    _usenetTrying = true;
+    _resumeOverride = _position.value > const Duration(seconds: 1) ? _position.value : _resumeAt;
+    _pick = AddonPick(next, _pick!.target);
+    _usenetGoesOn = true;
+    final why = UsenetPlay.shortReason(UsenetEngineError('', kind: kind)).replaceAll(RegExp(r'[.\s]+$'), '');
+    _switch('$why. Trying the next release…', () {});
+    try {
+      await _loadAndPlay();
+    } finally {
+      _usenetTrying = false;
+    }
+  }
+
+  /// Lets the Usenet release go (another source plays, or the page goes).
+  void _releaseUsenet() {
+    final u = _usenet;
+    _usenet = null;
+    _usenetFrame = false;
+    if (u != null && UsenetEngine.instance.owned == u.id) unawaited(UsenetEngine.instance.release(u.id));
   }
 
   // ── anime ──
@@ -3513,6 +3707,11 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     final ended = _gaveUp ||
         const {pz.PlayerError.playerInitFailed, pz.PlayerError.serverHttp404, pz.PlayerError.serverHttp500, pz.PlayerError.audioOutputFailed}.contains(e.cause);
     _gaveUp = false;
+    // a Usenet release: the engine knows whether the release itself is the trouble
+    if (_onUsenet) {
+      unawaited(_usenetTrouble(e, ended: ended));
+      return;
+    }
     if (ended) unawaited(_playerFailed(e));
   }
 
@@ -3587,7 +3786,9 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
     _watched = null;
     if (_userPicked) return;
     _watched = (src, seq);
-    _startTimer = Timer(const Duration(seconds: 25), () async {
+    // (a disc's clip from the Usenet engine, .ts or .m2ts, reads a lot before it starts: longer)
+    final clip = UsenetEngine.instance.isEngineUrl(src.url) && RegExp(r'\.(m2ts|mts|ts)$', caseSensitive: false).hasMatch(Uri.tryParse(src.url)?.path ?? '');
+    _startTimer = Timer(Duration(seconds: clip ? 90 : 25), () async {
       final session = _session, l = _playingLink, id = _loadId;
       // the best source was a dead link (a torrent is still finding peers, so it's left be)
       if (mounted && _pick != null && _torrent == null && seq == _openSeq && _player.state.duration == Duration.zero && _nextBest(id)) return;
@@ -3633,6 +3834,8 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
       source: l?.source.name ?? addon ?? widget.server?.label ?? src.server,
       link: _torrent != null
           ? 'Torrent'
+          : _usenet?.url == src.url
+          ? 'Usenet · ${_usenet!.filename}'
           : (l != null ? [l.name, l.quality, ?l.format].where((x) => x.isNotEmpty).join(' · ') : [if (addon != null || widget.server != null) src.server, src.quality].where((x) => x.isNotEmpty).toSet().join(' · ')),
       url: src.url,
       // (a Media3 player that has handed one video to mpv plays the next ones on mpv too)
@@ -3689,6 +3892,13 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
   /// couple of seconds while Stream info is open.
   Future<void> _refreshReport() async {
     if (_report.value == null) return;
+    // a Usenet release: what the engine says of it now
+    final u = _usenet;
+    if (u != null && _onUsenet) {
+      unawaited(UsenetEngine.instance.diagnostics(u.id).then((d) {
+        if (d != null && mounted && _usenet?.id == u.id) _editReport((r) => r.withUsenet(UsenetPlay.liveFacts(u, d)));
+      }));
+    }
     final media3 = _media3 && !_player.mpvCore;
     Map<String, Object?> facts;
     try {
@@ -3717,7 +3927,9 @@ class _PlayerPageState extends State<_PlayerView> with WidgetsBindingObserver {
           : r.withSubtitle(
               name: t.release.isEmpty ? t.language : t.release,
               language: t.language,
-              origin: t.provider == 'Built in' ? (_isBuiltIn(t.url) ? 'Inside the file' : 'A file in the torrent') : (t.translated ? '${t.provider}, translated' : t.provider),
+              origin: t.provider == 'Built in'
+                  ? (_isBuiltIn(t.url) ? 'Inside the file' : (_onUsenet ? 'A file in the release' : 'A file in the torrent'))
+                  : (t.translated ? '${t.provider}, translated' : t.provider),
             );
     });
   }

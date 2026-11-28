@@ -399,6 +399,6 @@ void main() {
   }, variant: tv);
 
   // (After the fourth round the player's menus became a side panel on a TV, with a list of the
-  // menus to go through first. On 2026-11-19 the user asked for full-screen menus like NuvioTV's
+  // menus to go through first. On 2026-11-19 the user asked for full-screen menus like another TV player's
   // instead: the panel and its test are gone, and t4_journeys_tv8_test.dart has the new ones.)
 }

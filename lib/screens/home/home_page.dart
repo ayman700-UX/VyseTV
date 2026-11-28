@@ -21,6 +21,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../data/playback/watch_progress.dart';
 import 'addon_home.dart';
 import 'continue_watching.dart';
+import 'home_look.dart';
 import '../../widgets/media_rows.dart';
 import '../../widgets/page_scrollbar.dart';
 
@@ -61,16 +62,28 @@ class _HomePageState extends State<HomePage> {
   Timer? _idle;
   DateTime _lastExit = DateTime(0);
 
+  /// Settings > Appearance > Home changed (on this screen or from a phone): laid out again, and
+  /// out of the spotlight if the hero is gone.
+  void _onLook() {
+    if (!mounted) return;
+    if (afterBuild(_onLook)) return;
+    if (!HomeLook.hero && _immersive) return _setImmersive(false);
+    setState(() {});
+    _armIdle();
+  }
+
   @override
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
     Addons.list.addListener(_onAddons);
+    HomeLook.changes.addListener(_onLook);
     _armIdle();
   }
 
   @override
   void dispose() {
+    HomeLook.changes.removeListener(_onLook);
     Addons.list.removeListener(_onAddons);
     _idle?.cancel();
     _scroll.dispose();
@@ -99,7 +112,7 @@ class _HomePageState extends State<HomePage> {
   /// Sitting still at the top of Home for a while drifts into spotlight mode.
   void _armIdle() {
     _idle?.cancel();
-    if (_immersive) return;
+    if (_immersive || !HomeLook.hero) return;
     _idle = Timer(_idleToSpotlight, () {
       if (mounted && _atTop) _setImmersive(true);
     });
@@ -107,8 +120,9 @@ class _HomePageState extends State<HomePage> {
 
   void _setImmersive(bool value) {
     // phones never enter the spotlight, but must always be able to leave it (e.g. after rotating
-    // from landscape, where they count as wide, back to portrait)
-    if (value == _immersive || (value && Layout.isPhone(context))) return;
+    // from landscape, where they count as wide, back to portrait); with the hero turned off in
+    // Settings there is none
+    if (value == _immersive || (value && (Layout.isPhone(context) || !HomeLook.hero))) return;
     if (value && !_atTop) {
       _scroll.animateTo(
         0,
@@ -212,30 +226,45 @@ class _HomePageState extends State<HomePage> {
         ? (size.height * .74).clamp(460.0, 700.0)
         : (size.height * .9).clamp(500.0, 1200.0);
 
-    final posterW = switch (ff) {
+    // Settings > Appearance > Home (out of the box: classic, at the standard size)
+    final cards = HomeLook.cards;
+    final scale = HomeLook.size.scale;
+    final logos = HomeLook.logos;
+    final names = HomeLook.names;
+    final showHero = HomeLook.hero;
+    final categories = HomeLook.categories;
+    // the new looks give a title with no logo art its name, and one with no backdrop its poster
+    final standIns = cards != HomeCards.classic;
+    final shapes = RowShapes(cards);
+
+    final posterW = scale * switch (ff) {
       FormFactor.phone => 108.0,
       FormFactor.tablet => 128.0,
       FormFactor.desktop => (w * .106).clamp(140.0, 200.0),
     };
-    final landW = switch (ff) {
+    final landW = scale * switch (ff) {
       FormFactor.phone => 230.0,
       FormFactor.tablet => 250.0,
       FormFactor.desktop => (w * .2).clamp(250.0, 380.0),
     };
-    final topW = switch (ff) {
-      FormFactor.phone => 200.0,
-      FormFactor.tablet => 210.0,
-      FormFactor.desktop => (w * .14).clamp(200.0, 270.0),
-    };
+    // (Backdrops: every card one size, the top 10s' too)
+    final topW = cards == HomeCards.backdrops
+        ? landW
+        : scale * switch (ff) {
+            FormFactor.phone => 200.0,
+            FormFactor.tablet => 210.0,
+            FormFactor.desktop => (w * .14).clamp(200.0, 270.0),
+          };
 
-    Widget posters(String title, Future<List<Media>> Function() load) =>
+    Widget posters(String title, Future<List<Media>> Function() load, {bool ranked = false}) =>
         Shelf<Media>(
           title: title,
           load: load,
+          maxItems: ranked ? 10 : 20,
           itemWidth: posterW,
-          itemHeight: posterW * 1.5,
-          itemBuilder: (_, m, _) =>
-              PosterCard(media: m, heroTag: 'home/$title/${m.key}'),
+          itemHeight: posterW * 1.5 + (names ? CardName.height : 0),
+          itemBuilder: (_, m, i) =>
+              PosterCard(media: m, heroTag: 'home/$title/${m.key}', named: names, rank: ranked ? i + 1 : null),
         );
     Widget landscape(String title, Future<List<Media>> Function() load) =>
         Shelf<Media>(
@@ -243,17 +272,27 @@ class _HomePageState extends State<HomePage> {
           load: load,
           itemWidth: landW,
           itemHeight: landW * 9 / 16,
-          itemBuilder: (_, m, _) => LandscapeCard(media: m),
+          itemBuilder: (_, m, _) => LandscapeCard(media: m, logo: logos, standIns: standIns),
         );
+    // a row of titles in the cards the look gives it ([own]: its classic ones)
+    Widget titles(String title, Future<List<Media>> Function() load, CardShape own) =>
+        shapes.next(own) == CardShape.poster ? posters(title, load) : landscape(title, load);
     Widget top10(String title, Future<List<Media>> Function() load) =>
-        Shelf<Media>(
-          title: title,
-          load: load,
-          maxItems: 10,
-          itemWidth: topW,
-          itemHeight: topW * 9 / 16,
-          itemBuilder: (_, m, i) => Top10Card(media: m, rank: i + 1),
-        );
+        shapes.next(CardShape.backdrop) == CardShape.poster
+            ? posters(title, load, ranked: true)
+            : Shelf<Media>(
+                title: title,
+                load: load,
+                maxItems: 10,
+                itemWidth: topW,
+                itemHeight: topW * 9 / 16,
+                itemBuilder: (_, m, i) => Top10Card(media: m, rank: i + 1),
+              );
+    // an addon's rows: the look of each, in turn
+    List<ShelfLook> addonLooks(Addon a) => [
+      for (final s in shapes.take(AddonHome.split(a).$1.length, CardShape.poster))
+        ShelfLook(shape: s, landscapeWidth: landW, logos: logos, names: names, standIns: standIns),
+    ];
 
     // Not a focus stop itself: it only listens to the keys of what is focused inside it.
     return Focus(
@@ -283,6 +322,11 @@ class _HomePageState extends State<HomePage> {
               ),
               physics: _immersive ? const NeverScrollableScrollPhysics() : null,
               children: [
+                // turned off in Settings > Appearance > Home: rows only, from the top (where a
+                // browsing page starts)
+                if (!showHero)
+                  SizedBox(height: Layout.topChrome(context) + (phone ? 12 : 26))
+                else
                 FutureBuilder<List<Media>>(
                   future: _hero,
                   builder: (context, snap) {
@@ -335,32 +379,53 @@ class _HomePageState extends State<HomePage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SizedBox(height: phone ? 8 : 4),
-                        const ContinueWatchingRow(),
+                        ContinueWatchingRow(
+                          posterWidth: cards == HomeCards.posters ? posterW : null,
+                          scale: scale,
+                          logos: logos,
+                          names: names,
+                        ),
                         // TMDB's rows and each metadata addon's, in your order (Settings > Addons)
                         for (final a in _order)
                           if (a.manifestUrl == Addon.tmdb.manifestUrl) ...[
-                            landscape('Hot right now', _feed.hero),
-                            _BecauseRow(hero: _hero, feed: _feed, posterWidth: posterW),
+                            titles('Hot right now', _feed.hero, CardShape.backdrop),
+                            _BecauseRow(
+                              hero: _hero,
+                              feed: _feed,
+                              posterWidth: posterW,
+                              shape: shapes.next(CardShape.poster),
+                              landscapeWidth: landW,
+                              logos: logos,
+                              names: names,
+                              standIns: standIns,
+                            ),
                             top10("Today's top 10 films", _feed.topMoviesToday),
-                            posters('Series everyone is watching', _feed.popularTv),
+                            titles('Series everyone is watching', _feed.popularTv, CardShape.poster),
                             Shelf<WatchProvider>(
                               title: 'Streaming services',
                               load: _feed.providers,
-                              itemWidth: phone ? 120 : 172,
-                              itemHeight: phone ? 92 : 118,
+                              itemWidth: (phone ? 120 : 172) * scale,
+                              itemHeight: (phone ? 92 : 118) * scale,
                               maxItems: 40,
                               itemBuilder: (_, p, _) => PlatformTile(provider: p),
                             ),
-                            landscape('In cinemas now', _feed.nowPlaying),
-                            posters('Anime picks', _feed.anime),
+                            titles('In cinemas now', _feed.nowPlaying, CardShape.backdrop),
+                            titles('Anime picks', _feed.anime, CardShape.poster),
                             top10("Today's top 10 series", _feed.topTvToday),
-                            const GenreGrid(),
-                            posters('All-time greats', _feed.topRated),
-                            landscape('Coming soon', _feed.upcoming),
+                            if (categories) const GenreGrid(),
+                            titles('All-time greats', _feed.topRated, CardShape.poster),
+                            titles('Coming soon', _feed.upcoming, CardShape.backdrop),
                           ] else
-                            AddonSection(key: ValueKey('addon/${a.manifestUrl}'), addon: a, posterWidth: posterW),
+                            AddonSection(
+                              key: ValueKey('addon/${a.manifestUrl}'),
+                              addon: a,
+                              posterWidth: posterW,
+                              looks: addonLooks(a),
+                              collections: categories,
+                            ),
                         // TMDB off: genre cards from your addons, or where to turn one on
-                        if (!Addons.tmdbOn) Addons.catalogAddons.isEmpty ? const NoMetadata() : const AddonGenreGrid(),
+                        if (!Addons.tmdbOn)
+                          if (Addons.catalogAddons.isEmpty) const NoMetadata() else if (categories) const AddonGenreGrid(),
                         const _Footer(),
                       ],
                     ),
@@ -480,10 +545,26 @@ class _Footer extends StatelessWidget {
 /// "If you like …": recommendations seeded by what you're watching (the newest Continue
 /// watching title), or today's top trending title when that's empty. The title is a picker.
 class _BecauseRow extends StatefulWidget {
-  const _BecauseRow({required this.hero, required this.feed, required this.posterWidth});
+  const _BecauseRow({
+    required this.hero,
+    required this.feed,
+    required this.posterWidth,
+    required this.shape,
+    required this.landscapeWidth,
+    required this.logos,
+    required this.names,
+    required this.standIns,
+  });
   final Future<List<Media>> hero;
   final HomeFeed feed;
   final double posterWidth;
+
+  /// Its cards, and how they're drawn (Settings > Appearance > Home).
+  final CardShape shape;
+  final double landscapeWidth;
+  final bool logos;
+  final bool names;
+  final bool standIns;
 
   @override
   State<_BecauseRow> createState() => _BecauseRowState();
@@ -504,7 +585,8 @@ class _BecauseRowState extends State<_BecauseRow> {
         final all = [...watching, ...trending];
         if (all.isEmpty) return const SizedBox.shrink();
         final seed = all.where((m) => m.key == _pickedKey).firstOrNull ?? all.first;
-        final w = widget.posterWidth;
+        final wide = widget.shape == CardShape.backdrop;
+        final w = wide ? widget.landscapeWidth : widget.posterWidth;
         return Shelf<Media>(
           key: ValueKey('because/${seed.key}'),
           title: 'If you like ${seed.title}',
@@ -516,8 +598,10 @@ class _BecauseRowState extends State<_BecauseRow> {
           ),
           load: () => widget.feed.because(seed),
           itemWidth: w,
-          itemHeight: w * 1.5,
-          itemBuilder: (_, m, _) => PosterCard(media: m, heroTag: 'home/because/${seed.key}/${m.key}'),
+          itemHeight: wide ? w * 9 / 16 : w * 1.5 + (widget.names ? CardName.height : 0),
+          itemBuilder: (_, m, _) => wide
+              ? LandscapeCard(media: m, logo: widget.logos, standIns: widget.standIns)
+              : PosterCard(media: m, heroTag: 'home/because/${seed.key}/${m.key}', named: widget.names),
         );
       },
     ),

@@ -33,7 +33,7 @@ class BadgeGroup {
   final bool exclusive;
 }
 
-/// SourceBadge templates in the Nuvio / Fusion format (what Badger, nintle.github.io/Badger, makes):
+/// SourceBadge templates in the Fusion format (what Badger, nintle.github.io/Badger, makes):
 /// `{groups: [...], filters: [{id, groupId, name, pattern, imageURL, …}]}`. The template is kept
 /// on the device, so badges show offline; its address is a synced setting.
 class Badges {

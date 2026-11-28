@@ -7,6 +7,7 @@
 //   VYSE_USENET_ENGINE=<path to vyse-usenet(.exe)> VYSE_USENET_VIDEO=<an .mkv>
 //     flutter test test/usenet_engine_e2e_test.dart
 // Without them the test is skipped.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -74,7 +75,13 @@ class FakeNntp {
 
   Future<void> start() async {
     server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-    server.listen((sock) async {
+    server.listen((sock) => _serve(sock).catchError((Object _) {}), onError: (Object _) {});
+  }
+
+  // (the engine closes connections it is done with: a write after that is no failure)
+  Future<void> _serve(Socket sock) async {
+    unawaited(sock.done.then((_) {}, onError: (Object _) {}));
+    {
       sock.add(utf8.encode('200 fake news ready\r\n'));
       var buf = <int>[];
       await for (final chunk in sock) {
@@ -116,7 +123,7 @@ class FakeNntp {
           }
         }
       }
-    }, onError: (Object _) {});
+    }
   }
 }
 
@@ -150,17 +157,19 @@ $segs</segments>
 </file>
 </nzb>''';
     final http = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    http.listen((r) {
+    http.listen((r) async {
+      // (a slow indexer: the NZB comes after 3 s)
+      if (r.uri.path.startsWith('/slow')) await Future<void>.delayed(const Duration(seconds: 3));
       r.response.headers.contentType = ContentType('application', 'x-nzb');
       r.response.write(nzb);
-      r.response.close();
+      await r.response.close();
     });
 
     UsenetEngine.debugProgram = engine;
     UsenetEngine.debugSupportDir = await Directory.systemTemp.createTemp('vyse-usenet-e2e-');
     final e = UsenetEngine.instance;
     List<Map<String, Object?>>? report;
-    e.onProviderReport = (servers, r, {required refused, kind}) => report = r;
+    e.onProviderReport = (servers, r, {required refused, kind, required content}) => report = r;
     final sw = Stopwatch()..start();
     final s = await e.open({
       'nzbUrl': 'http://127.0.0.1:${http.port}/release.nzb',
@@ -204,6 +213,41 @@ $segs</segments>
     expect(e.isEngineUrl(s.url), isTrue);
     expect(e.sessionOf(s.url), s.id);
     await e.release(s.id);
+    expect(report?.first['articles'], greaterThan(0), reason: 'the provider counts come back as the session closes');
+
+    // A release opened ahead of its pick (Prefetch results) is called off by a pick of another
+    // one: the pick opens at once instead of being refused as busy, and is the session kept.
+    Map<String, Object?> req(String path) => {
+      'nzbUrl': 'http://127.0.0.1:${http.port}/$path',
+      'servers': ['nntp://user:pass@127.0.0.1:${nntp.server.port}/4'],
+      'headers': {'User-Agent': 'VyseTV/test'},
+      'cacheScope': 'unscoped',
+      'config': {
+        'profile': 'balanced',
+        'readAhead': 0,
+        'maxConnections': 0,
+        'fastMkvStartup': true,
+        'fastNzbFetch': true,
+        'cacheNzb': false,
+        'allowPrivateNetwork': true,
+        'holeFilling': false,
+        'maxMissingArticles': 5,
+        'maxConsecutiveMissing': 2,
+      },
+    };
+    final ahead = e.open(req('slow/ahead.nzb'), ahead: true);
+    var aheadFailed = false;
+    unawaited(ahead.then((_) {}, onError: (Object _) => aheadFailed = true));
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    final sw2 = Stopwatch()..start();
+    final picked = await e.open(req('picked.nzb'));
+    expect(sw2.elapsed, lessThan(const Duration(seconds: 3)), reason: 'the pick waited on the open made ahead');
+    expect(aheadFailed, isTrue);
+    expect(e.owned, picked.id);
+    final r2 = await client.getUrl(Uri.parse(picked.url));
+    r2.headers.set(HttpHeaders.rangeHeader, 'bytes=0-9999');
+    expect([for (final c in await (await r2.close()).toList()) ...c], file.sublist(0, 10000));
+    await e.release(picked.id);
     // ignore: avoid_print
     print('closed; providers: $report; stderr: ${e.lastErrors}');
     await e.stop();

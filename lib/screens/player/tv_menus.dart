@@ -13,7 +13,7 @@ import 'player_menus.dart' show MenuInk, MenuScroll;
 /// that is darkest at the left, and the menu stands on the bottom left as columns side by side:
 /// languages, then that language's subtitles, then how they look. Left and Right go between the
 /// columns, Up and Down along one, Back closes the menu. (It was a panel down the right edge
-/// with a list of menus to go through first; the user asked for menus like NuvioTV's, whose
+/// with a list of menus to go through first; the user asked for menus like another TV player's, whose
 /// subtitle menu this follows.)
 ///
 /// These are the parts every menu is made of: the shade ([TvMenuShade]), the frame that holds
@@ -43,7 +43,7 @@ class TvMenuScope extends InheritedWidget {
 ///
 /// One layer, drawn once (a TV pays for every see-through layer the size of its screen, see
 /// core/lean.dart): black at 92% under the first column, about two thirds in the middle of the
-/// screen and 42% at the far edge, which is NuvioTV's shade (a gradient from the left over a
+/// screen and 42% at the far edge, which is that TV player's shade (a gradient from the left over a
 /// flat tint) folded into one.
 class TvMenuShade extends StatelessWidget {
   const TvMenuShade({super.key});

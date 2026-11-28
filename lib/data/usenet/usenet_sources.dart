@@ -139,7 +139,7 @@ class UsenetIndexer {
 
   final String id;
 
-  /// Also in results' names ("Usenet • 4K • geek").
+  /// Shown on the details line of each release it finds, and in its failure notes.
   final String name;
   final String apiUrl;
 

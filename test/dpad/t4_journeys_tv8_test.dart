@@ -1,5 +1,5 @@
 // The player on a TV, as the user asked for it on 2026-11-19: "i want the player UI to be fully
-// different for android tv, more like nuvio, and all panels to be transparent fullscreen
+// different for android tv, more like [another TV app], and all panels to be transparent fullscreen
 // menu's ... especially their subtitles ui". docs/dpad/PLAN.md note 94 has what was looked at
 // and what was built.
 //

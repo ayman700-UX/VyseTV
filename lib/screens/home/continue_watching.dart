@@ -10,14 +10,26 @@ import '../player/player_page.dart';
 import '../../dpad/dpad_reveal.dart';
 import '../../dpad/dpad_traversal.dart';
 import '../../widgets/common.dart';
-import '../../widgets/media_rows.dart' show ShelfHeader;
+import '../../widgets/media_rows.dart' show CardName, ShelfHeader;
 import '../../widgets/watched_marks.dart';
 import 'up_next.dart';
 
 /// "Continue watching": what's half watched, newest first, and shows whose episode was watched to
 /// the end, with the next one when it's out ("Up next"). Hidden when there's nothing.
 class ContinueWatchingRow extends StatefulWidget {
-  const ContinueWatchingRow({super.key});
+  const ContinueWatchingRow({super.key, this.posterWidth, this.scale = 1, this.logos = true, this.names = false});
+
+  /// Poster cards this wide instead of wide ones (Settings > Appearance > Home: Posters).
+  final double? posterWidth;
+
+  /// The wide cards' size, times their usual one.
+  final double scale;
+
+  /// The wide cards show the title's logo art; false: its name.
+  final bool logos;
+
+  /// Poster cards have the title's name under them.
+  final bool names;
 
   @override
   State<ContinueWatchingRow> createState() => _ContinueWatchingRowState();
@@ -81,8 +93,10 @@ class _ContinueWatchingRowState extends State<ContinueWatchingRow> {
       ..addAll(shown);
     if (entries.isEmpty) return const SizedBox.shrink();
     final phone = Layout.isPhone(context);
-    final w = phone ? 256.0 : 336.0;
-    final h = w * 9 / 16;
+    final poster = widget.posterWidth;
+    final named = poster != null && widget.names;
+    final w = poster ?? (phone ? 256.0 : 336.0) * widget.scale;
+    final h = poster != null ? poster * 1.5 + (named ? CardName.height : 0) : w * 9 / 16;
     return DpadRevealBlock(
       child: Padding(
       padding: EdgeInsets.only(bottom: phone ? 22 : 30),
@@ -104,14 +118,14 @@ class _ContinueWatchingRowState extends State<ContinueWatchingRow> {
               scrollDirection: Axis.horizontal,
               padding: EdgeInsets.fromLTRB(Layout.inset(context), 4, phone ? 16 : 40, 4),
               itemCount: entries.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              separatorBuilder: (_, _) => SizedBox(width: poster != null ? 10 : 12),
               itemBuilder: (context, i) => SizedBox(
                 width: w,
                 child: FadeSlideIn(
                   key: ValueKey(entries[i].entry.media.key),
                   delay: Duration(milliseconds: 35 * (i < 8 ? i : 8)),
                   offset: 10,
-                  child: _ResumeCard(entry: entries[i].entry, next: entries[i].next, phone: phone),
+                  child: _ResumeCard(entry: entries[i].entry, next: entries[i].next, phone: phone, poster: poster != null, logo: widget.logos, named: named),
                 ),
               ),
             ),
@@ -137,9 +151,18 @@ String _left(Duration d) {
 /// a right click or holding OK offers the same in a menu. With [next] (Up next), it is that
 /// episode's card: played from the start, and the one marked watched.
 class _ResumeCard extends StatefulWidget {
-  const _ResumeCard({required this.entry, required this.phone, this.next});
+  const _ResumeCard({required this.entry, required this.phone, this.next, this.poster = false, this.logo = true, this.named = false});
   final WatchEntry entry;
   final bool phone;
+
+  /// A poster card: the poster, where you are on it, and no title art (the poster has it).
+  final bool poster;
+
+  /// A wide card shows the title's logo art; false: its name.
+  final bool logo;
+
+  /// A poster card has the title's name and where you are under it.
+  final bool named;
 
   /// The episode after the one [entry] finished.
   final PlayerEpisode? next;
@@ -150,6 +173,9 @@ class _ResumeCard extends StatefulWidget {
 
 class _ResumeCardState extends State<_ResumeCard> {
   late final Future<String?> _logo = HomeFeed.instance.logo(widget.entry.media);
+
+  /// The name, not the logo art (Settings > Appearance > Home): never looked for.
+  static final Future<String?> _noLogo = Future.value();
 
   void _play() {
     final e = widget.entry;
@@ -216,13 +242,23 @@ class _ResumeCardState extends State<_ResumeCard> {
   @override
   Widget build(BuildContext context) {
     final e = widget.entry;
-    final phone = widget.phone;
     final next = widget.next;
     final (season, episode, name) = next != null ? (next.season, next.number, next.name) : (e.season, e.episode, e.episodeName);
     final sub = season != null && episode != null
         ? '${episodeLabel(season, episode)}${name == null ? '' : '  $name'}'
         : (e.media.year ?? e.media.kind);
     final fraction = next != null ? 0.0 : e.fraction;
+    final left = next != null ? 'Up next' : _left(e.left);
+    // the poster; a wide card's backdrop (anime without a banner: their cover)
+    final art = widget.poster ? (e.media.poster() ?? e.media.backdrop('w780')) : (e.media.backdrop('w780') ?? (e.media.anime ? e.media.poster() : null));
+    return _card(context, e, sub: sub, left: left, art: art, fraction: fraction);
+  }
+
+  Widget _card(BuildContext context, WatchEntry e, {required String sub, required String left, required String? art, required double fraction}) {
+    final phone = widget.phone;
+    final poster = widget.poster;
+    // (part of what is pressed, outside the card's outline)
+    final below = widget.named ? CardName(title: e.media.title, detail: sub) : null;
     return GestureDetector(
       onLongPressStart: (d) => _menu(d.globalPosition),
       onSecondaryTapUp: (d) => _menu(d.globalPosition),
@@ -230,7 +266,9 @@ class _ResumeCardState extends State<_ResumeCard> {
         onTap: _play,
         // holding OK does what a long press does: the menu
         onLongPress: _menu,
-        builder: (context, hovered, pressed) => AnimatedScale(
+        // (the ring goes round the card, not the name under it)
+        focusInset: below == null ? EdgeInsets.zero : const EdgeInsets.only(bottom: CardName.height),
+        builder: (context, hovered, pressed) => _withBelow(below, AnimatedScale(
           scale: pressed ? .98 : (hovered ? 1.02 : 1),
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOutCubic,
@@ -239,13 +277,13 @@ class _ResumeCardState extends State<_ResumeCard> {
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: VyseColors.surface,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(poster ? 7 : 12),
               boxShadow: [
                 if (hovered) BoxShadow(color: VyseColors.accent.withValues(alpha: .22), blurRadius: 22, offset: const Offset(0, 6)),
               ],
             ),
             foregroundDecoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(poster ? 7 : 12),
               border: Border.all(color: hovered ? Colors.white.withValues(alpha: .9) : Colors.white.withValues(alpha: .06), width: hovered ? 1.5 : 1),
             ),
             child: Stack(fit: StackFit.expand, children: [
@@ -254,11 +292,10 @@ class _ResumeCardState extends State<_ResumeCard> {
                 scale: hovered ? 1.06 : 1,
                 duration: const Duration(milliseconds: 600),
                 curve: Curves.easeOutCubic,
-                // anime without a banner: their cover
-                child: (e.media.backdrop('w780') ?? (e.media.anime ? e.media.poster() : null)) == null
+                child: art == null
                     ? const ColoredBox(color: VyseColors.surface)
                     : CachedNetworkImage(
-                        imageUrl: (e.media.backdrop('w780') ?? e.media.poster())!,
+                        imageUrl: art,
                         fit: BoxFit.cover,
                         fadeInDuration: const Duration(milliseconds: 300),
                         placeholder: (_, _) => const ColoredBox(color: VyseColors.surface),
@@ -276,6 +313,25 @@ class _ResumeCardState extends State<_ResumeCard> {
                   ),
                 ),
               ),
+              // where you are, on a poster (its own art has the title)
+              if (poster)
+                Positioned(
+                  left: 10,
+                  right: 10,
+                  bottom: 12,
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                    // (with its name under the card, this line is there)
+                    if (!widget.named)
+                      Text(
+                        sub,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11.5, height: 1.2, fontWeight: FontWeight.w600, color: Color(0xFFD5D7E2)),
+                      ),
+                    Text(left, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, height: 1.25, fontWeight: FontWeight.w700, color: VyseColors.accent)),
+                  ]),
+                )
+              else
               // title art and where you are
               Positioned(
                 left: 14,
@@ -283,7 +339,7 @@ class _ResumeCardState extends State<_ResumeCard> {
                 bottom: 14,
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                   FutureBuilder<String?>(
-                    future: _logo,
+                    future: widget.logo ? _logo : _noLogo,
                     builder: (context, snap) => snap.data == null
                         ? Text(
                             e.media.title,
@@ -318,12 +374,15 @@ class _ResumeCardState extends State<_ResumeCard> {
                       margin: const EdgeInsets.symmetric(horizontal: 7),
                       decoration: const BoxDecoration(color: VyseColors.textFaint, shape: BoxShape.circle),
                     ),
-                    Text(next != null ? 'Up next' : _left(e.left), style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: VyseColors.accent)),
+                    Text(left, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: VyseColors.accent)),
                   ]),
                 ]),
               ),
-              // play: a ring that fills with progress. Centre on hover; always there on touch.
-              if (phone)
+              // play: a ring that fills with progress. Centre on hover; always there on touch
+              // (a poster's top corner, above its art's title).
+              if (phone && poster)
+                Positioned(right: 8, top: 8, child: _Ring(fraction: fraction, size: 32))
+              else if (phone)
                 Positioned(right: 12, bottom: 14, child: _Ring(fraction: fraction, size: 38))
               else
                 Center(
@@ -334,7 +393,7 @@ class _ResumeCardState extends State<_ResumeCard> {
                       scale: hovered ? 1 : .8,
                       duration: const Duration(milliseconds: 220),
                       curve: Curves.easeOutBack,
-                      child: _Ring(fraction: fraction, size: 58),
+                      child: _Ring(fraction: fraction, size: poster ? 46 : 58),
                     ),
                   ),
                 ),
@@ -378,10 +437,13 @@ class _ResumeCardState extends State<_ResumeCard> {
               ),
             ]),
           ),
-        ),
+        )),
       ),
     );
   }
+
+  static Widget _withBelow(Widget? below, Widget card) =>
+      below == null ? card : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Expanded(child: card), below]);
 }
 
 /// A round button on the card under the mouse.

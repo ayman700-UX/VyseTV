@@ -221,7 +221,7 @@ class _RowError extends StatelessWidget {
 
 /// Crisp white outline on hover, image brightens a touch. No zoom, no glow.
 class OutlineCard extends StatelessWidget {
-  const OutlineCard({super.key, required this.label, required this.builder, this.radius = _cardRadius, this.onTap, this.onLongPress});
+  const OutlineCard({super.key, required this.label, required this.builder, this.radius = _cardRadius, this.onTap, this.onLongPress, this.below});
   final String label;
   final double radius;
   final Widget Function(bool hovered) builder;
@@ -230,25 +230,33 @@ class OutlineCard extends StatelessWidget {
   /// What holding OK (or the Menu key) does on this card: its menu, or its remove.
   final VoidCallback? onLongPress;
 
+  /// Under the card, outside its outline but part of what is pressed: a poster's name.
+  final Widget? below;
+
   @override
   Widget build(BuildContext context) => Pressable(
     onTap: onTap ?? () => comingSoon(context, label),
     onLongPress: onLongPress,
     focusScale: 1.03,
-    builder: (context, hovered, pressed) => AnimatedScale(
-      scale: pressed ? .98 : 1,
-      duration: const Duration(milliseconds: 120),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        foregroundDecoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          border: Border.all(color: hovered ? Colors.white : Colors.white.withValues(alpha: .05), width: hovered ? 2 : 1),
+    // the ring goes round the card, not the name under it
+    focusInset: below == null ? EdgeInsets.zero : const EdgeInsets.only(bottom: CardName.height),
+    builder: (context, hovered, pressed) {
+      final card = AnimatedScale(
+        scale: pressed ? .98 : 1,
+        duration: const Duration(milliseconds: 120),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          foregroundDecoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(color: hovered ? Colors.white : Colors.white.withValues(alpha: .05), width: hovered ? 2 : 1),
+          ),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(radius), color: VyseColors.surface),
+          clipBehavior: Clip.antiAlias,
+          child: builder(hovered),
         ),
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(radius), color: VyseColors.surface),
-        clipBehavior: Clip.antiAlias,
-        child: builder(hovered),
-      ),
-    ),
+      );
+      return below == null ? card : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Expanded(child: card), below!]);
+    },
   );
 }
 
@@ -276,30 +284,86 @@ Widget _dimmer(bool hovered) => IgnorePointer(
 // ───────────────────────── Cards ─────────────────────────
 
 class PosterCard extends StatelessWidget {
-  const PosterCard({super.key, required this.media, required this.heroTag});
+  const PosterCard({super.key, required this.media, required this.heroTag, this.named = false, this.rank});
   final Media media;
 
   /// Unique per row, so the poster can fly into the details page.
   final String heroTag;
 
+  /// The title's name and year under the poster (Settings > Appearance > Home), in the last
+  /// [CardName.height] of the card's height.
+  final bool named;
+
+  /// Its place in a top 10, on a tag in the corner.
+  final int? rank;
+
   @override
   Widget build(BuildContext context) => OutlineCard(
     label: media.title,
     onTap: () => openDetails(context, media, heroTag: heroTag),
+    below: named ? CardName(title: media.title, detail: media.year ?? media.kind) : null,
     builder: (hovered) => Stack(
       fit: StackFit.expand,
       children: [
         Hero(tag: heroTag, child: _image(media.poster())),
         _dimmer(hovered),
+        if (rank != null) Positioned(top: 7, left: 7, child: RankTag(rank: rank!)),
       ],
     ),
   );
 }
 
+/// A title's name and a quieter line under it, beneath a card ([PosterCard.named]).
+class CardName extends StatelessWidget {
+  const CardName({super.key, required this.title, this.detail});
+  final String title;
+  final String? detail;
+
+  /// What it adds under the card.
+  static const height = 38.0;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: height,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(2, 7, 2, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, height: 1.2, fontWeight: FontWeight.w600)),
+          if (detail != null && detail!.isNotEmpty)
+            Text(detail!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, height: 1.2, color: VyseColors.textFaint)),
+        ],
+      ),
+    ),
+  );
+}
+
+/// A top 10's place, on the accent colour: a poster's corner in a top 10 row.
+class RankTag extends StatelessWidget {
+  const RankTag({super.key, required this.rank});
+  final int rank;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(color: VyseColors.accent, borderRadius: BorderRadius.circular(4)),
+    child: Text('$rank', style: const TextStyle(fontSize: 12, height: 1.2, fontWeight: FontWeight.w900, color: Colors.black)),
+  );
+}
+
 /// Backdrop with the title's logo art; on hover the logo gives way to title + details.
 class LandscapeCard extends StatefulWidget {
-  const LandscapeCard({super.key, required this.media});
+  const LandscapeCard({super.key, required this.media, this.logo = true, this.standIns = false});
   final Media media;
+
+  /// The title's logo art on the card at rest; false: its name, in plain text (Settings >
+  /// Appearance > Home).
+  final bool logo;
+
+  /// A title with no logo art shows its name instead, and one with no backdrop its poster (an
+  /// addon's title, say): for the looks chosen in Settings > Appearance > Home.
+  final bool standIns;
 
   @override
   State<LandscapeCard> createState() => _LandscapeCardState();
@@ -308,19 +372,39 @@ class LandscapeCard extends StatefulWidget {
 class _LandscapeCardState extends State<LandscapeCard> {
   late final _logo = HomeFeed.instance.logo(widget.media);
 
+  /// The logo art was looked for and there is none ([LandscapeCard.standIns]).
+  bool _noLogo = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.logo && widget.standIns) {
+      void none() {
+        if (mounted) setState(() => _noLogo = true);
+      }
+
+      _logo.then((url) {
+        if (url == null) none();
+      }, onError: (Object _) => none()).ignore();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final m = widget.media;
+    // its name at rest, on the shade the details have on hover
+    final named = !widget.logo || _noLogo;
+    final art = m.backdrop('w780') ?? (widget.standIns ? m.poster() : null);
     return OutlineCard(
       label: m.title,
       onTap: () => openDetails(context, m),
       builder: (hovered) => Stack(
         fit: StackFit.expand,
         children: [
-          _image(m.backdrop('w780')),
+          _image(art, alignment: m.backdropPath == null ? const Alignment(0, -.4) : Alignment.center),
           _dimmer(hovered),
           AnimatedOpacity(
-            opacity: hovered ? 1 : 0,
+            opacity: hovered || named ? 1 : 0,
             duration: const Duration(milliseconds: 200),
             child: const DecoratedBox(
               decoration: BoxDecoration(
@@ -332,6 +416,24 @@ class _LandscapeCardState extends State<LandscapeCard> {
               ),
             ),
           ),
+          // its name (resting state, when it has no logo art or the name was chosen)
+          if (named)
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 10,
+              child: AnimatedOpacity(
+                opacity: hovered ? 0 : 1,
+                duration: const Duration(milliseconds: 200),
+                child: Text(
+                  m.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, height: 1.15, letterSpacing: -.1),
+                ),
+              ),
+            )
+          else
           // logo art (resting state)
           Positioned(
             left: 12,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,6 +10,7 @@ import '../../core/nav_sections.dart';
 import '../../mpv/mpv.dart' show Upscaler;
 import '../app_settings.dart';
 import '../../core/lean.dart';
+import '../../screens/home/home_look.dart' show HomeCardSize, HomeCards;
 import '../playback/intro_db.dart' show SegmentKind;
 import '../playback/player_engine.dart';
 import '../sources/addons.dart';
@@ -18,6 +20,10 @@ import '../sources/film_sources/film_sources.dart' show FilmSource;
 import '../sources/film_sources/source_settings.dart';
 import '../sources/torrents.dart';
 import '../subtitles/subtitle_style.dart';
+import '../usenet/newznab.dart' show Newznab;
+import '../usenet/nntp.dart' show NntpResult, NntpTarget, nntpResultText, testProvider;
+import '../usenet/usenet_profile_json.dart';
+import '../usenet/usenet_sources.dart';
 
 /// Everything Edit on your phone can change, in the order and words of Settings. The phone page
 /// draws whatever this describes (it knows controls, not settings), so a setting added here shows
@@ -468,6 +474,454 @@ class _Action extends PhoneItem {
   }
 }
 
+// ── Usenet: a provider and an indexer filled in on the phone, box by box ──
+//
+// The phone page knows boxes, switches and lists, not forms, so the provider (or indexer) being
+// filled in is kept here on the TV, each box sent as it is done, and saved with Save provider
+// (Save indexer) the way Settings saves one. A saved password or API key never goes to the
+// phone: left blank, the saved one is kept, but only for the same server. Turning a source on
+// or off, moving it, deleting it and Tune connections stay on the TV.
+
+const _usenetSecretNeeded = 'Enter the password or API key again: a saved one is only used for the server it was saved for.';
+
+/// The provider and the indexer being filled in, and which saved ones they are.
+class _UsenetDraft {
+  _UsenetDraft._();
+
+  static final changes = ValueNotifier<int>(0);
+
+  /// The saved provider being changed; null: a new one.
+  static String? providerId;
+  static UsenetProvider provider = UsenetProvider();
+  static String? indexerId;
+  static UsenetIndexer indexer = UsenetIndexer(apiPath: '/api');
+  static DateTime _touched = DateTime.now();
+
+  static void changed() {
+    _touched = DateTime.now();
+    changes.value++;
+  }
+
+  /// A form left for a quarter of an hour starts over, so a password typed into it doesn't stay
+  /// on the TV for long; so does one whose saved source was deleted on the TV.
+  static void check(UsenetSources s) {
+    final stale = DateTime.now().difference(_touched) > const Duration(minutes: 15);
+    if (stale || (providerId != null && !s.providers.any((p) => p.id == providerId))) {
+      providerId = null;
+      provider = UsenetProvider();
+    }
+    if (stale || (indexerId != null && !s.indexers.any((i) => i.id == indexerId))) {
+      indexerId = null;
+      indexer = UsenetIndexer(apiPath: '/api');
+    }
+    if (stale) _touched = DateTime.now();
+  }
+
+  /// Starts on saved provider [id] ('' or unknown: a new one), its password left blank.
+  static void pickProvider(String id) {
+    final saved = UsenetSourcesStore.current.value.providers.where((p) => p.id == id).firstOrNull;
+    providerId = saved?.id;
+    provider = saved == null ? UsenetProvider() : saved.copyWith(password: '');
+    changed();
+  }
+
+  static void pickIndexer(String id) {
+    final saved = UsenetSourcesStore.current.value.indexers.where((i) => i.id == id).firstOrNull;
+    indexerId = saved?.id;
+    indexer = saved == null ? UsenetIndexer(apiPath: '/api') : saved.copyWith(apiKey: '');
+    changed();
+  }
+
+  static UsenetProvider? get savedProvider => providerId == null ? null : UsenetSourcesStore.current.value.providers.where((p) => p.id == providerId).firstOrNull;
+  static UsenetIndexer? get savedIndexer => indexerId == null ? null : UsenetSourcesStore.current.value.indexers.where((i) => i.id == indexerId).firstOrNull;
+
+  /// The provider as it would be saved (its saved password kept for the same server, its on or
+  /// off kept as the TV has it), or why it can't be.
+  static ({UsenetProvider? provider, String? problem}) resolvedProvider() {
+    final saved = savedProvider;
+    var p = saved == null ? provider : provider.copyWith(enabled: saved.enabled);
+    if (provider.password.isEmpty && saved != null && saved.password.isNotEmpty) {
+      if (provider.identity != saved.identity) return (provider: null, problem: _usenetSecretNeeded);
+      p = p.copyWith(password: saved.password);
+    }
+    final bad = p.problem;
+    return bad == null ? (provider: p, problem: null) : (provider: null, problem: bad);
+  }
+
+  static ({UsenetIndexer? indexer, String? problem}) resolvedIndexer() {
+    final saved = savedIndexer;
+    var x = saved == null ? indexer : indexer.copyWith(enabled: saved.enabled);
+    if (indexer.apiKey.isEmpty && saved != null && saved.apiKey.isNotEmpty) {
+      if (indexer.identity != saved.identity) return (indexer: null, problem: _usenetSecretNeeded);
+      x = x.copyWith(apiKey: saved.apiKey);
+    }
+    final bad = x.problem;
+    return bad == null ? (indexer: x, problem: null) : (indexer: null, problem: bad);
+  }
+}
+
+/// An address without what follows "?" (where indexer keys can be).
+String _withoutQuery(String url) {
+  final q = url.indexOf('?');
+  return q < 0 ? url : url.substring(0, q);
+}
+
+/// A box of the Usenet forms. [write] takes what was typed, and answers what is wrong with it.
+/// A [secret] (a password, a key) never goes back to the phone.
+class _UsenetField extends PhoneItem {
+  _UsenetField(String id, String title, {String? sub, required this.read, required this.write, this.placeholder, this.max = 500, this.secret = false, this.saved, this.done})
+    : super(id, title, sub);
+  final String Function() read;
+  final Future<String?> Function(String) write;
+
+  /// What the phone is told when [write] took it (nothing: the box shows it).
+  final String? done;
+  final String? placeholder;
+  final int max;
+  final bool secret;
+
+  /// For a secret: whether one is kept already.
+  final bool Function()? saved;
+
+  @override
+  String get kind => secret ? 'secret' : 'text';
+
+  @override
+  Map<String, Object?> get fields {
+    if (!secret) return {'value': read(), 'max': max, 'placeholder': ?placeholder, 'button': 'OK'};
+    final kept = saved?.call() ?? false;
+    return {'value': kept ? 'saved' : '', 'placeholder': kept ? 'Saved. Leave blank to keep it.' : (placeholder ?? ''), 'button': 'OK'};
+  }
+
+  @override
+  List<Listenable> get watched => [_UsenetDraft.changes, UsenetSourcesStore.current];
+
+  @override
+  Future<PhoneTook?> take(Map<String, Object?> change) async {
+    final v = change['v'];
+    if (v is! String || v.length > max) return null;
+    final bad = await write(v);
+    _UsenetDraft.changed();
+    if (bad != null) return PhoneTook(null, PhoneNote(bad, bad: true));
+    final t = v.trim();
+    return PhoneTook(secret ? '$title: typed' : (t.length > 60 ? '$title: changed' : '$title: $t'), done == null ? null : PhoneNote(done!));
+  }
+}
+
+class _UsenetSwitch extends PhoneItem {
+  _UsenetSwitch(String id, String title, {String? sub, required this.read, required this.write}) : super(id, title, sub);
+  final bool Function() read;
+  final void Function(bool) write;
+
+  @override
+  String get kind => 'toggle';
+  @override
+  Map<String, Object?> get fields => {'value': read()};
+  @override
+  List<Listenable> get watched => [_UsenetDraft.changes];
+
+  @override
+  Future<PhoneTook?> take(Map<String, Object?> change) async {
+    final v = change['v'];
+    if (v is! bool) return null;
+    write(v);
+    _UsenetDraft.changed();
+    return PhoneTook('$title: ${v ? 'on' : 'off'}');
+  }
+}
+
+/// One of a few: pills, or a list ([kind] `select`). [write] answers a note for the phone.
+class _UsenetPick<T> extends PhoneItem {
+  _UsenetPick(String id, String title, {String? sub, required this.options, required this.read, required this.write, this.kind = 'choice'}) : super(id, title, sub);
+  final List<(T, String)> options;
+  final T Function() read;
+  final Future<PhoneNote?> Function(T) write;
+  @override
+  final String kind;
+
+  @override
+  Map<String, Object?> get fields => {
+    'value': read(),
+    'options': [for (final (v, l) in options) {'v': v, 'l': l}],
+  };
+
+  @override
+  List<Listenable> get watched => [_UsenetDraft.changes, UsenetSourcesStore.current];
+
+  @override
+  Future<PhoneTook?> take(Map<String, Object?> change) async {
+    final v = change['v'];
+    for (final (o, l) in options) {
+      if (o == v || (o is int && v is num && v == o)) {
+        final note = await write(o);
+        _UsenetDraft.changed();
+        return PhoneTook(note != null && note.bad ? null : '$title: $l', note);
+      }
+    }
+    return null;
+  }
+}
+
+class _UsenetAction extends PhoneItem {
+  _UsenetAction(String id, String title, {String? sub, required this.button, required this.run}) : super(id, title, sub);
+  final String button;
+  final Future<PhoneTook> Function() run;
+
+  @override
+  String get kind => 'action';
+  @override
+  Map<String, Object?> get fields => {'button': button, 'confirm': ''};
+
+  @override
+  Future<PhoneTook?> take(Map<String, Object?> change) => run();
+}
+
+Future<String?> _usenetNumber(String v, int lo, int hi, String what, void Function(int) set) async {
+  final n = int.tryParse(v.trim());
+  if (n == null || n < lo || n > hi) return 'Use a $what from $lo to $hi.';
+  set(n);
+  return null;
+}
+
+/// Saves what [change] makes of the TV's Usenet sources as they are now: a note for the phone
+/// either way. (Read from the keychain first: saving before that would write over it.)
+Future<PhoneNote> _usenetSave(UsenetSources Function(UsenetSources) change, String done) async {
+  await UsenetSourcesStore.load();
+  final problem = await UsenetSourcesStore.save(change(UsenetSourcesStore.current.value));
+  return problem == null ? PhoneNote(done) : PhoneNote(problem, bad: true);
+}
+
+final _usenetPriorityOptions = [for (var n = 1; n <= 5; n++) (n, n == 1 ? '1 (highest)' : (n == 5 ? '5 (lowest)' : '$n'))];
+
+List<PhoneItem> _usenetItems() {
+  unawaited(UsenetSourcesStore.load());
+  final s = UsenetSourcesStore.current.value;
+  _UsenetDraft.check(s);
+  final builtIn = s.preset != UsenetPreset.original && s.preset != UsenetPreset.custom;
+  final custom = s.customProfile;
+  String presetName(UsenetPreset p) => p == UsenetPreset.custom ? UsenetProfileJson.nameOf(custom) : p.label;
+  return [
+    _Group('NNTP provider'),
+    _UsenetPick<String>(
+      'usenet.provider',
+      'Provider',
+      sub: 'Pick one of yours to change, or add a new one. Nothing changes on the TV until you press Save provider.',
+      kind: 'select',
+      options: [('', 'Add a new provider'), for (final p in s.providers) (p.id, '${p.name} (${p.host})')],
+      read: () => _UsenetDraft.providerId ?? '',
+      write: (id) async {
+        _UsenetDraft.pickProvider(id);
+        return null;
+      },
+    ),
+    _UsenetField('usenet.provider.name', 'Name', placeholder: 'My provider', max: 80, read: () => _UsenetDraft.provider.name, write: (v) async {
+      _UsenetDraft.provider = _UsenetDraft.provider.copyWith(name: v.trim());
+      return null;
+    }),
+    _UsenetField('usenet.provider.host', 'Server host', placeholder: 'news.example.com', max: 253, read: () => _UsenetDraft.provider.host, write: (v) async {
+      _UsenetDraft.provider = _UsenetDraft.provider.copyWith(host: v.trim());
+      return null;
+    }),
+    _UsenetField('usenet.provider.port', 'Port', placeholder: '563', max: 5, read: () => '${_UsenetDraft.provider.port}',
+        write: (v) => _usenetNumber(v, 1, 65535, 'port', (n) => _UsenetDraft.provider = _UsenetDraft.provider.copyWith(port: n))),
+    _UsenetSwitch('usenet.provider.tls', 'Use TLS', sub: 'A secure connection: usually port 563, or 119 without', read: () => _UsenetDraft.provider.tls, write: (on) {
+      final port = _UsenetDraft.provider.port;
+      _UsenetDraft.provider = _UsenetDraft.provider.copyWith(tls: on, port: port == 119 || port == 563 ? (on ? 563 : 119) : port);
+    }),
+    _UsenetField('usenet.provider.username', 'Username', max: 500, read: () => _UsenetDraft.provider.username, write: (v) async {
+      _UsenetDraft.provider = _UsenetDraft.provider.copyWith(username: v);
+      return null;
+    }),
+    _UsenetField(
+      'usenet.provider.password',
+      'Password',
+      secret: true,
+      placeholder: 'Password',
+      read: () => '',
+      saved: () => _UsenetDraft.provider.password.isNotEmpty || (_UsenetDraft.savedProvider?.password.isNotEmpty ?? false),
+      write: (v) async {
+        _UsenetDraft.provider = _UsenetDraft.provider.copyWith(password: v);
+        return null;
+      },
+    ),
+    _UsenetField('usenet.provider.connections', 'Connection allowance', sub: 'How many connections your account allows at once (1 to 4096)', placeholder: '20', max: 4,
+        read: () => '${_UsenetDraft.provider.connections}',
+        write: (v) => _usenetNumber(v, 1, 4096, 'number', (n) => _UsenetDraft.provider = _UsenetDraft.provider.copyWith(connections: n))),
+    _UsenetPick<int>(
+      'usenet.provider.priority',
+      'Priority',
+      sub: 'Providers of the same priority share the work. Lower priorities are only asked for articles the higher ones are missing.',
+      options: _usenetPriorityOptions,
+      read: () => _UsenetDraft.provider.priority,
+      write: (n) async {
+        _UsenetDraft.provider = _UsenetDraft.provider.copyWith(priority: n);
+        return null;
+      },
+    ),
+    _UsenetAction('usenet.provider.test', 'Test provider', sub: 'Signs in with what is filled in above, before anything is saved.', button: 'Test', run: () async {
+      final r = _UsenetDraft.resolvedProvider();
+      final p = r.provider;
+      if (p == null) return PhoneTook(null, PhoneNote(r.problem!, bad: true));
+      final target = NntpTarget(host: p.host, port: p.port, tls: p.tls, username: p.username, password: p.password);
+      final result = await testProvider(target, allowPrivate: AppSettings.usenetAllowPrivate.value);
+      return PhoneTook('Tested ${p.name}', PhoneNote(nntpResultText(result, anonymous: target.anonymous), bad: result != NntpResult.success));
+    }),
+    _UsenetAction('usenet.provider.save', 'Save provider', sub: 'On the TV, in its keychain. Turning it off, moving it and deleting it are done on the TV.', button: 'Save', run: () async {
+      final r = _UsenetDraft.resolvedProvider();
+      final p = r.provider;
+      if (p == null) return PhoneTook(null, PhoneNote(r.problem!, bad: true));
+      final note = await _usenetSave((now) {
+        final list = [...now.providers];
+        final i = list.indexWhere((x) => x.id == p.id);
+        if (i >= 0) {
+          list[i] = p;
+        } else {
+          list.add(p);
+        }
+        return now.copyWith(providers: list);
+      }, 'Saved on the TV.');
+      if (note.bad) return PhoneTook(null, note);
+      _UsenetDraft.providerId = p.id;
+      _UsenetDraft.provider = p.copyWith(password: '');
+      _UsenetDraft.changed();
+      return PhoneTook('Usenet provider saved: ${p.name}', note);
+    }),
+    _Group('Newznab indexer'),
+    _UsenetPick<String>(
+      'usenet.indexer',
+      'Indexer',
+      sub: "Pick one of yours to change, or add a new one. Enter the indexer's address; the API path (usually /api) is added to it. Newznab, Prowlarr and NZBHydra work.",
+      kind: 'select',
+      options: [('', 'Add a new indexer'), for (final x in s.indexers) (x.id, '${x.name} (${x.shownEndpoint})')],
+      read: () => _UsenetDraft.indexerId ?? '',
+      write: (id) async {
+        _UsenetDraft.pickIndexer(id);
+        return null;
+      },
+    ),
+    _UsenetField('usenet.indexer.name', 'Name', placeholder: 'My indexer', max: 80, read: () => _UsenetDraft.indexer.name, write: (v) async {
+      _UsenetDraft.indexer = _UsenetDraft.indexer.copyWith(name: v.trim());
+      return null;
+    }),
+    // (its query, which can hold a key, is never shown: sent back as it was, the saved one stays)
+    _UsenetField('usenet.indexer.url', 'URL', placeholder: 'https://indexer.example', max: 2000, read: () => _withoutQuery(_UsenetDraft.indexer.apiUrl), write: (v) async {
+      final t = v.trim();
+      if (t != _withoutQuery(_UsenetDraft.indexer.apiUrl)) _UsenetDraft.indexer = _UsenetDraft.indexer.copyWith(apiUrl: t);
+      return null;
+    }),
+    _UsenetField('usenet.indexer.path', 'API path', placeholder: '/api', max: 200, read: () => _UsenetDraft.indexer.apiPath, write: (v) async {
+      _UsenetDraft.indexer = _UsenetDraft.indexer.copyWith(apiPath: v.trim());
+      return null;
+    }),
+    _UsenetField(
+      'usenet.indexer.key',
+      'API key',
+      secret: true,
+      placeholder: 'API key',
+      read: () => '',
+      saved: () => _UsenetDraft.indexer.apiKey.isNotEmpty || (_UsenetDraft.savedIndexer?.apiKey.isNotEmpty ?? false),
+      write: (v) async {
+        _UsenetDraft.indexer = _UsenetDraft.indexer.copyWith(apiKey: v.trim());
+        return null;
+      },
+    ),
+    _UsenetPick<int>(
+      'usenet.indexer.fetch',
+      'Fetch limit',
+      sub: 'Results read per search from this indexer before the filters. Unlimited reads every page there is, which can take longer and uses more API hits.',
+      kind: 'select',
+      options: const [(-1, 'Use global setting'), (0, 'Unlimited'), (100, '100'), (200, '200'), (500, '500'), (1000, '1000')],
+      read: () => _UsenetDraft.indexer.fetchLimit ?? -1,
+      write: (n) async {
+        _UsenetDraft.indexer = _UsenetDraft.indexer.copyWith(fetchLimit: () => n < 0 ? null : n);
+        return null;
+      },
+    ),
+    _UsenetPick<int>(
+      'usenet.indexer.priority',
+      'Priority',
+      sub: 'It decides which copy of a repeated release is kept, and which indexers are searched first when lower ones are only a fallback.',
+      options: _usenetPriorityOptions,
+      read: () => _UsenetDraft.indexer.priority,
+      write: (n) async {
+        _UsenetDraft.indexer = _UsenetDraft.indexer.copyWith(priority: n);
+        return null;
+      },
+    ),
+    _UsenetAction('usenet.indexer.test', 'Test indexer', sub: 'Asks it for its capabilities and one result with what is filled in above (one API hit).', button: 'Test', run: () async {
+      final r = _UsenetDraft.resolvedIndexer();
+      final x = r.indexer;
+      if (x == null) return PhoneTook(null, PhoneNote(r.problem!, bad: true));
+      final result = await Newznab.instance.test(x);
+      return PhoneTook('Tested ${x.name}', PhoneNote(result.message, bad: !result.ok));
+    }),
+    _UsenetAction('usenet.indexer.save', 'Save indexer', sub: 'On the TV, in its keychain. Turning it off, moving it and deleting it are done on the TV.', button: 'Save', run: () async {
+      final r = _UsenetDraft.resolvedIndexer();
+      final x = r.indexer;
+      if (x == null) return PhoneTook(null, PhoneNote(r.problem!, bad: true));
+      final note = await _usenetSave((now) {
+        final list = [...now.indexers];
+        final i = list.indexWhere((y) => y.id == x.id);
+        if (i >= 0) {
+          list[i] = x;
+        } else {
+          list.add(x);
+        }
+        return now.copyWith(indexers: list);
+      }, 'Saved on the TV.');
+      if (note.bad) return PhoneTook(null, note);
+      _UsenetDraft.indexerId = x.id;
+      _UsenetDraft.indexer = x.copyWith(apiKey: '');
+      _UsenetDraft.changed();
+      return PhoneTook('Usenet indexer saved: ${x.name}', note);
+    }),
+    _Group('Sorting'),
+    _UsenetPick<String>(
+      'usenet.preset',
+      'Sorting profile',
+      sub: UsenetProfileJson.presetDescription(s.preset),
+      kind: 'select',
+      options: [for (final p in UsenetPreset.values) if (p != UsenetPreset.custom || custom != null) (p.name, presetName(p))],
+      read: () => UsenetSourcesStore.current.value.preset.name,
+      write: (name) async {
+        final p = UsenetPreset.values.firstWhere((x) => x.name == name);
+        return _usenetSave((now) => now.copyWith(preset: p), 'Saved on the TV.');
+      },
+    ),
+    if (builtIn)
+      _UsenetPick<String>(
+        'usenet.language',
+        'Preferred language',
+        sub: 'Releases labelled with this audio language come before quality and size. Other and unlabelled releases stay available.',
+        kind: 'select',
+        options: [('', UsenetProfileJson.languageLabel('')), for (final c in UsenetSources.languages) (c, UsenetProfileJson.languageLabel(c))],
+        read: () => UsenetSourcesStore.current.value.preferredLanguage,
+        write: (code) => _usenetSave((now) => now.copyWith(preferredLanguage: code), 'Saved on the TV.'),
+      ),
+    _UsenetField(
+      'usenet.profile',
+      'Your own sorting profile',
+      sub: custom == null
+          ? 'Paste a profile copied from VyseTV (Settings > Usenet > Your own sorting profile > Copy) to use it on the TV.'
+          : 'The one saved now is in the box, to copy. Paste another over it to use that one instead.',
+      placeholder: 'Paste a sorting profile here',
+      max: 11000,
+      done: 'Saved on the TV. It is the sorting profile now.',
+      read: () {
+        final p = UsenetSourcesStore.current.value.customProfile;
+        return p == null ? '' : jsonEncode(p);
+      },
+      write: (v) async {
+        if (v.trim().isEmpty) return 'Paste a sorting profile first.';
+        final r = UsenetProfileJson.parse(v);
+        if (r.profile == null) return r.problem;
+        final note = await _usenetSave((now) => now.copyWith(customProfile: () => r.profile, preset: UsenetPreset.custom), '');
+        return note.bad ? note.text : null;
+      },
+    ),
+  ];
+}
+
 String cssColor(int argb) {
   String hex(int v) => v.toRadixString(16).padLeft(2, '0');
   final a = (argb >> 24) & 0xFF;
@@ -563,8 +1017,17 @@ List<PhoneSection> phoneSections({required List<SubtitleFontChoice> fonts}) {
       ],
       _Action('subs.reset', 'Caption style', sub: 'Back to how VyseTV draws subtitles out of the box', button: 'Reset', confirm: 'Reset the caption style on the TV?', run: SubtitleStyle.resetCaption),
     ]),
-    PhoneSection('appearance', 'Appearance', 'The light behind every page, and what the navbar shows.', [
+    PhoneSection('appearance', 'Appearance', 'The light behind every page, how Home looks, and what the navbar shows.', [
       _Choice<String>(AppSettings.themeId, 'Look', [for (final t in appThemes) (t.id, t.name)], colors: {for (final t in appThemes) t.id: t.color.toARGB32()}),
+      _Group('Home'),
+      _Choice<String>(AppSettings.homeCards, 'Cards', [for (final c in HomeCards.values) (c.name, c.label)],
+          sub: 'Classic: each row in its own style. Posters or Backdrops: every card alike. Mixed: rows take turns'),
+      _Choice<String>(AppSettings.homeCardSize, 'Card size', [for (final s in HomeCardSize.values) (s.name, s.label)]),
+      _Toggle(AppSettings.homeHero, 'Hero carousel', 'The big slideshow at the top. Off: Home is only rows'),
+      _Toggle(AppSettings.homeCategories, 'Genre and collection cards', "Explore genres, and each addon's More from cards"),
+      _Choice<bool>(AppSettings.homeLogos, 'On backdrop cards', const [(true, 'Logo'), (false, 'Name')], sub: "The title's logo art, or its name in plain letters"),
+      _Toggle(AppSettings.homeNames, 'Names under posters', 'The title and its year under each poster'),
+      _Group('Interface'),
       _Lean(),
       _Order<NavItem>(
         'nav',
@@ -610,6 +1073,12 @@ List<PhoneSection> phoneSections({required List<SubtitleFontChoice> fonts}) {
       _DebridKey(),
       _Toggle(AppSettings.debridOn, 'Play torrents through debrid', 'With a service and its key: torrents play from it instead of peer to peer'),
     ]),
+    PhoneSection(
+      'usenet',
+      'Usenet',
+      "Your own Usenet providers and Newznab indexers, typed here instead of with the remote. Passwords and API keys are kept in the TV's keychain and never shown here.",
+      _usenetItems(),
+    ),
     PhoneSection('lists', 'Lists and tracking', 'What you watch here keeps your lists there up to date, once connected on the TV.', [
       _Toggle(AppSettings.trackAniList, 'Update AniList progress', 'Anime episodes you finish here count there'),
       _Toggle(AppSettings.trackRewatches, 'Count rewatches', 'Finishing episode 1 of something you completed starts a rewatch there'),

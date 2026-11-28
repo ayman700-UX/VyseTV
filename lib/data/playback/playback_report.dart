@@ -66,6 +66,10 @@ class PlaybackReport {
   /// display takes, its Dolby Vision decoders, the profile 7 conversion). Android only.
   PlaybackReport withDevice(Map<String, Object?> caps) => caps.isEmpty ? this : _with({'caps': _clean(caps)});
 
+  /// A Usenet release, as the Usenet engine has it now (UsenetPlay.liveFacts): which providers
+  /// served it, how complete it is, how quickly they answer, what went wrong.
+  PlaybackReport withUsenet(Map<String, String> facts) => facts.isEmpty ? this : _with({'usenet': facts});
+
   /// What Media3 says about the video (its `getStats`), live or as it gave the video up.
   PlaybackReport withMedia3(Map<String, Object?> stats) => stats.isEmpty ? this : _with({'exo': _clean(stats)});
 
@@ -185,6 +189,13 @@ class PlaybackReport {
   /// One line for a list: what it was and how it went ("The Body · handed to mpv").
   String get summary => [if (title.isNotEmpty) title, _outcomeShort].join(' · ');
 
+  /// How it went, in a few words ("did not play", "played on Media3").
+  String get outcome => _outcomeShort;
+
+  /// Whether [other] is this same playback, a later word on it (a report is kept again as the
+  /// player learns more, and once more when it closes).
+  bool sameAs(PlaybackReport other) => _s('when') == other._s('when') && title == other.title;
+
   String get _outcomeShort {
     if (failed) return started ? 'stopped with an error' : 'did not play';
     if (handedOver) return _f['mpvFrameMs'] != null ? 'played on mpv, after Media3' : 'handed to mpv';
@@ -255,6 +266,7 @@ class PlaybackReport {
               ('Language', _str(subtitle['language']) ?? ''),
               ('From', _str(subtitle['origin']) ?? ''),
             ])),
+      if (_m('usenet').isNotEmpty) (title: 'Usenet', facts: _facts([for (final e in _m('usenet').entries) (e.key, '${e.value ?? ''}')])),
     ];
   }
 
@@ -684,35 +696,66 @@ class PlaybackReport {
         },
   }..removeWhere((_, v) => v == null);
 
-  // ── The newest one, kept ──
+  // ── The last few, kept ──
 
-  static const _key = 'device.lastPlayback';
+  /// How many playbacks are kept: enough that a film that would not play is still there after
+  /// the tester has tried another one.
+  static const keepCount = 5;
 
-  /// The newest report, also after the player has closed and the app has been started again.
-  /// Null until [load] has read it, or when nothing has been played yet.
+  static const _key = 'device.recentPlaybacks';
+
+  /// Where builds before 1.0.4 kept the one newest report: read once, then left behind.
+  static const _oldKey = 'device.lastPlayback';
+
+  /// The kept reports, newest first, also after the player has closed and the app has been
+  /// started again. Empty until [load] has read them, or when nothing has been played yet.
+  static final recent = ValueNotifier<List<PlaybackReport>>(const []);
+
+  /// The newest of [recent].
   static final last = ValueNotifier<PlaybackReport?>(null);
-  static bool _loaded = false;
+  static Future<void>? _loading;
 
-  /// Reads the kept report (once).
-  static Future<void> load() async {
-    if (_loaded) return;
-    _loaded = true;
+  /// Reads the kept reports (once; every caller waits for the same reading).
+  static Future<void> load() => _loading ??= _read();
+
+  static Future<void> _read() async {
     try {
-      final raw = (await SharedPreferences.getInstance()).getString(_key);
-      if (raw != null && last.value == null) last.value = PlaybackReport.fromJson((jsonDecode(raw) as Map).cast<String, Object?>());
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_key);
+      final old = raw == null ? prefs.getString(_oldKey) : null;
+      final kept = [
+        if (raw != null)
+          for (final j in jsonDecode(raw) as List) PlaybackReport.fromJson((j as Map).cast<String, Object?>()),
+        if (old != null) PlaybackReport.fromJson((jsonDecode(old) as Map).cast<String, Object?>()),
+      ];
+      // the ones made since the app started come first, then what was kept, each playback once
+      final all = [...recent.value];
+      for (final r in kept) {
+        if (!all.any((x) => x.sameAs(r))) all.add(r);
+      }
+      _show(all);
     } catch (_) {
       // nothing kept, or kept by a build that wrote it differently
     }
   }
 
-  /// Makes [report] the newest one and keeps it.
+  static void _show(List<PlaybackReport> all) {
+    final list = List<PlaybackReport>.unmodifiable(all.take(keepCount));
+    recent.value = list;
+    last.value = list.isEmpty ? null : list.first;
+  }
+
+  /// Makes [report] the newest one and keeps it, with the [keepCount] - 1 before it. A later
+  /// word on the same playback ([sameAs]) takes its place instead of being kept beside it.
   static Future<void> keep(PlaybackReport report) async {
-    _loaded = true;
-    last.value = report;
+    _show([report, ...recent.value.where((r) => !r.sameAs(report))]);
+    await load();
     try {
-      await (await SharedPreferences.getInstance()).setString(_key, jsonEncode(report.toJson()));
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_key, jsonEncode([for (final r in recent.value) r.toJson()]));
+      await prefs.remove(_oldKey);
     } catch (_) {
-      // (a report that can't be written is still shown while the app runs)
+      // (reports that can't be written are still shown while the app runs)
     }
   }
 
@@ -758,7 +801,8 @@ class PlaybackReport {
   @visibleForTesting
   static void debugReset() {
     _device = null;
-    _loaded = false;
+    _loading = null;
+    recent.value = const [];
     last.value = null;
   }
 }

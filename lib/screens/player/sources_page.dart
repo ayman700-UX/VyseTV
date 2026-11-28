@@ -23,6 +23,10 @@ import '../../data/catalog/meta_addons.dart';
 import '../../data/catalog/tmdb.dart';
 import '../../data/playback/watch_progress.dart';
 import '../../data/sources/torrents.dart';
+import '../../data/usenet/usenet_engine.dart' show UsenetEngine;
+import '../../data/usenet/usenet_play.dart';
+import '../../data/usenet/usenet_release.dart' show UsenetReleases;
+import '../../data/usenet/usenet_search.dart';
 import '../../dpad/dpad_traversal.dart';
 import '../../widgets/common.dart';
 import '../../widgets/dialogs/debrid_consent.dart';
@@ -36,7 +40,7 @@ import 'player_page.dart';
 import '../profile/profile_page.dart';
 
 /// Streaming mode off: before a film or an episode plays, its sources from your Stremio addons,
-/// to pick one. Each source reads as its addon wrote it (the way Stremio and Nuvio show them),
+/// to pick one. Each source reads as its addon wrote it (the way Stremio shows them),
 /// with badges from your badge template under it. Anime come through here too (by Kitsu id).
 /// [notice]: a line said over it as it opens (why it opened instead of the player).
 Future<void> openSources(BuildContext context, Media media, {PlayerEpisode? episode, int? runtime, AnimeTarget? anime, String? notice}) =>
@@ -100,6 +104,10 @@ class _Result {
   String? error;
   List<AddonStream> streams = const [];
   int torrents = 0;
+
+  /// Why a search that found nothing failed, one line each (the built-in Usenet source's
+  /// indexers): said only when the whole list is empty.
+  List<String> notes = const [];
 }
 
 /// What the header says about the title.
@@ -164,6 +172,7 @@ class _SourcesPageState extends State<SourcesPage> {
   void initState() {
     super.initState();
     Badges.list.addListener(_badgesChanged);
+    UsenetReleases.changed.addListener(_releasesChanged);
     _ask();
     final notice = widget.notice;
     if (notice != null) {
@@ -176,12 +185,44 @@ class _SourcesPageState extends State<SourcesPage> {
   @override
   void dispose() {
     Badges.list.removeListener(_badgesChanged);
+    UsenetReleases.changed.removeListener(_releasesChanged);
     unawaited(Torrents.forgetPrepared()); // torrents hovered here but never played
+    if (!_picked) UsenetPlay.cancelPrefetch(); // a Usenet release opened ahead and never played
     super.dispose();
   }
 
   void _badgesChanged() {
     if (mounted) setState(() {});
+  }
+
+  /// A Usenet release played or failed (in the player, most often): the Usenet results take
+  /// their places again, one gone from your providers last with UNAVAILABLE, so it is there
+  /// on the way back.
+  void _releasesChanged() {
+    if (!mounted) return;
+    setState(() {
+      final r = _results[Addon.usenet.manifestUrl];
+      if (r != null && r.streams.isNotEmpty) r.streams = UsenetSearch.instance.arrange(r.streams);
+      _orderFor = null; // (the list is put in order afresh)
+    });
+  }
+
+  /// Something was picked here (a Usenet release opened ahead is the player's then, or let go
+  /// by the pick's own open).
+  bool _picked = false;
+
+  /// The season and episode a Usenet release is opened for, as the player opens it.
+  int? get _usenetSeason => widget.anime != null ? null : _ep?.season;
+
+  /// With Usenet results on the list: the engine is started, and with Prefetch results on, the
+  /// first Usenet result is opened ahead, so picking it plays at once. Not inside the player
+  /// (a video plays there), nor once something was picked.
+  void _warmUsenet() {
+    if (widget.overlay || _picked || !mounted) return;
+    final top = _shown.where((s) => s.usenet && s.playable).firstOrNull;
+    if (top == null) return;
+    unawaited(UsenetEngine.instance.prewarm());
+    UsenetPlay.prefetch(top, season: _usenetSeason, episode: _ep?.number);
   }
 
   Future<void> _ask() async {
@@ -227,7 +268,9 @@ class _SourcesPageState extends State<SourcesPage> {
           t,
           // a plugin repository's streams as each plugin finds them (it is still looking)
           onSome: (l) {
-            if (mounted) setState(() => r.streams = [...own, ...l]);
+            if (!mounted) return;
+            setState(() => r.streams = [...own, ...l]);
+            if (l.any((s) => s.usenet)) _warmUsenet();
           },
         ).then(
           (got) {
@@ -241,13 +284,15 @@ class _SourcesPageState extends State<SourcesPage> {
                 ..streams = [...own, ...?got?.streams]
                 ..torrents = got?.torrents ?? 0;
             });
+            if (got != null && got.streams.any((s) => s.usenet)) _warmUsenet();
           },
           onError: (Object e) {
             if (!mounted) return;
             setState(() {
               r
                 ..loading = false
-                ..error = e is TimeoutException ? 'took too long' : "didn't answer";
+                ..notes = e is SourceSearchFailed ? e.notes : const []
+                ..error = e is SourceSearchFailed ? 'found nothing' : (e is TimeoutException ? 'took too long' : "didn't answer");
             });
           },
         ),
@@ -319,7 +364,7 @@ class _SourcesPageState extends State<SourcesPage> {
   List<String> _order = const [];
   Object? _orderFor;
 
-  static String _key(AddonStream s) => '${s.addon.manifestUrl}|${s.infoHash ?? ''}|${s.fileIdx ?? ''}|${s.url}|${s.name}|${s.description}';
+  static String _key(AddonStream s) => '${s.addon.manifestUrl}|${s.infoHash ?? ''}|${s.nzbUrl ?? ''}|${s.fileIdx ?? ''}|${s.url}|${s.name}|${s.description}';
 
   List<AddonStream> get _shown {
     final view = (_sort, _addon, _quality, _language, _source, _size, _kind);
@@ -389,6 +434,16 @@ class _SourcesPageState extends State<SourcesPage> {
     if (!s.playable) return _openLink(s.external!);
     // P2P off: ask first, and start nothing unless allowed (in your room, everyone there too)
     final party = Rooms.mine.value?.iOwn == true;
+    // A Usenet release plays from your own providers, through this device's engine: nobody else
+    // in a room could play it (and its link carries your indexer's key).
+    if (s.usenet && party) {
+      showToast(
+        context,
+        const Text("Usenet sources play from your own providers, so they can't be shared with your room. Pick another source.", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        icon: Icons.info_outline_rounded,
+      );
+      return;
+    }
     // with debrid on, torrents come from the service: nothing peer to peer to agree to
     final p2p = s.torrent && !Debrid.active;
     if (p2p && !await allowP2p(context)) return;
@@ -397,6 +452,15 @@ class _SourcesPageState extends State<SourcesPage> {
     // (a source changed from inside the room's player is asked there, in the player)
     if (party && !widget.overlay && s.torrent && Debrid.active && mounted && !await allowDebridInRoom(context)) return;
     if (!mounted) return;
+    _picked = true;
+    // a Usenet release: the ones listed after it are where the player carries on, should it not
+    // play (Settings > Usenet > Automatic Usenet fallback); anything else lets go of one opened
+    // ahead
+    if (s.usenet) {
+      UsenetFallback.hand(_shown, s);
+    } else {
+      UsenetPlay.cancelPrefetch();
+    }
     if (widget.overlay) return widget.onPick?.call(AddonPick(s, t));
     if (party) {
       // your room: this exact source plays there for everyone
@@ -463,7 +527,7 @@ class _SourcesPageState extends State<SourcesPage> {
   bool _isPlaying(AddonStream s) {
     final p = widget.playing;
     if (p == null) return false;
-    return p.torrent ? s.infoHash == p.infoHash && s.fileIdx == p.fileIdx : s.url == p.url;
+    return p.sameAs(s);
   }
 
   /// VyseTV's own servers instead. A title from a metadata addon plays there as its TMDB match;
@@ -649,7 +713,8 @@ class _SourcesPageState extends State<SourcesPage> {
               const Spacer(),
               // the title, over its art
               SizedBox(
-                width: math.min(420.0, size.width * .3),
+                // (what is left beside the list: a TV's 960 points have less than 30% after its insets)
+                width: math.max(0.0, math.min(math.min(420.0, size.width * .3), size.width - 2 * inset - listW - 24)),
                 child: Padding(
                   padding: EdgeInsets.only(top: size.height * .16),
                   child: Column(
@@ -666,9 +731,12 @@ class _SourcesPageState extends State<SourcesPage> {
                         ),
                       ],
                       const SizedBox(height: 24),
-                      Row(
+                      // (two lines when the column is narrow, as on a TV)
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
                         children: [
-                          if (best != null) ...[_Primary(label: 'Play best', onTap: () => _play(best)), const SizedBox(width: 10)],
+                          if (best != null) _Primary(label: 'Play best', onTap: () => _play(best)),
                           if (!widget.overlay) _Secondary(label: 'VyseTV servers', onTap: _builtIn),
                         ],
                       ),
@@ -827,6 +895,8 @@ class _SourcesPageState extends State<SourcesPage> {
     }
     if (list.isEmpty) {
       final t = _torrents;
+      // (why your Usenet indexers found nothing, when the whole list is empty)
+      final notes = _filtered ? const <String>[] : [for (final r in _results.values) ...r.notes];
       return [
         one(
           _Note(
@@ -835,6 +905,8 @@ class _SourcesPageState extends State<SourcesPage> {
                 ? 'Loosen a filter to see more.'
                 : t > 0
                 ? 'Your addons found $t torrents, but this device can only play them through a debrid service set up in the addon.'
+                : notes.isNotEmpty
+                ? 'Your addons have nothing for this right now.\n\n${notes.join('\n')}'
                 : 'Your addons have nothing for this right now.',
             actions: [
               if (_filtered) _Secondary(label: 'Clear filters', onTap: _clear),
@@ -1260,8 +1332,13 @@ class _SourceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = stream;
-    final description = s.description;
-    final badges = s.badges;
+    // a release name is one long word: it may break at its dots ("…REMUX.DV.HDR.HEVC.TrueHD…")
+    final description = s.usenet ? [for (final l in s.description.split('\n')) l.contains(' ') ? l : l.replaceAll('.', '.​')].join('\n') : s.description;
+    // a Usenet release: how it went before (AVAILABLE, UNAVAILABLE, an episode of the same
+    // upload that failed or played), a season pack, a full disc, before the template's badges
+    final badges = [if (s.usenet) for (final b in UsenetSearch.badgesOf(s)) _usenetBadge(b), ...s.badges];
+    // the built-in Usenet source's results lead with what the release is ("4K WEB-DL • DV • HEVC")
+    final headline = s.usenet && s.addon.manifestUrl == Addon.usenet.manifestUrl && s.name.trim().isNotEmpty ? s.name.trim() : null;
     // a torrent starts fetching its file list as soon as you point at it or press it
     void prepare() {
       if (s.torrent && !Debrid.active) Torrents.prepare(s.infoHash!, trackers: s.trackers, title: s.release);
@@ -1298,6 +1375,7 @@ class _SourceRow extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  if (headline != null) ...[Text(headline, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, style: _headStyle), const SizedBox(height: 3)],
                                   if (description.isNotEmpty) Text(description, maxLines: 7, overflow: TextOverflow.ellipsis, style: _descStyle),
                                   if (!s.playable) ...[SizedBox(height: description.isEmpty ? 0 : 8), _Opens(link: s.external!, notice: s.notice)],
                                 ],
@@ -1319,6 +1397,7 @@ class _SourceRow extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (playing) ...[_now, const SizedBox(height: 6)],
+                              if (headline != null) ...[Text(headline, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, style: _headStyle), const SizedBox(height: 3)],
                               if (description.isNotEmpty) Text(description, maxLines: 7, overflow: TextOverflow.ellipsis, style: _descStyle),
                               if (!s.playable) ...[SizedBox(height: description.isEmpty ? 0 : 8), _Opens(link: s.external!, notice: s.notice)],
                               if (badges.isNotEmpty) ...[SizedBox(height: description.isEmpty ? 0 : 12), BadgeRow(badges: badges)],
@@ -1350,6 +1429,26 @@ class _SourceRow extends StatelessWidget {
   }
 
   static const _descStyle = TextStyle(fontSize: 13, height: 1.5, color: Color(0xFFB4B9D2));
+  static const _headStyle = TextStyle(fontSize: 14, height: 1.4, fontWeight: FontWeight.w700, color: VyseColors.text);
+
+  static final _never = RegExp(r'(?!)');
+
+  /// A Usenet badge as a text tag, white on its own colour.
+  static SourceBadge _usenetBadge(UsenetBadge b) => SourceBadge(
+    id: 'usenet:${b.text}',
+    group: 'usenet',
+    name: b.text,
+    pattern: _never,
+    tag: switch (b.kind) {
+      UsenetBadgeKind.available => 0xFF198754,
+      UsenetBadgeKind.unavailable => 0xFF6C757D,
+      UsenetBadgeKind.failed => 0xFFFD7E14,
+      UsenetBadgeKind.played => 0xFF0AA2C0,
+      UsenetBadgeKind.pack => 0xFF6F42C1,
+      UsenetBadgeKind.other => 0xFF0B5ED7,
+    },
+    text: 0xFFFFFFFF,
+  );
 }
 
 /// Copies a torrent source's magnet link, for opening it in another app.
@@ -1438,19 +1537,22 @@ class _BadgeView extends StatelessWidget {
     final tag = Container(
       height: height,
       padding: const EdgeInsets.symmetric(horizontal: 6),
-      alignment: Alignment.center,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(4),
         color: b.tag != null && (b.tag! >> 24) > 0 ? Color(b.tag!) : const Color(0x1AFFFFFF),
         border: b.border != null && (b.border! >> 24) > 0 ? Border.all(color: Color(b.border!)) : null,
       ),
-      child: Text(
-        _plain(b.name),
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w800,
-          letterSpacing: .3,
-          color: b.text != null && (b.text! >> 24) > 0 ? Color(b.text!) : VyseColors.textDim,
+      // (as wide as its words: a tag in a row of badges doesn't take the row)
+      child: Center(
+        widthFactor: 1,
+        child: Text(
+          _plain(b.name),
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: .3,
+            color: b.text != null && (b.text! >> 24) > 0 ? Color(b.text!) : VyseColors.textDim,
+          ),
         ),
       ),
     );

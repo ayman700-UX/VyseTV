@@ -61,7 +61,8 @@ void main() {
 
   test('TMDB is a built-in metadata addon, on unless turned off; the list keeps your order', () {
     final l = Addons.withBuiltIns([lantern]);
-    expect([for (final a in l) a.name], ['Lantern', 'TMDB', 'Knaben']);
+    expect([for (final a in l) a.name], ['Lantern', 'TMDB', 'Knaben', 'Usenet']);
+    expect(l.last.enabled, isFalse, reason: 'Usenet is off until it is set up');
     Addons.list.value = l;
     expect(Addons.tmdbOn, isTrue);
     expect(Addons.metaAddons.single.name, 'Lantern');
@@ -233,7 +234,7 @@ void main() {
     Addons.list.value = Addons.withBuiltIns([old, brook]);
     await Addons.refresh(force: true);
     final now = Addons.list.value;
-    expect([for (final a in now) a.name], ['Lantern', 'Brook', 'TMDB', 'Knaben']);
+    expect([for (final a in now) a.name], ['Lantern', 'Brook', 'TMDB', 'Knaben', 'Usenet']);
     expect((now.first.catalogs.length, now.first.enabled), (lantern.catalogs.length, false));
   });
 }

@@ -96,7 +96,12 @@ class UsenetEngine {
   final _stderr = <String>[];
 
   /// Provider counts reported as sessions close (statistics listen: usenet_stats.dart).
-  void Function(List<String> servers, List<Map<String, Object?>> report, {required bool refused, String? kind})? onProviderReport;
+  /// [content]: 'show' for an episode, 'movie' for anything else.
+  void Function(List<String> servers, List<Map<String, Object?>> report, {required bool refused, String? kind, required String content})? onProviderReport;
+
+  final _content = <String, String>{}; // session → 'show' or 'movie'
+
+  static String _contentOf(Map<String, Object?> request) => request['episode'] != null ? 'show' : 'movie';
 
   /// The engine's last words on stderr.
   List<String> get lastErrors => List.unmodifiable(_stderr);
@@ -131,7 +136,14 @@ class UsenetEngine {
     final token = List.generate(32, (_) => rnd.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
     final support = debugSupportDir ?? await getApplicationSupportDirectory();
     final cache = Directory('${support.path}${Platform.pathSeparator}usenet${Platform.pathSeparator}nzb-cache');
-    if (AppSettings.usenetCacheNzb.value) await cache.create(recursive: true);
+    if (AppSettings.usenetCacheNzb.value) {
+      await cache.create(recursive: true);
+    } else if (await cache.exists()) {
+      // Cache NZB files turned off: what was kept goes
+      try {
+        await cache.delete(recursive: true);
+      } catch (_) {}
+    }
     final bootstrap = jsonEncode({'token': token, 'certificates': const <String>[], 'memoryMiB': memoryMiB, 'nzbCacheDir': AppSettings.usenetCacheNzb.value ? cache.path : ''});
     _stderr.clear();
     if (TizenTv.isTv) {
@@ -243,6 +255,26 @@ class UsenetEngine {
     });
   }
 
+  /// A Usenet result is on the sources list: the engine starts now (no release, sign-in or
+  /// connection yet), so a pick opens sooner. With nothing opened it goes again after two
+  /// minutes, unless "Pre-warm Usenet Engine" keeps it.
+  Future<void> prewarm() async {
+    if (!supported) return;
+    try {
+      await base();
+    } catch (_) {
+      return;
+    }
+    if (_owned == null) _maybeIdle(const Duration(minutes: 2));
+  }
+
+  /// A setting the engine reads as it starts changed (Performance profile, Cache NZB files): an
+  /// engine with nothing open goes now, and the next release starts it as Settings says. One
+  /// playing keeps going, and takes the change when it next starts.
+  Future<void> settingsChanged() async {
+    if (running && _owned == null && _ahead == null) await stop();
+  }
+
   /// The app went to the background: an engine with nothing of ours goes now.
   Future<void> backgrounded() async {
     if (_owned == null && running) await stop();
@@ -297,10 +329,11 @@ class UsenetEngine {
     ..connectionTimeout = const Duration(seconds: 5)
     ..findProxy = (_) => 'DIRECT';
 
-  Future<(int, Map<String, String>, String)> _call(String method, String path, {Object? body, required Duration timeout}) async {
+  Future<(int, Map<String, String>, String)> _call(String method, String path, {Object? body, required Duration timeout, void Function(HttpClientRequest req)? sent}) async {
     final b = await base();
     try {
       final req = await _http.openUrl(method, b.resolve(path)).timeout(timeout);
+      sent?.call(req);
       req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
       if (body != null) {
         req.headers.contentType = ContentType.json;
@@ -334,16 +367,31 @@ class UsenetEngine {
   /// Opens a release: [request] is the engine's open request without `keepSessionId` (the
   /// session ours now is kept until this one is ready, then let go). [timeout]: the open gives
   /// up (and the engine with it) after this long.
-  Future<UsenetSession> open(Map<String, Object?> request, {Duration timeout = const Duration(seconds: 120)}) async {
+  ///
+  /// The engine opens one release at a time. [ahead]: a release opened before it is picked
+  /// (Prefetch results); any other open calls it off first ([abortAhead]), so a pick never waits
+  /// on it.
+  Future<UsenetSession> open(Map<String, Object?> request, {Duration timeout = const Duration(seconds: 120), bool ahead = false}) async {
+    if (!ahead) await abortAhead();
     _idle?.cancel();
     final previous = _owned;
     final servers = [for (final s in (request['servers'] as List? ?? const [])) '$s'];
+    final mine = (token: Object(), req: <HttpClientRequest>[], done: Completer<void>());
+    if (ahead) _ahead = mine;
+    bool calledOff() => ahead && !identical(_ahead, mine);
     try {
-      final (status, headers, text) = await _call('POST', '/sessions', body: {...request, 'keepSessionId': previous ?? ''}, timeout: timeout);
+      final body = {...request, 'keepSessionId': previous ?? ''};
+      var (status, headers, text) = await _call('POST', '/sessions', body: body, timeout: timeout, sent: mine.req.add);
+      // (an open called off a moment ago may still be unwinding in the engine)
+      for (var i = 0; status == 409 && !ahead && i < 8; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        (status, headers, text) = await _call('POST', '/sessions', body: body, timeout: timeout);
+      }
+      if (calledOff()) throw UsenetEngineError('Usenet stream could not be opened');
       if (status != 200) {
         final kind = headers['x-usenet-failure'];
         final providers = _report(headers['x-usenet-providers']);
-        if (providers != null) onProviderReport?.call(servers, providers, refused: true, kind: kind);
+        if (providers != null) onProviderReport?.call(servers, providers, refused: true, kind: kind, content: _contentOf(request));
         final body = text.trim();
         throw UsenetEngineError(
           body.isEmpty ? 'Usenet engine returned HTTP $status' : (body.length > 240 ? body.substring(0, 240) : body),
@@ -376,14 +424,21 @@ class UsenetEngine {
       // the engine let every other session go; ours is this one now
       _retired.clear();
       _servers.removeWhere((k, _) => k != previous && k != id);
+      _content.removeWhere((k, _) => k != previous && k != id);
       _servers[id] = servers;
+      _content[id] = _contentOf(request);
       _owned = id;
       if (previous != null && previous != id) _retire(previous);
       return session;
     } catch (e) {
+      // Called off for a pick: the pick's own open takes it from here (the engine lets go of
+      // whatever this left when that one opens).
+      if (calledOff()) throw UsenetEngineError('Usenet stream could not be opened');
       // a failed or abandoned open leaves what played playing; with nothing else of ours, the
-      // engine goes too
-      if (previous == null || _owned != previous || !running) {
+      // engine goes too (one opened ahead only idles: a pick may be on its way)
+      if (ahead) {
+        if (_owned == null) _maybeIdle(const Duration(minutes: 2));
+      } else if (previous == null || _owned != previous || !running) {
         unawaited(stop());
       } else {
         _maybeIdle();
@@ -391,7 +446,24 @@ class UsenetEngine {
       if (e is UsenetEngineError) rethrow;
       if (e is TimeoutException) throw UsenetEngineError('Usenet source preparation timed out');
       throw UsenetEngineError('Usenet stream could not be opened');
+    } finally {
+      if (identical(_ahead, mine)) _ahead = null;
+      if (!mine.done.isCompleted) mine.done.complete();
     }
+  }
+
+  /// The open of a release ahead of its pick, while it runs.
+  ({Object token, List<HttpClientRequest> req, Completer<void> done})? _ahead;
+
+  /// Calls off an open made ahead of a pick, and waits until it has let go.
+  Future<void> abortAhead() async {
+    final a = _ahead;
+    if (a == null) return;
+    _ahead = null;
+    for (final r in a.req) {
+      r.abort();
+    }
+    await a.done.future.timeout(const Duration(seconds: 3), onTimeout: () {});
   }
 
   /// Lets a session go (the player closed, or it was never played): its provider counts go to
@@ -402,8 +474,8 @@ class UsenetEngine {
     try {
       final (status, _, text) = await _call('DELETE', '/sessions/${Uri.encodeComponent(id)}', timeout: const Duration(seconds: 2));
       final report = status == 200 ? _report(text) : null;
-      final servers = _servers.remove(id);
-      if (report != null && servers != null) onProviderReport?.call(servers, report, refused: false);
+      final servers = _servers.remove(id), content = _content.remove(id) ?? 'movie';
+      if (report != null && servers != null) onProviderReport?.call(servers, report, refused: false, content: content);
     } catch (_) {
       await stop();
       return;
@@ -424,8 +496,8 @@ class UsenetEngine {
           if (status != 200 && status != 204) continue;
           _retired.remove(id);
           final report = status == 200 ? _report(text) : null;
-          final servers = _servers.remove(id);
-          if (report != null && servers != null) onProviderReport?.call(servers, report, refused: false);
+          final servers = _servers.remove(id), content = _content.remove(id) ?? 'movie';
+          if (report != null && servers != null) onProviderReport?.call(servers, report, refused: false, content: content);
           return;
         } catch (_) {}
       }

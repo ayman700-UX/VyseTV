@@ -163,12 +163,12 @@ void main() {
     expect(last.toJson()['closedAfterMs'], isNotNull, reason: 'the report outlives the player');
     expect(kept(), isNot(contains('SECRET123')));
 
-    // Settings > Playback on a TV: the last playback, and its card
+    // Settings > Playback on a TV: the recent playbacks, and this one's card
     await openSettings(t, 'Playback');
     await Bed.settle(t, rounds: 2);
-    expect(find.text('Last playback'), findsOneWidget);
-    expect(find.textContaining('handed to mpv'), findsOneWidget);
-    await pressOn(t, find.widgetWithText(Pressable, 'Report card'));
+    expect(find.text('Recent playbacks'), findsOneWidget);
+    expect(find.textContaining('Handed to mpv'), findsOneWidget);
+    await pressOn(t, find.ancestor(of: find.textContaining('Handed to mpv'), matching: find.byType(Pressable)).first);
     await Bed.settle(t, rounds: 3);
     expect(find.text('Take a photo of this card when you report a problem.'), findsOneWidget);
     expect(find.byType(FactColumn), findsNWidgets(3));

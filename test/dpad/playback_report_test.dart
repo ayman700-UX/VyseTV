@@ -2,6 +2,8 @@
 // and the report card say, from what the engines and the TV report. The values are the ones a
 // tester photographed in another app on a TCL TV (2026-11-19, docs/dpad/PLAN.md note 95):
 // Dolby Vision profile 5 and 8 at about 12 Mbps with E-AC-3 5.1, from a workers.dev host.
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vyse_tv/data/playback/playback_report.dart';
@@ -207,5 +209,54 @@ void main() {
     expect(back.when, DateTime(2026, 11, 19, 8, 0, 36));
     expect(fact(back.card, 'Source and hardware', 'Dolby Vision decoders'), 'c2.mtk.dvhe.stn.decoder (P5)\nc2.mtk.dvhe.st.decoder (P8)');
     expect(back.text, contains('First frame: 4452 ms'));
+  });
+
+  PlaybackReport film(String title, int minute) => PlaybackReport.begin(
+    title: title,
+    source: 'CNO',
+    url: 'https://cdn.example.org/$minute.mkv',
+    engine: 'media3',
+    when: DateTime(2026, 11, 28, 20, minute),
+  );
+
+  test('the last five playbacks are kept, newest first, and read back after a restart', () async {
+    SharedPreferences.setMockInitialValues({});
+    PlaybackReport.debugReset();
+    await PlaybackReport.load();
+    for (var i = 1; i <= 7; i++) {
+      await PlaybackReport.keep(film('Film $i', i));
+    }
+    expect([for (final r in PlaybackReport.recent.value) r.title], ['Film 7', 'Film 6', 'Film 5', 'Film 4', 'Film 3']);
+    expect(PlaybackReport.last.value?.title, 'Film 7');
+
+    PlaybackReport.debugReset(); // the app starts again
+    await PlaybackReport.load();
+    expect([for (final r in PlaybackReport.recent.value) r.title], ['Film 7', 'Film 6', 'Film 5', 'Film 4', 'Film 3']);
+  });
+
+  test('a film that would not play stays on record after the next one plays', () async {
+    SharedPreferences.setMockInitialValues({});
+    PlaybackReport.debugReset();
+    final broken = film('Broken film', 1);
+    // the player keeps a report again as it learns more: each word on it takes the same place
+    await PlaybackReport.keep(broken);
+    await PlaybackReport.keep(broken.withFailure('Source error'));
+    await PlaybackReport.keep(film('Good film', 5).withMedia3(playing));
+    expect([for (final r in PlaybackReport.recent.value) r.title], ['Good film', 'Broken film']);
+    final kept = PlaybackReport.recent.value.last;
+    expect(kept.failed, isTrue);
+    expect(kept.outcome, 'did not play');
+    expect(PlaybackReport.recent.value.first.outcome, 'played on Media3');
+  });
+
+  test("the one report an older build kept comes along", () async {
+    SharedPreferences.setMockInitialValues({'device.lastPlayback': jsonEncode(begin().withDevice(tcl).withMedia3(playing).toJson())});
+    PlaybackReport.debugReset();
+    // a playback that starts before Settings has read what was kept goes in front of it
+    await PlaybackReport.keep(film('New film', 9));
+    expect([for (final r in PlaybackReport.recent.value) r.title], ['New film', 'The Body · S1 E1']);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('device.lastPlayback'), isNull, reason: 'read once, then left behind');
+    expect((jsonDecode(prefs.getString('device.recentPlaybacks')!) as List).length, 2);
   });
 }

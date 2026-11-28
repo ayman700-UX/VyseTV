@@ -101,6 +101,41 @@ class NntpFailure implements Exception {
   String toString() => 'NNTP: ${result.name}';
 }
 
+/// Stops connections that are still opening ([NntpSession.open]): the tuner's Stop. A
+/// connection attempt is cancelled and a socket not yet signed in is closed, which also ends a
+/// greeting that never comes. Connections already signed in are left to their owner, to sign
+/// out properly.
+class NntpAbort {
+  bool _aborted = false;
+  final _stops = <int, void Function()>{};
+  int _next = 0;
+
+  bool get aborted => _aborted;
+
+  void abort() {
+    if (_aborted) return;
+    _aborted = true;
+    final stops = [..._stops.values];
+    _stops.clear();
+    for (final stop in stops) {
+      try {
+        stop();
+      } catch (_) {}
+    }
+  }
+
+  /// Runs [stop] on [abort] (at once when that already happened); answers how to take it back.
+  void Function() _watch(void Function() stop) {
+    if (_aborted) {
+      stop();
+      return () {};
+    }
+    final k = _next++;
+    _stops[k] = stop;
+    return () => _stops.remove(k);
+  }
+}
+
 /// Where to sign in: what Test provider and the tuner need of a provider.
 class NntpTarget {
   const NntpTarget({required this.host, required this.port, required this.tls, this.username = '', this.password = ''});
@@ -130,6 +165,8 @@ class NntpSession {
       },
       cancelOnError: true,
     );
+    // (a write to a connection the provider already closed fails here; the next read says so)
+    unawaited(_socket.done.catchError((Object _) {}));
   }
 
   final Socket _socket;
@@ -191,84 +228,150 @@ class NntpSession {
 
   void send(String command) => _socket.add(utf8.encode('$command\r\n'));
 
-  /// Reads a multi-line body to its "." line, counting its bytes (nothing is kept).
-  Future<int> drainBody() async {
-    var n = 0;
-    while (true) {
-      // ".\r\n" on a line of its own ends it (a dot-stuffed line starts "..")
-      final end = _bodyEnd();
-      if (end >= 0) {
-        n += end;
-        _pending = _pending.sublist(end + 3);
-        return n;
-      }
-      // keep the last 4 bytes back, so an end split across reads is still seen
-      if (_pending.length > 4) {
-        n += _pending.length - 4;
-        _pending = _pending.sublist(_pending.length - 4);
-      }
-      await _more();
-    }
+  /// Sends [commands] in one write (pipelined requests).
+  void sendAll(List<String> commands) => _socket.add(utf8.encode([for (final c in commands) '$c\r\n'].join()));
+
+  /// Sends [command] if the connection still takes it (a goodbye to a provider that may have
+  /// gone already).
+  void trySend(String command) {
+    try {
+      send(command);
+    } catch (_) {}
   }
 
-  int _bodyEnd() {
-    final p = _pending;
-    if (p.length >= 3 && p[0] == 0x2E && p[1] == 13 && p[2] == 10) return 0;
-    for (var i = 0; i + 4 < p.length; i++) {
-      if (p[i] == 10 && p[i + 1] == 0x2E && p[i + 2] == 13 && p[i + 3] == 10) return i + 1;
+  /// Reads a multi-line body to its end, a "." alone on a line, and answers its bytes as they
+  /// came over the connection (dot-stuffing and the closing ".\r\n" included). Nothing is kept,
+  /// and nothing of the reply after it is read. [onBytes] hears of them as they arrive.
+  Future<int> drainBody({void Function(int bytes)? onBytes}) async {
+    // Where we are in the body: 0 inside a line, 1 after its CR, 2 at the start of a line
+    // (a line starts only after CR LF), 3 after a "." there, 4 after ".\r". An LF then ends it;
+    // ".." is a stuffed line and ordinary content.
+    var state = 2;
+    var total = 0;
+    while (true) {
+      if (_pending.isEmpty) await _more();
+      final p = _pending;
+      final n = p.length;
+      var i = 0;
+      var end = -1;
+      while (i < n) {
+        if (state == 0) {
+          // the bulk of a body: straight to the next CR
+          final cr = p.indexOf(13, i);
+          if (cr < 0) {
+            i = n;
+            break;
+          }
+          i = cr + 1;
+          state = 1;
+          continue;
+        }
+        final b = p[i];
+        i++;
+        switch (state) {
+          case 1:
+            state = b == 10 ? 2 : (b == 13 ? 1 : 0);
+          case 2:
+            state = b == 0x2E ? 3 : (b == 13 ? 1 : 0);
+          case 3:
+            state = b == 13 ? 4 : 0;
+          case 4:
+            if (b == 10) {
+              end = i;
+            } else {
+              state = b == 13 ? 1 : 0;
+            }
+        }
+        if (end >= 0) break;
+      }
+      if (end >= 0) {
+        total += end;
+        onBytes?.call(end);
+        _pending = end == n ? Uint8List(0) : Uint8List.sublistView(p, end);
+        return total;
+      }
+      total += n;
+      onBytes?.call(n);
+      _pending = Uint8List(0);
     }
-    return -1;
   }
 
   /// Says goodbye without waiting for the answer, and closes.
   void quit() {
-    try {
-      send('QUIT');
-    } catch (_) {}
+    trySend('QUIT');
     close();
   }
 
+  /// Closes the connection at once; a read waiting on it ends as the connection closing.
   void close() {
     _closed = true;
     unawaited(_sub.cancel().catchError((Object _) {}));
     _socket.destroy();
+    _wake();
   }
 
   /// Opens one connection to [t] and signs in, as the engine does: the addresses in order
   /// within one 10 s budget (each attempt at least 2 s, or its fair share of what is left), TLS
   /// checked against the host's name, a 200/201 greeting, then AUTHINFO USER (and PASS on 381).
-  static Future<NntpSession> open(NntpTarget t, List<InternetAddress> addresses, {Duration budget = const Duration(seconds: 10)}) async {
+  /// [abort] stops it wherever it is (it then fails as unreachable). [readTimeout] bounds the
+  /// TLS handshake and every reply of the sign-in.
+  static Future<NntpSession> open(
+    NntpTarget t,
+    List<InternetAddress> addresses, {
+    Duration budget = const Duration(seconds: 10),
+    Duration readTimeout = const Duration(seconds: 10),
+    NntpAbort? abort,
+  }) async {
     final clock = Stopwatch()..start();
     Socket? raw;
     for (var i = 0; i < addresses.length && raw == null; i++) {
+      if (abort?.aborted ?? false) break;
       final left = budget - clock.elapsed;
       if (left <= Duration.zero) break;
       final share = Duration(microseconds: left.inMicroseconds ~/ (addresses.length - i));
       final each = share > const Duration(seconds: 2) ? share : (left < const Duration(seconds: 2) ? left : const Duration(seconds: 2));
+      ConnectionTask<Socket>? task;
+      void Function()? stopWatching;
       try {
-        raw = await Socket.connect(addresses[i], t.port, timeout: each);
-      } catch (_) {}
+        final pending = task = await Socket.startConnect(addresses[i], t.port);
+        stopWatching = abort?._watch(() => _give(pending));
+        raw = await pending.socket.timeout(each);
+      } catch (_) {
+        if (task != null) _give(task);
+      } finally {
+        stopWatching?.call();
+      }
     }
     if (raw == null) throw const NntpFailure(NntpResult.unreachable);
+    if (abort?.aborted ?? false) {
+      raw.destroy();
+      throw const NntpFailure(NntpResult.unreachable);
+    }
+    final opened = raw;
+    final unwatchSocket = abort?._watch(opened.destroy);
     Socket s = raw;
+    if (!t.tls) unwatchSocket?.call(); // (from here on the session below is what is closed)
     if (t.tls) {
       try {
-        s = await SecureSocket.secure(raw, host: t.host.replaceAll(RegExp(r'^\[|\]$'), '')).timeout(const Duration(seconds: 10));
+        s = await SecureSocket.secure(raw, host: t.host.replaceAll(RegExp(r'^\[|\]$'), '')).timeout(readTimeout);
       } on TimeoutException {
         raw.destroy();
         throw const NntpFailure(NntpResult.unreachable);
       } on HandshakeException {
         raw.destroy();
-        throw const NntpFailure(NntpResult.tls);
+        throw (abort?.aborted ?? false) ? const NntpFailure(NntpResult.unreachable) : const NntpFailure(NntpResult.tls);
       } on TlsException {
         raw.destroy();
-        throw const NntpFailure(NntpResult.tls);
+        throw (abort?.aborted ?? false) ? const NntpFailure(NntpResult.unreachable) : const NntpFailure(NntpResult.tls);
       } catch (_) {
         raw.destroy();
         throw const NntpFailure(NntpResult.unreachable);
+      } finally {
+        unwatchSocket?.call();
       }
     }
-    final session = NntpSession._(s);
+    final session = NntpSession._(s)..readTimeout = readTimeout;
+    final unwatch = abort?._watch(session.close);
     try {
       final greeting = await session.code();
       if (greeting != 200 && greeting != 201) throw const NntpFailure(NntpResult.refused);
@@ -288,7 +391,15 @@ class NntpSession {
       if (e is NntpFailure) rethrow;
       if (e is TlsException || e is HandshakeException) throw const NntpFailure(NntpResult.tls);
       throw const NntpFailure(NntpResult.unreachable);
+    } finally {
+      unwatch?.call();
     }
+  }
+
+  /// Gives up a connection attempt: cancelled, and closed should it connect all the same.
+  static void _give(ConnectionTask<Socket> task) {
+    task.cancel();
+    unawaited(task.socket.then((s) => s.destroy(), onError: (Object _) {}));
   }
 }
 

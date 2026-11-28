@@ -103,7 +103,8 @@ class _InfoPaneState extends State<InfoPane> {
   static List<List<ReportSection>> _streamColumns(PlaybackReport r) {
     final s = r.stream;
     return [
-      [s[0], s[1]],
+      // (a Usenet release: what the engine says of it, under where it is from)
+      [s[0], s[1], ...s.skip(5)],
       [s[2]],
       [s[3], s[4]],
     ];

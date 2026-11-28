@@ -55,6 +55,18 @@ class AppSettings {
   static final navOrder = Setting<String>('look.navOrder', '');
   static final navOff = Setting<String>('look.navOff', '');
 
+  /// Home (Settings > Appearance > Home). Read through HomeLook (screens/home/home_look.dart).
+  /// The cards of its rows: 'classic', 'posters', 'backdrops' or 'mixed'; and their size:
+  /// 'smaller', 'standard' or 'larger'.
+  static final homeCards = Setting<String>('look.home.cards', 'classic');
+  static final homeCardSize = Setting<String>('look.home.size', 'standard');
+  // the slideshow at the top; the genre and collection cards
+  static final homeHero = Setting<bool>('look.home.hero', true);
+  static final homeCategories = Setting<bool>('look.home.categories', true);
+  // backdrop cards show the title's logo art (true) or its name; posters their name below
+  static final homeLogos = Setting<bool>('look.home.logos', true);
+  static final homeNames = Setting<bool>('look.home.names', false);
+
   // My List page
   static final myListGrid = Setting<bool>('list.grid', true);
   static final myListSort = Setting<int>('list.sort', 0);
@@ -221,6 +233,7 @@ class AppSettings {
 
   static List<Setting<Object?>> get _all => [
         displayName, avatarUrl, avatarLabel, themeId, navOrder, navOff,
+        homeCards, homeCardSize, homeHero, homeCategories, homeLogos, homeNames,
         addons, streamingMode, autoNext, autoplayBest, autoplayOrder, autoplayRest, autoSubtitles, seekSeconds, skipButtonsOff, p2pStreaming, sourceOrder, sourcesOff, trackAniList, trackRewatches, simklScrobble, simklList, simklHistory,
         traktScrobble, traktList, traktHistory,
         subtitleLanguage, autoSyncSubtitles, subtitleSize, subtitleColor,

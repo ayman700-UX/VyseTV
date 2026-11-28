@@ -11,6 +11,10 @@ import 'badges.dart';
 import 'film_sources/common.dart' show getTmdbMetadata, fetchText, HttpError;
 import 'knaben.dart';
 import '../usenet/usenet_engine.dart' show UsenetEngine;
+import '../usenet/usenet_play.dart' show UsenetFallback;
+import '../usenet/usenet_release.dart' show UsenetReleases;
+import '../usenet/usenet_search.dart' show UsenetSearch;
+import '../usenet/usenet_sources.dart' show UsenetSourcesStore;
 import 'plugins/js_plugins.dart';
 import 'plugins/plugin_catalogs.dart';
 import '../net.dart';
@@ -600,6 +604,13 @@ class AddonStream {
   /// finds its own link), a torrent by its file, anything else by its link.
   String get partyKey => plugin?.key ?? (torrent ? '$infoHash:$fileIdx' : (usenet ? '$nzbUrl#${fileIdx ?? ''}' : url));
 
+  /// The same video as [o]: a torrent's file, a Usenet release's file, or the same link.
+  bool sameAs(AddonStream o) => torrent
+      ? o.torrent && infoHash == o.infoHash && fileIdx == o.fileIdx
+      : usenet
+      ? o.usenet && nzbUrl == o.nzbUrl && fileIdx == o.fileIdx && fileMustInclude == o.fileMustInclude
+      : !o.torrent && !o.usenet && url == o.url;
+
   /// Not a video VyseTV plays but a link that opens elsewhere: a web page (`externalUrl`), a
   /// YouTube video (`ytId`, opened on YouTube), or a Stremio link (`stremio:///detail/…`, opened
   /// in VyseTV). Listed after what plays; never picked by autoplay.
@@ -952,6 +963,16 @@ class AutoplayOrder {
   }
 }
 
+/// A source whose search failed outright, found nothing, and can say why: one line each (the
+/// built-in Usenet source, an indexer per line). Never carries a key or a server's raw words.
+class SourceSearchFailed implements Exception {
+  const SourceSearchFailed(this.notes);
+  final List<String> notes;
+
+  @override
+  String toString() => notes.join('\n');
+}
+
 /// A stream picked on the sources screen, and what it was picked for (to find the next
 /// episode's on the same addon).
 class AddonPick {
@@ -1053,7 +1074,19 @@ class Addons {
     AppSettings.addons.set(json.encode([for (final a in l) a.toJson()]));
   }
 
-  static List<Addon> get streamAddons => [for (final a in list.value) if (a.enabled && a.streams) a];
+  /// The addons asked for sources: every one turned on, the built-in Usenet source only once it
+  /// can search (a provider and an indexer turned on in Settings > Usenet, on a device the
+  /// Usenet engine runs on).
+  static List<Addon> get streamAddons => [
+    for (final a in list.value)
+      if (a.enabled && a.streams && (a.manifestUrl != Addon.usenet.manifestUrl || usenetReady)) a,
+  ];
+
+  /// The built-in Usenet source can search and play here.
+  static bool get usenetReady => UsenetEngine.supported && UsenetSourcesStore.current.value.usable;
+
+  /// Whether the built-in Usenet source is turned on (Settings > Usenet, or its row in Addons).
+  static bool get usenetOn => list.value.where((a) => a.manifestUrl == Addon.usenet.manifestUrl).firstOrNull?.enabled ?? false;
   static List<Addon> get subtitleAddons => [for (final a in list.value) if (a.enabled && a.subtitles) a];
 
   /// Whether TMDB, the built-in metadata addon, is on (it is, until you turn it off).
@@ -1228,6 +1261,7 @@ class Addons {
   /// asks many sites, some slow); other addons answer all at once.
   static Future<({List<AddonStream> streams, int torrents})?> streams(Addon a, AddonTarget t, {void Function(List<AddonStream> soFar)? onSome}) async {
     if (a.plugins) return _pluginStreams(a, t, onSome);
+    if (a.manifestUrl == Addon.usenet.manifestUrl) return _usenetStreams(a, t, onSome);
     if (a.builtIn) return _builtInStreams(a, t);
     final id = t.idFor(a.streamPrefixes);
     if (id == null || !t.typeOk(a.streamTypes)) return null;
@@ -1256,6 +1290,19 @@ class Addons {
     final hits = await Knaben.search(title: title, series: series, year: t.year, season: season, episode: episode);
     if (!Torrents.supported) return (streams: const <AddonStream>[], torrents: hits.length);
     return (streams: [for (final h in hits) knabenStream(a, h)], torrents: 0);
+  }
+
+  /// The built-in Usenet source's results for [t]: your indexers searched from this device,
+  /// ranked and filtered by Settings > Usenet, each played from your providers. [onSome] gets
+  /// the list as it fills (once every indexer answered, or what came after 5 s; each indexer
+  /// as it answers with "Show results as each indexer answers"). Null when the title can't be
+  /// searched; when nothing was found because indexers failed, [SourceSearchFailed] says which.
+  static Future<({List<AddonStream> streams, int torrents})?> _usenetStreams(Addon a, AddonTarget t, void Function(List<AddonStream>)? onSome) async {
+    if (!usenetReady) return null;
+    final got = await UsenetSearch.instance.search(a, t, onSome: onSome);
+    if (got == null) return null;
+    if (got.streams.isEmpty && got.failures.isNotEmpty) throw SourceSearchFailed(got.failures);
+    return (streams: got.streams, torrents: 0);
   }
 
   /// What a plugin repository's plugins found for [t]. They look titles up by name (and TMDB and
@@ -1453,7 +1500,8 @@ class Addons {
     });
     await done.future;
     timer.cancel();
-    final all = [for (final l in got) ...l];
+    // (never a Usenet release known to be gone from your providers)
+    final all = [for (final l in got) ...l.where((s) => !s.usenet || !UsenetReleases.isUnplayable(s))];
     return AutoplayOrder.arrange(where == null ? all : all.where(where));
   }
 
@@ -1500,11 +1548,18 @@ class Addons {
   static Future<AddonPick?> follow(AddonPick p, int? season, int? episode) async {
     final t = p.target.withEpisode(season, episode);
     try {
-      final l = (await streams(p.stream.addon, t))?.streams.where((s) => s.playable).toList();
-      if (l == null || l.isEmpty) return null;
+      final all = (await streams(p.stream.addon, t))?.streams.where((s) => s.playable).toList();
+      if (all == null || all.isEmpty) return null;
       final was = p.stream;
+      // (a Usenet release known to be gone from your providers isn't followed into)
+      final ok = was.usenet ? all.where((s) => !UsenetReleases.isUnplayable(s)).toList() : all;
+      final l = ok.isEmpty ? all : ok;
       final same = was.bingeGroup == null ? null : l.where((s) => s.bingeGroup == was.bingeGroup).firstOrNull;
-      return AddonPick(same ?? l.where((s) => s.quality == was.quality && s.cached == was.cached).firstOrNull ?? l.first, t);
+      final next = same ?? l.where((s) => s.quality == was.quality && s.cached == was.cached).firstOrNull ?? l.first;
+      // a Usenet release: the next episode's own results are where the player carries on, should
+      // it not play
+      if (next.usenet) UsenetFallback.hand(all, next);
+      return AddonPick(next, t);
     } catch (_) {
       return null;
     }

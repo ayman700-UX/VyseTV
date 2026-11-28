@@ -115,7 +115,7 @@ void main() {
     await Bed.focus(t, control('Install'));
     await Bed.ok(t);
     expect(find.textContaining('Lantern is installed (catalogs and details)'), findsOneWidget);
-    expect(Addons.list.value.map((a) => a.name).toList(), ['Lantern', 'TMDB', 'Knaben'], reason: 'a metadata addon goes just above TMDB');
+    expect(Addons.list.value.map((a) => a.name).toList(), ['Lantern', 'TMDB', 'Knaben', 'Usenet'], reason: 'a metadata addon goes just above TMDB');
     expect(Addons.catalogAddons.single.catalogs.where((c) => c.board).length, 6);
     await Bed.picture(t, 'meta_addons/settings_installed');
 
